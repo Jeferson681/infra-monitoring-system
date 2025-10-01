@@ -1,0 +1,38 @@
+Projeto é um portfolio.
+Fale sempre em portugues
+linguagem predominante: Ingles para todo o programa / portugues para Docstrings e comentarios.
+
+Estrutura obrigatória:
+
+src/
+  core/
+    __init__.py
+    core.py          # loop principal, orquestra execução
+    args.py          # parser de argumentos (console vs ui)
+    tray.py          # UI mínima (system tray)
+
+  config/
+    __init__.py
+    settings.py      # configurações globais, env, thresholds
+
+  monitoring/
+    __init__.py
+    metrics.py       # coleta CPU, RAM, disco, rede, ping, latência
+    averages.py      # cálculo de médias (1h, últimas N linhas)
+    events.py        # registro de eventos/alertas
+
+  system/
+    __init__.py
+    treatments.py    # ações automáticas (fix disco, memória, etc.)
+    logs.py          # rotação, compressão e persistência de logs
+    helpers.py       # funções auxiliares (debug_log, safe_* etc.)
+
+  exporter/
+    __init__.py
+    exporter.py      # integração com Prometheus/Grafana
+
+
+Programa de monitoramento deve conter coletas de metricas, logs ricos, debugs ricos, alertas, tratamentos,
+parseArgs perfeitos e expor metricas pra integração prometheus-grafana
+
+OBS: COPILOT sempre sugerir boas praticas e metodos auxiliares
