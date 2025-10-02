@@ -1,1 +1,0 @@
-# Testes para ações automáticas

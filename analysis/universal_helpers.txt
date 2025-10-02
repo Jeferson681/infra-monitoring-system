@@ -1,0 +1,112 @@
+Resumo: helpers universais sugeridos para leitura/iteração de JSONL e seleção de ficheiros por datas.
+
+1) safe_jsonl_iter
+- Propósito:
+  Iterar de forma resiliente sobre objetos JSON em um ficheiro .jsonl, descartando
+  linhas inválidas e encapsulando erros de I/O.
+- Assinatura sugerida:
+  def safe_jsonl_iter(path: Path, *, encoding: str = "utf-8", parser: Callable[[str], dict] = json.loads,
+                      skip_invalid: bool = True, log_errors: bool | Callable = True,
+                      max_lines: int | None = None) -> Iterator[dict]
+- Parâmetros chave:
+  - encoding: codificação do ficheiro (default "utf-8").
+  - parser: função que converte string->dict (p.ex. json.loads) — permite fallback.
+  - skip_invalid: se True descarta linhas com parse error; se False propaga.
+  - log_errors: True / False ou callable(exc, path) para log customizado.
+  - max_lines: se fornecido, limita a leitura (útil para testes/lotes).
+- Retorno: iterator que gera dicionários válidos (streaming).
+- Benefícios:
+  - Remove try/except aninhado em vários lugares.
+  - Facilita testes (injetando parser) e consistência de logging.
+- Locais de reaproveitamento:
+  - `averages._collect_samples`
+  - `averages._find_min_max_ts`
+  - testes que hoje fazem json.loads(line) diretamente
+- Testes recomendados:
+  - ficheiro com linhas válidas e inválidas (skip_invalid True/False).
+  - ficheiro inexistente -> iterator vazio (ou exceção, dependendo do parametro).
+
+
+2) files_for_date_range
+- Propósito:
+  Gerar Paths ordenados dos ficheiros JSONL que cobrem um intervalo entre start_ts e end_ts.
+- Assinatura sugerida:
+  def files_for_date_range(json_dir: Path, start_ts: float, end_ts: float,
+                            *, date_fmt: str = "%Y-%m-%d",
+                            filename_template: str = "monitoring-{date}.jsonl",
+                            include_missing: bool = False,
+                            lookahead_days: int = 0) -> Iterator[Path]
+- Parâmetros chave:
+  - filename_template: permite reutilização para outros prefixos (ex.: testapp-{date}.jsonl).
+  - include_missing: se True retorna paths mesmo que não existam (útil para pré-criação/tests).
+  - lookahead_days: incluir dias além do end_ts (útil quando logs chegam com atraso).
+- Retorno: iterator de Paths ordenados por data.
+- Benefícios:
+  - Centraliza lógica de cálculo de dias (evita duplicação de time.strftime).
+  - Evita set/união manual e garante ordenação consistente.
+- Locais de reaproveitamento:
+  - `averages._collect_samples`
+  - Qualquer script que varra logs por datas
+- Testes recomendados:
+  - intervalo dentro de um mesmo dia, múltiplos dias, ausência de ficheiros.
+
+
+3) in_time_range
+- Propósito:
+  Normalizar/validar um timestamp e verificar se está dentro de um intervalo.
+- Assinatura sugerida:
+  def in_time_range(ts: float | None, start_ts: float, end_ts: float,
+                    *, inclusive: tuple[bool, bool] = (True, True),
+                    normalizer: Callable[[float], float] | None = None) -> bool
+- Parâmetros chave:
+  - inclusive: tupla (início_inclusivo, fim_inclusivo).
+  - normalizer: opção para ajustar timezone ou arredondamento antes da comparação.
+- Benefícios:
+  - Limpa condições como `if ts is None or not (start_ts <= ts <= end_ts)`.
+  - Facilita teste e reutilização.
+- Locais de reaproveitamento:
+  - `averages._collect_samples`
+  - Qualquer filtro por timestamp
+
+
+4) collect_metric_values_from_files
+- Propósito:
+  Compor `files_for_date_range` + `safe_jsonl_iter` + extractors para devolver um iterator
+  de valores numéricos de métricas.
+- Assinatura sugerida:
+  def collect_metric_values_from_files(files: Iterable[Path], metric_keys: List[str],
+                                       *, json_iter_factory: Callable = safe_jsonl_iter,
+                                       timestamp_extractor: Callable = _extract_timestamp,
+                                       metric_extractor: Callable = _extract_metric_value,
+                                       filter_fn: Callable[[dict], bool] | None = None,
+                                       log_errors: bool | Callable = True) -> Iterator[float]
+- Parâmetros chave:
+  - json_iter_factory: permite injeção de stub em testes.
+  - filter_fn: filtro extra sobre os objetos (p.ex. host == 'x').
+- Retorno: iterator de float (valores extraídos).
+- Benefícios:
+  - Transforma `_collect_samples` em uma linha de composição (alta reutilização).
+- Locais de reaproveitamento:
+  - `averages._collect_samples` (refatorado para chamar este helper)
+  - Outros extractors/relatórios que precisem varrer logs
+
+
+5) parse_json_line (opcional)
+- Propósito: encapsular tentativas de desserialização com fallback e logging.
+- Assinatura:
+  def parse_json_line(line: str, parser: Callable = json.loads, *, fallback: Callable | None = None) -> dict | None
+- Uso: dentro de `safe_jsonl_iter` ou testes para centralizar fallback behaviors.
+
+
+Notas de implementação e localização sugerida
+- Onde colocar os helpers:
+  - Preferível: `src/system/jsonl_helpers.py` (separação clara de responsabilidades);
+  - Alternativa: adicionar em `src/system/log_helpers.py` se preferir manter tudo relacionado a logs num único módulo.
+- Defaults/compatibilidade:
+  - Manter comportamento resiliente atual (skip_invalid=True, log_errors=True) para evitar regressões.
+- Testes a adicionar:
+  - unit tests para cada helper em `tests/system/test_jsonl_helpers.py` cobrindo erros I/O, linhas inválidas, precisão de datas e integração curta com `averages`.
+
+
+Conclusão
+Criar `safe_jsonl_iter` e `files_for_date_range` primeiro traz o maior benefício com menor risco. `in_time_range` e `collect_metric_values_from_files` são helpers de composição óbvios e úteis a seguir. Implementar estes helpers reduz a complexidade cognitiva em `_collect_samples` e `_find_min_max_ts`, melhora testabilidade e promove reutilização em outros módulos/testes.

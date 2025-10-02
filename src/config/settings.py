@@ -1,17 +1,23 @@
-"""Configurações globais, variáveis de ambiente e thresholds.
+"""Configurações do projeto de monitorização.
 
-Docstrings em português.
+Carrega limites (thresholds), nível de logs e políticas de tratamento a partir do
+ambiente e de um ficheiro .env no raiz do projeto.
 """
 
 import os
 from pathlib import Path
 
-# Estados de alerta usados pelo fluxo mínimo
-STATE_STABLE = "ESTAVEL"
-STATE_ALERT = "ALERTA"
+# ========================
+# 0. Constantes e padrões globais
+# ========================
+
+# --- Module purpose
+# Este módulo: carrega e normaliza configurações do projeto (limites, nível de logs, políticas de tratamento).
+
+STATE_STABLE = "STABLE"
+STATE_WARNING = "WARNING"
 STATE_CRITIC = "CRITIC"
 
-# Lista dos nomes de métricas esperadas no stub de coleta
 METRIC_NAMES = [
     "cpu_percent",
     "memory_percent",
@@ -22,44 +28,77 @@ METRIC_NAMES = [
     "temperature_celsius",
 ]
 
-# Thresholds padrão (alert / critic) — valores de exemplo para o stub
 DEFAULT_THRESHOLDS = {
-    "cpu_percent": {"alert": 75.0, "critic": 90.0},
-    "memory_percent": {"alert": 75.0, "critic": 90.0},
-    "disk_percent": {"alert": 80.0, "critic": 95.0},
-    # perda de pacotes em porcentagem
-    "network_loss_percent": {"alert": 2.0, "critic": 5.0},
-    # latência/tempo de ida em ms
-    "network_latency_ms": {"alert": 100.0, "critic": 250.0},
-    # ping (ms) — usado quando aplicável
-    "ping_ms": {"alert": 100.0, "critic": 500.0},
-    # temperatura em Celsius
-    "temperature_celsius": {"alert": 70.0, "critic": 85.0},
+    "cpu_percent": {"warning": 75.0, "critic": 90.0},
+    "memory_percent": {"warning": 75.0, "critic": 90.0},
+    "disk_percent": {"warning": 80.0, "critic": 95.0},
+    "network_loss_percent": {"warning": 2.0, "critic": 5.0},
+    "network_latency_ms": {"warning": 100.0, "critic": 250.0},
+    "ping_ms": {"warning": 100.0, "critic": 500.0},
+    "temperature_celsius": {"warning": 70.0, "critic": 85.0},
 }
 
-# Diretório raiz de logs relativo à raiz do projection.
-# Permite sobrescrever via variável de ambiente MONITORING_LOG_ROOT.
-# Preferimos um diretório em lowercase ('logs') por padrão para evitar
-# problemas de case-sensitive em alguns sistemas de ficheiros.
-_raw_log_root = os.getenv("MONITORING_LOG_ROOT", "logs")
-if isinstance(_raw_log_root, str):
-    _raw_log_root = _raw_log_root.strip()
-else:
-    _raw_log_root = "logs"
-if _raw_log_root == "Logs":
-    LOG_ROOT = "logs"
-else:
-    LOG_ROOT = _raw_log_root or "logs"
-# Nome do ficheiro de debug dentro de LOG_ROOT
-DEBUG_LOG_FILENAME = "debug_log"
+DEFAULT_TREATMENT_POLICIES = {
+    "sustained_crit_seconds": 5 * 60,
+    "min_critical_alerts": 1,
+    "treatment_cooldowns": {
+        "cleanup_temp_files": 3 * 24 * 3600,
+        "check_disk_usage": 24 * 3600,
+        "trim_process_working_set_windows": 60 * 60,
+        "reap_zombie_processes": 60 * 60,
+        "reapply_network_config": 30 * 60,
+    },
+    "cleanup_temp_age_days": 7,
+}
 
 
-def _read_env_file(path) -> dict:
-    """Lê um ficheiro .env simples e retorna um dict de chaves/valores.
+# ========================
+# 1. Carregamento das configurações
+# ========================
 
-    Comentários e linhas vazias são ignoradas. Não lança exceções para erro de
-    I/O; retorna um dict vazio e deixa o logging para o chamador.
+
+# Função principal do módulo; carrega todas as configurações do ambiente
+def load_settings() -> dict:
+    """Carrega configurações do ambiente e do arquivo .env.
+
+    Retorna dicionário com thresholds, log_level e políticas de tratamento.
     """
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    thresholds = {k: v.copy() for k, v in DEFAULT_THRESHOLDS.items()}
+
+    project_root = Path(__file__).resolve().parents[2]
+    env_path = Path(os.getenv("MONITORING_ENV_FILE", project_root / ".env"))
+
+    env_items = _merge_env_items(env_path, logger)
+    _apply_threshold_overrides(env_items, thresholds, logger)
+
+    treatment_policies = DEFAULT_TREATMENT_POLICIES.copy()
+    _apply_treatment_policies(env_items, treatment_policies, logger)
+
+    return {
+        "thresholds": thresholds,
+        "log_level": (env_items.get("MONITORING_LOG_LEVEL") or os.getenv("MONITORING_LOG_LEVEL", "INFO")),
+        "treatment_policies": treatment_policies,
+    }
+
+
+# ========================
+# 2. Funções auxiliares para ambiente e overrides
+# ========================
+
+
+# Auxilia load_settings; criado para centralizar leitura do .env
+def _read_env_file(path: Path | str) -> dict:
+    """Lê variáveis do arquivo .env e retorna pares chave-valor.
+
+    Ignora linhas inválidas e registra falhas de leitura para depuração.
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
     result: dict[str, str] = {}
     p = Path(path)
     if not p.exists():
@@ -76,148 +115,145 @@ def _read_env_file(path) -> dict:
                 key = key.strip()
                 val = val.strip().strip('"').strip("'")
                 result[key] = val
-    except Exception:
-        # caller irá logar; aqui evitamos crash
+    except OSError as exc:
+        logger.debug("falha a ler .env em %s: %s", p, exc)
         return {}
     return result
 
 
-def load_settings() -> dict:
-    """Carrega settings de `.env` e variáveis de ambiente, retornando um dict.
+# Auxilia load_settings; criado para unir variáveis do ambiente e .env
+def _merge_env_items(env_path: Path, logger) -> dict:
+    """Combina variáveis do .env com as do processo.
 
-    Para sobrescrever thresholds, use chaves do tipo
-    `MONITORING_THRESHOLD_<metric>_<ALERT|CRITIC>` no .env ou nas env vars do
-    sistema.
+    Prioriza valores do arquivo .env e complementa com os do ambiente.
     """
-    import logging
-
-    logger = logging.getLogger(__name__)
-
-    # Começar com uma cópia dos defaults
-    thresholds = {k: v.copy() for k, v in DEFAULT_THRESHOLDS.items()}
-
-    project_root = Path(__file__).resolve().parents[2]
-    env_path = Path(os.getenv("MONITORING_ENV_FILE", project_root / ".env"))
-
     env_items = _read_env_file(env_path)
     if env_items == {} and env_path.exists():
-        logger.warning(
-            "Erro ou ficheiro .env vazio em %s",
-            env_path,
-        )
-
-    # adicionar variáveis de ambiente do processo caso não existam no ficheiro
+        logger.warning("Erro ou ficheiro .env vazio em %s", env_path)
     for k, v in os.environ.items():
         env_items.setdefault(k, v)
+    return env_items
 
-    # Aplicar overrides de thresholds
+
+# Auxilia load_settings; criado para aplicar overrides de thresholds
+def _apply_threshold_overrides(env_items: dict, thresholds: dict, logger) -> None:
+    """Atualiza thresholds conforme variáveis de ambiente.
+
+    Ignora valores inválidos e registra avisos sem interromper inicialização.
+    """
     for key, raw_val in env_items.items():
         if not key.startswith("MONITORING_THRESHOLD_"):
             continue
-        rest = key[len("MONITORING_THRESHOLD_") :]  # correct slice (no E203)
+        rest = key[len("MONITORING_THRESHOLD_") :]
         metric, sep, kind = rest.rpartition("_")
         if not sep:
-            logger.debug(
-                "Ignorando chave de threshold malformada: %s",
-                key,
-            )
+            logger.debug("Ignorando chave de limite (threshold) malformada: %s", key)
             continue
         metric = metric.lower()
         kind = kind.lower()
         if metric not in thresholds:
-            logger.debug(
-                "Métrica desconhecida em thresholds: %s",
-                metric,
-            )
+            logger.debug("Métrica desconhecida em limites (thresholds): %s", metric)
             continue
-        if kind not in ("alert", "critic"):
-            logger.debug(
-                "Tipo de threshold desconhecido para %s: %s",
-                metric,
-                kind,
-            )
+        if kind not in ("warning", "critic"):
+            logger.debug("Tipo de limite (threshold) desconhecido para %s: %s", metric, kind)
             continue
         try:
             thresholds[metric][kind] = float(raw_val)
-        except Exception:
+        except (TypeError, ValueError):
+            logger.warning("Valor inválido para %s: %s", key, raw_val)
+
+
+# Auxilia load_settings; criado para aplicar overrides nas políticas de tratamento
+def _apply_treatment_policies(env_items: dict, treatment_policies: dict, logger) -> None:
+    """Atualiza políticas de tratamento conforme variáveis de ambiente.
+
+    Ignora valores inválidos e registra avisos sem interromper inicialização.
+    """
+    if "MONITORING_SUSTAINED_CRIT_SECONDS" in env_items:
+        try:
+            treatment_policies["sustained_crit_seconds"] = int(env_items["MONITORING_SUSTAINED_CRIT_SECONDS"])
+        except (TypeError, ValueError):
             logger.warning(
-                "Valor inválido para %s: %s",
-                key,
-                raw_val,
+                "MONITORING_SUSTAINED_CRIT_SECONDS inválido: %s",
+                env_items.get("MONITORING_SUSTAINED_CRIT_SECONDS"),
             )
+    if "MONITORING_MIN_CRITICAL_ALERTS" in env_items:
+        try:
+            treatment_policies["min_critical_alerts"] = int(env_items["MONITORING_MIN_CRITICAL_ALERTS"])
+        except (TypeError, ValueError):
+            logger.warning(
+                "MONITORING_MIN_CRITICAL_ALERTS inválido: %s",
+                env_items.get("MONITORING_MIN_CRITICAL_ALERTS"),
+            )
+    if "MONITORING_CLEANUP_TEMP_AGE_DAYS" in env_items:
+        try:
+            treatment_policies["cleanup_temp_age_days"] = int(env_items["MONITORING_CLEANUP_TEMP_AGE_DAYS"])
+        except (TypeError, ValueError):
+            logger.warning(
+                "MONITORING_CLEANUP_TEMP_AGE_DAYS inválido: %s",
+                env_items.get("MONITORING_CLEANUP_TEMP_AGE_DAYS"),
+            )
+    for k, v in env_items.items():
+        if not k.startswith("MONITORING_TREATMENT_COOLDOWN_"):
+            continue
+        name = k[len("MONITORING_TREATMENT_COOLDOWN_") :].lower()
+        try:
+            sec = int(v)
+            treatment_policies.setdefault("treatment_cooldowns", {}).update({name: sec})
+        except (TypeError, ValueError):
+            logger.warning("MONITORING_TREATMENT_COOLDOWN_%s inválido: %s", name, v)
 
-    return {
-        "thresholds": thresholds,
-        "log_level": (env_items.get("MONITORING_LOG_LEVEL") or os.getenv("MONITORING_LOG_LEVEL", "INFO")),
-    }
+
+# ========================
+# 3. Validação e normalização dos thresholds
+# ========================
 
 
+# Auxilia validate_settings; criado para garantir tipos e limites corretos
 def _coerce_threshold(metric_name: str, raw_value: dict) -> dict:
-    """Coerce um threshold bruto para a forma normalizada (nível de módulo).
+    """Valida e converte thresholds para tipos corretos.
 
-    Lança ValueError para formatos inválidos.
+    Garante que warning < critic e valores estejam dentro dos limites esperados.
     """
     if not isinstance(raw_value, dict):
-        raise ValueError(f"threshold for {metric_name} must be a dict with 'alert' " f"and 'critic'")
-    if "alert" not in raw_value or "critic" not in raw_value:
-        raise ValueError(f"threshold for {metric_name} must contain 'alert' and 'critic' " f"keys: {raw_value!r}")
+        raise ValueError(f"threshold para {metric_name} deve ser um dict com chaves 'warning' e 'critic'")
+    if "warning" not in raw_value or "critic" not in raw_value:
+        raise ValueError(f"threshold para {metric_name} deve conter chaves 'warning' e 'critic': {raw_value!r}")
     try:
-        alert_v = float(raw_value["alert"])
+        warning_v = float(raw_value["warning"])
         critic_v = float(raw_value["critic"])
     except (TypeError, ValueError) as exc:
-        raise ValueError(f"threshold values for {metric_name} must be numeric: {raw_value!r}") from exc
+        raise ValueError(f"valores de threshold para {metric_name} devem ser numéricos: {raw_value!r}") from exc
 
-    if alert_v >= critic_v:
-        raise ValueError(f"threshold alert must be < critic for {metric_name}: {alert_v} " f">= {critic_v}")
+    if warning_v >= critic_v:
+        raise ValueError(f"threshold 'warning' deve ser < 'critic' para {metric_name}: {warning_v} >= {critic_v}")
 
-    if metric_name.endswith("_percent") or metric_name in (
-        "cpu_percent",
-        "memory_percent",
-        "disk_percent",
-        "network_loss_percent",
-    ):
-        if not (0.0 <= alert_v <= 100.0 and 0.0 <= critic_v <= 100.0):
-            raise ValueError(f"thresholds for {metric_name} must be between 0 and 100")
+    if (
+        metric_name.endswith("_percent")
+        or metric_name
+        in (
+            "cpu_percent",
+            "memory_percent",
+            "disk_percent",
+            "network_loss_percent",
+        )
+    ) and not (0.0 <= warning_v <= 100.0 and 0.0 <= critic_v <= 100.0):
+        raise ValueError(f"thresholds para {metric_name} devem ficar entre 0 e 100")
 
-    return {"alert": alert_v, "critic": critic_v}
-
-
-# (validate_settings(settings: dict) abaixo implementa a validação real)
-
-
-def get_thresholds() -> dict:
-    """Return hard-coded thresholds for the minimal stub flow.
-
-    Structure returned:
-    {
-        "metric_name": {"alert": float, "critic": float},
-        ...
-    }
-
-    These values are placeholders for the stub and can be replaced by real
-    configuration later.
-    """
-    # Para o stub, retornamos uma cópia da constante DEFAULT_THRESHOLDS.
-    # Isso deixa o local centralizado para futuras configurações dinâmicas.
-    return {k: v.copy() for k, v in DEFAULT_THRESHOLDS.items()}
+    return {"warning": warning_v, "critic": critic_v}
 
 
+# Função principal de validação; normaliza e valida configurações
 def validate_settings(settings: dict) -> dict:
-    """Valida e normaliza o dicionário de settings.
+    """Normaliza e valida o dicionário de configurações.
 
-    - Garante que exista a key 'thresholds' como dict
-    - Para cada métrica em METRIC_NAMES garante que exista {'alert', 'critic'}
-      e que alert < critic. Coerção para float é realizada quando possível.
-    - Preenche thresholds ausentes com DEFAULT_THRESHOLDS.
-
-    Lança ValueError em caso de erro grave de formato ou de ranges inválidos.
-    Retorna o dict de settings normalizado.
+    Garante que todos os thresholds estejam presentes e corretos.
     """
     import logging
 
     logger = logging.getLogger(__name__)
     if not isinstance(settings, dict):
-        raise TypeError("settings must be a dict")
+        raise TypeError("settings deve ser um dict")
 
     raw_thresholds = settings.get("thresholds")
     if not isinstance(raw_thresholds, dict):
@@ -227,21 +263,21 @@ def validate_settings(settings: dict) -> dict:
     for metric in METRIC_NAMES:
         raw = raw_thresholds.get(metric)
         if raw is None:
-            normalized[metric] = DEFAULT_THRESHOLDS.get(metric, {"alert": 0.0, "critic": 100.0}).copy()
+            normalized[metric] = DEFAULT_THRESHOLDS.get(metric, {"warning": 0.0, "critic": 100.0}).copy()
             continue
         normalized[metric] = _coerce_threshold(metric, raw)
 
     settings["thresholds"] = normalized
     settings.setdefault("log_level", "INFO")
-    logger.debug("Settings validated and normalized")
+    logger.debug("settings validados e normalizados")
     return settings
 
 
+# Auxilia outros módulos; retorna thresholds validados ou padrão em caso de erro
 def get_valid_thresholds(settings: dict | None = None) -> dict:
-    """Retorna thresholds validados prontos para consumo pelo SystemState.
+    """Retorna thresholds validados a partir das configurações.
 
-    Se `settings` for None, carrega via `load_settings()`. Em caso de falha na
-    validação, faz fallback para `DEFAULT_THRESHOLDS` e regista um warning.
+    Em caso de erro, retorna os thresholds padrão e registra aviso.
     """
     import logging
 
@@ -251,9 +287,6 @@ def get_valid_thresholds(settings: dict | None = None) -> dict:
             settings = load_settings()
         validated = validate_settings(settings)
         return validated.get("thresholds", {k: v.copy() for k, v in DEFAULT_THRESHOLDS.items()})
-    except Exception as exc:
-        logger.warning(
-            "Falha ao validar settings; usando DEFAULT_THRESHOLDS: %s",
-            exc,
-        )
+    except (TypeError, ValueError, OSError) as exc:
+        logger.warning("Falha ao validar settings; usando limites padrão (DEFAULT_THRESHOLDS): %s", exc)
         return {k: v.copy() for k, v in DEFAULT_THRESHOLDS.items()}

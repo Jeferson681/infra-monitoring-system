@@ -1,48 +1,70 @@
-"""Helpers genéricos de sistema de ficheiros usados pelo subsistema de logs.
+"""Helpers genéricos de sistema.
 
-Mantido intencionalmente pequeno e sem dependências para que possa ser
-reutilizado por outros módulos.
+Mantido intencionalmente pequeno e sem dependências pesadas.
 """
 
+from __future__ import annotations
 import logging
+import os
 import re
 import socket
-
-# Reexporta helpers específicos de logging de system.log_helpers para manter uma
-# fonte única de verdade para o comportamento de logging, preservando
-# compatibilidade para código que importa de system.helpers.
+from typing import List, Tuple
 
 logger = logging.getLogger(__name__)
 
 
-def parse_ping_output(output: str, is_windows: bool = True) -> float:
-    """Extrai o tempo de resposta (ms) a partir do output do comando ping.
+def reap_children_nonblocking() -> List[Tuple[int, int]]:
+    """Recolhe processos filhos terminados (POSIX, não bloqueante)."""
+    reaped: List[Tuple[int, int]] = []
+    if os.name == "posix":
+        try:
+            # Alguns analisadores estáticos/mypy reclamam do acesso direto a
+            # `os.WNOHANG` em plataformas onde a constante pode não existir.
+            # Usamos getattr com fallback para manter o comportamento POSIX
+            # e evitar erros de tipagem em outras plataformas.
+            flags = getattr(os, "WNOHANG", 1)
+            while True:
+                pid, status = os.waitpid(-1, flags)
+                if pid == 0:
+                    break
+                reaped.append((pid, status))
+        except ChildProcessError:
+            pass  # nenhum filho
+        except OSError:
+            pass  # plataforma ou permissão
+    return reaped
 
-    A função lida com formatos do Windows e Unix. Retorna -1.0 se não for
-    possível extrair um valor.
+
+def parse_ping_output(output: str, is_windows: bool = True) -> float:
+    """Extrai tempo médio de resposta (ms) a partir da saída do `ping`.
+
+    Aceita variações regionais ("Tempo" / "time"), aceita valores com casas
+    decimais e ignora case. Retorna -1.0 se não for possível extrair.
     """
+    # aceitar floats tanto em Windows quanto em Unix-like; ser case-insensitive
+    win_re = re.compile(r"(?:Tempo|time)[=:]?\s*(\d+(?:\.\d+)?)\s*ms", re.IGNORECASE)
+    unix_re = re.compile(r"time=(\d+(?:\.\d+)?)\s*ms", re.IGNORECASE)
     if is_windows:
-        # O output do Windows pode conter 'Tempo=12ms' ou 'time=12ms' dependendo
-        # da localidade. Buscamos dígitos seguidos de 'ms'.
-        match = re.search(r"(?:Tempo|time)[=:]?\s*(\d+)ms", output)
-        if match:
-            return float(match.group(1))
+        m = win_re.search(output)
+        if m:
+            try:
+                return float(m.group(1))
+            except Exception:
+                return -1.0
     else:
-        match = re.search(r"time=([0-9.]+) ms", output)
-        if match:
-            return float(match.group(1))
+        m = unix_re.search(output)
+        if m:
+            try:
+                return float(m.group(1))
+            except Exception:
+                return -1.0
     return -1.0
 
 
 def validate_host_port(host: str, port: int) -> bool:
-    """Valida se o host e porta são utilizáveis para conexão TCP."""
+    """Valida host e porta TCP."""
     try:
         socket.inet_aton(host)
-        if not (0 < port < 65536):
-            return False
-        return True
+        return 0 < port < 65536
     except Exception:
         return False
-
-
-# format_date_for_log is re-exported from system.log_helpers above
