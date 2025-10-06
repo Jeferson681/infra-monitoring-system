@@ -337,3 +337,20 @@ def _find_min_max_ts() -> (
     if not found:
         return 0.0, 0.0
     return float(min_ts), float(max_ts)
+
+
+def ensure_hourly_state_exists() -> None:
+    """Garante que exista um estado mínimo no cache (compatibilidade API).
+
+    Cria `last_end_ts: 0` quando não existir. Mantido para compatibilidade com callers.
+    """
+    try:
+        _migrate_old_state()
+        lp = get_log_paths()
+        cache_dir = Path(lp.root) / STATE_CACHE_DIR_NAME
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        p = cache_dir / STATE_FILE_NAME
+        if not p.exists():
+            _write_hourly_state({"last_end_ts": 0})
+    except Exception as exc:
+        logger.debug("ensure_hourly_state_exists failed: %s", exc, exc_info=True)
