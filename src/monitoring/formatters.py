@@ -3,16 +3,33 @@
 Normaliza métricas brutas e gera resumos curtos e detalhados para console.
 """
 
-from __future__ import annotations
 from typing import Dict, Any
+import logging
+
+logger = logging.getLogger(__name__)
 
 # ========================
-# 0. Cabeçalho e padrões
+# 0. Função principal de normalização (API pública)
 # ========================
 
 
+def normalize_for_display(metrics: Dict[str, Any]) -> Dict[str, Any]:
+    """Normaliza métricas brutas em estrutura pronta para exibição.
+
+    Retorna dict com 'summary_short', 'summary_long' e 'metrics_raw'.
+    """
+    summary_short = _build_short_from_metrics(metrics)
+    long_lines = _build_long_from_metrics(metrics)
+
+    return {
+        "summary_short": summary_short,
+        "summary_long": long_lines,
+        "metrics_raw": metrics,
+    }
+
+
 # ========================
-# 1. Construção de summaries
+# 1. Resumos (summaries) — construção de summaries curtos/detalhados
 # ========================
 
 
@@ -28,13 +45,22 @@ def _build_short_from_metrics(metrics: Dict[str, Any]) -> str:
     ping = metrics.get("ping_ms")
     parts: list[str] = []
     if cpu is not None:
-        parts.append(f"CPU {int(round(cpu))}%")
+        # include optional frequency (GHz) when available; show GHz before percent
+        cpu_freq = metrics.get("cpu_freq_ghz")
+        if cpu_freq is not None:
+            try:
+                cpu_freq_f = float(cpu_freq)
+                parts.append(f"CPU {cpu_freq_f:.1f}GHz • {int(round(cpu))}%")
+            except Exception:
+                parts.append(f"CPU {int(round(cpu))}%")
+        else:
+            parts.append(f"CPU {int(round(cpu))}%")
     if mem_percent is not None:
         parts.append(f"RAM {int(round(mem_percent))}%")
     if ping is not None:
         parts.append(f"Ping {int(round(ping))} ms")
     if disk_percent is not None:
-        parts.append(f"Disk {int(round(disk_percent))}%")
+        parts.append(f"Disco {int(round(disk_percent))}%")
     return " | ".join(parts) if parts else "Sem dados"
 
 
@@ -53,7 +79,19 @@ def _build_long_from_metrics(metrics: Dict[str, Any]) -> list[str]:
     latency = metrics.get("latency_ms")
     long_lines: list[str] = []
 
-    long_lines.append(f"CPU: {int(round(cpu))}%" if cpu is not None else "CPU: Indisponivel")
+    # CPU line: include frequency if available (GHz before percent)
+    if cpu is not None:
+        cpu_freq = metrics.get("cpu_freq_ghz")
+        if cpu_freq is not None:
+            try:
+                cpu_freq_f = float(cpu_freq)
+                long_lines.append(f"CPU: {cpu_freq_f:.1f}GHz • {int(round(cpu))}%")
+            except Exception:
+                long_lines.append(f"CPU: {int(round(cpu))}%")
+        else:
+            long_lines.append(f"CPU: {int(round(cpu))}%")
+    else:
+        long_lines.append("CPU: Indisponivel")
     mem_line = _fmt_bytes_gb(mem_used, mem_total)
     long_lines.append(f"RAM: {mem_line}")
     disk_line = _fmt_bytes_gb(disk_used, disk_total)
@@ -63,9 +101,9 @@ def _build_long_from_metrics(metrics: Dict[str, Any]) -> list[str]:
     if latency is not None:
         # Sempre exibir em ms para evitar conversão para segundos que pode
         # mascarar que o valor é um timeout/estimativa (ex.: 10000 ms -> 10.0 s).
-        long_lines.append(f"Latency: {latency:.1f} ms")
+        long_lines.append(f"Latência: {latency:.1f} ms")
     else:
-        long_lines.append("Latency: Indisponivel")
+        long_lines.append("Latência: Indisponivel")
 
     temp = metrics.get("temperature_celsius")
     long_lines.append(f"Temperatura: {temp} C" if temp is not None else "Temperatura: Indisponivel")
@@ -85,14 +123,16 @@ def _build_long_from_metrics(metrics: Dict[str, Any]) -> list[str]:
             dt = datetime.datetime.fromtimestamp(float(ts))
             # Mostrar apenas até segundos, sem milissegundos
             long_lines.append(f"Data/hora: {dt.strftime('%Y-%m-%d %H:%M:%S')}")
-        except Exception:
+        except (TypeError, ValueError, OSError, OverflowError) as exc:
+            logger.debug("timestamp inválido ao formatar Data/hora: %s", exc, exc_info=True)
+            # timestamp inválido ou fora de alcance
             long_lines.append(f"Data/hora: {ts}")
 
     return long_lines
 
 
 # ========================
-# 2. Helpers de formatação (exclusivos do módulo)
+# 2. Helpers de formatação (funções auxiliares do módulo)
 # ========================
 
 
@@ -108,8 +148,10 @@ def _fmt_bytes_gb(used: int | None, total: int | None) -> str:
         used_gb = used / (1024**3)
         total_gb = total / (1024**3)
         percent = int(round((used / total) * 100))
-        return f"{used_gb:.1f} / {total_gb:.0f} GB - {percent}%"
-    except Exception:
+        return f"{used_gb:.1f} / {total_gb:.0f} GB • {percent}%"
+    except (TypeError, ValueError, ZeroDivisionError) as exc:
+        logger = logging.getLogger(__name__)
+        logger.debug("erro ao formatar bytes para GB: %s", exc, exc_info=True)
         return "Indisponivel"
 
 
@@ -127,26 +169,7 @@ def _fmt_bytes_human(n: int | None) -> str:
         if gb >= 1.0:
             return f"{gb:.1f} GB"
         return f"{mb:.1f} MB"
-    except Exception:
+    except (TypeError, ValueError) as exc:
+        logger = logging.getLogger(__name__)
+        logger.debug("erro ao formatar bytes humanamente: %s", exc, exc_info=True)
         return "Indisponivel"
-
-
-# ========================
-# 3. Função principal de normalização
-# ========================
-
-
-# Fornece: normalize_for_display — cria summaries prontos para exibição
-def normalize_for_display(metrics: Dict[str, Any]) -> Dict[str, Any]:
-    """Normaliza métricas brutas em estrutura pronta para exibição.
-
-    Retorna dict com 'summary_short', 'summary_long' e 'metrics_raw'.
-    """
-    summary_short = _build_short_from_metrics(metrics)
-    long_lines = _build_long_from_metrics(metrics)
-
-    return {
-        "summary_short": summary_short,
-        "summary_long": long_lines,
-        "metrics_raw": metrics,
-    }
