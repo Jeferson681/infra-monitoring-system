@@ -19,10 +19,12 @@ Stage B — Idioma e mensagens humanas
 - Ação: garantir que todas mensagens humanas (logger.info/warning/error/debug que não sejam fields JSON) e prints estejam em português.
 - Regra: manter termos técnicos e keys JSON em inglês (p.ex. `thresholds`) — opcionalmente entre parênteses usar PT.
 - Nota: não alterar conteúdo de logs estruturados (jsonl) sem garantir compatibilidade com consumidores.
+- Ação: Garantir comentarios em 1 linha acima do metodo em portugues explicitando se é função principal ou auxiliar, se for auxiliar explicide de quem
+- Ação: docstrings de 1 a 3 linhas sobre oque a funcão faz, em portugues.
 
 Stage C — Estrutura do arquivo e API compatibility
-+- Ação: garantir blocos numerados no topo (mínimo: 0. Config, 1. Paths/I/O, 2. Helpers/Funções). Ajustar helpers locais conforme diretriz.
-+- Regra explícita: helpers relacionados diretamente à função principal do módulo devem ser posicionados logo abaixo dessa função (ex.: helpers de `load_settings` imediatamente após `load_settings`). Helpers reutilizáveis continuam em `src/system/helpers.py` ou `src/system/log_helpers.py`.
++- Ação: garantir blocos numerados no topo exemplos praticos:(mínimo: 0. Config, 1. Paths/I/O, 2. Helpers/Funções) nao obrigatoriamente esses nomes. Ajustar helpers locais conforme diretriz.
++- Regra explícita: helpers relacionados diretamente à função principal do módulo devem ser posicionados logo abaixo dessa função (ex.: helpers de `load_settings` imediatamente após `load_settings`)seguir o exemplo em qualquer função. Helpers reutilizáveis continuam em `src/system/helpers.py` ou `src/system/log_helpers.py`.
 +- Crucial: NÃO alterar a API pública do módulo sem compatibilidade reversa. Se for necessário renomear, adicionar alias compatível (mantendo comportamento) e documentar.
 +- Adicionar `# noqa` temporário apenas com TODO e justificativa se não for possível completar sem testes.
 

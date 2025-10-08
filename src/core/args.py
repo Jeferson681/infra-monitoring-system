@@ -88,17 +88,19 @@ def validate_args(args: argparse.Namespace) -> None:
         args.interval = 1.0
     try:
         args.interval = float(args.interval)
-    except Exception:
-        raise ValueError("interval must be a number")
+    except (TypeError, ValueError) as exc:
+        # Mensagem para usuário em PT; mantém o nome técnico 'interval' em inglês
+        raise ValueError("intervalo deve ser um número") from exc
     if args.interval < 0.0:
-        raise ValueError("interval must be >= 0.0")
+        raise ValueError("intervalo deve ser >= 0.0")
 
     try:
         args.cycles = int(args.cycles)
-    except Exception:
-        raise ValueError("cycles must be an integer >= 0")
+    except (TypeError, ValueError) as exc:
+        # Mensagem em PT; 'cycles' é o nome do argumento técnico
+        raise ValueError("cycles deve ser um inteiro >= 0") from exc
     if args.cycles < 0:
-        raise ValueError("cycles must be >= 0")
+        raise ValueError("cycles deve ser >= 0")
 
 
 # ========================

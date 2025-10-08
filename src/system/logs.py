@@ -86,7 +86,7 @@ def _ensure_dir_writable(p: Path) -> Path:
             f.write("ok")
         test.unlink(missing_ok=True)
     except Exception as exc:
-        logger.warning("Falha em logdir %s: %s", p, exc)
+        logger.warning("Falha em logdir %s: %s", p, exc, exc_info=True)
         try:
             if isinstance(exc, OSError):
                 if exc.errno == errno.ENOSPC:
@@ -116,8 +116,9 @@ def get_log_paths(root: str | Path | None = None) -> LogPaths:
     """
     try:
         log_root = Path(root) if root else Path(LOG_ROOT)
-    except Exception:
+    except Exception as exc:
         # fallback: projeto/logs
+        logger.debug("get_log_paths: falha ao resolver root: %s", exc, exc_info=True)
         project_root = Path(__file__).resolve().parents[2]
         log_root = project_root / "logs"
 
@@ -139,7 +140,7 @@ def invalidate_get_log_paths_cache() -> None:
     try:
         get_log_paths.cache_clear()
     except Exception as exc:
-        logger.debug("invalidate_get_log_paths_cache: cache_clear failed: %s", exc)
+        logger.debug("invalidate_get_log_paths_cache: cache_clear failed: %s", exc, exc_info=True)
 
 
 # ========================
@@ -224,7 +225,15 @@ def write_log(
 
     for idx, msg in enumerate(messages):
         ts = datetime.now(timezone.utc).isoformat()
-        human_msg = normalize_message_for_human(msg)
+
+        # Preserve multi-line human messages for the hourly summary log or
+        # when writing to a safe file. Historically the normalize step
+        # flattened newlines; when writing the canonical dated `_safe` files
+        # we want to preserve the original multiline human text.
+        if human_enable and (name == "monitoring-hourly" or safe_log_enable) and isinstance(msg, str):
+            human_msg = msg
+        else:
+            human_msg = normalize_message_for_human(msg)
 
         if human_enable:
             _perform_human_write(
@@ -263,11 +272,12 @@ def _hourly_allows_write(lp: LogPaths, name: str, hourly: bool, hourly_window_se
             try:
                 with open(ts_path, "r", encoding="utf-8") as f:
                     last = int(f.read().strip() or 0)
-            except Exception:
+            except (OSError, ValueError):
                 last = 0
             return (now_int - last) >= int(hourly_window_seconds)
         return True
-    except Exception:
+    except Exception as exc:
+        logger.debug("_hourly_allows_write: erro ao verificar hourly: %s", exc, exc_info=True)
         return True
 
 
@@ -300,7 +310,7 @@ def _perform_human_write(
                 with open(ts_file, "w", encoding="utf-8") as f:
                     f.write(str(int(time.time())))
             except Exception as exc:
-                logger.debug("_perform_human_write: unable to write hourly ts: %s", exc)
+                logger.debug("_perform_human_write: não foi possível escrever hourly ts: %s", exc, exc_info=True)
     else:
         logger.debug("human write ignorado pela janela hourly")
 
@@ -324,6 +334,40 @@ def get_debug_file_path() -> Path:
     date_str = format_date_for_log(None)
     filename = f"debug_log-{date_str}.txt"
     return get_log_paths().debug_dir / filename
+
+
+# Auxiliar do loop: verifica e restabelece diretórios de logs se necessários
+def ensure_log_dirs_exist(root: str | Path | None = None) -> None:
+    """Garante existência dos diretórios de logs e recria se faltarem.
+
+    Faz checagens leves (Path.exists()) e só escala para a criação completa
+    chamando a rotina de inicialização quando um caminho estiver ausente.
+    Projetada para ser chamada frequentemente pelo loop sem overhead.
+    """
+    try:
+        # resolve candidate root (do not call get_log_paths() yet)
+        log_root = Path(root) if root else Path(LOG_ROOT)
+    except Exception:
+        return
+
+    # list of expected directories under the root
+    expected = (
+        log_root,
+        log_root / "log",
+        log_root / "json",
+        log_root / "archive",
+        log_root / "debug",
+    )
+
+    for p in expected:
+        # cheap check; if any missing, force resolution/creation via get_log_paths
+        if not p.exists():
+            try:
+                # this will create the directories via _ensure_dir_writable
+                get_log_paths(root)
+            except Exception as exc:
+                logger.debug("ensure_log_dirs_exist: failed to recreate %s: %s", p, exc, exc_info=True)
+            break
 
 
 # ========================
@@ -385,4 +429,4 @@ def safe_remove(retention_days: int = 7, safe_retention_days: int | None = 30) -
                 p.unlink()
                 logger.info("safe_remove: removed %s", p)
             except Exception as exc:
-                logger.warning("safe_remove: failed to remove %s: %s", p, exc)
+                logger.warning("safe_remove: falha ao remover %s: %s", p, exc, exc_info=True)

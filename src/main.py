@@ -10,6 +10,9 @@ import sys
 from system.logs import get_debug_file_path
 from core.core import _run_loop
 
+# Use existing averages helper to ensure hourly/cache state exists
+from monitoring.averages import get_last_ts_file
+
 
 def main(argv: list[str] | None = None) -> None:
     """Inicializa logging e inicia o loop principal do programa."""
@@ -33,8 +36,8 @@ def main(argv: list[str] | None = None) -> None:
                     if getattr(h, "baseFilename", None) == getattr(fh, "baseFilename", None):
                         existing = True
                         break
-            except Exception as exc:
-                _logging.getLogger(__name__).debug("error inspecting handler: %s", exc)
+            except Exception:
+                _logging.getLogger(__name__).exception("erro inspeccionando handler")
         if not existing:
             root.addHandler(fh)
 
@@ -45,8 +48,15 @@ def main(argv: list[str] | None = None) -> None:
                 sys.__excepthook__(exc_type, exc_value, exc_tb)
 
         sys.excepthook = _exc_hook
+    except Exception as exc:
+        _logging.getLogger(__name__).debug("falha ao configurar debug file handler: %s", exc, exc_info=True)
+
+    # garantir arquivo de controle (.cache/last_ts.json) antes de iniciar o loop
+    try:
+        # calling get_last_ts_file will create the .cache dir and default file
+        get_last_ts_file()
     except Exception:
-        _logging.getLogger(__name__).debug("Could not set up debug file handler")
+        _logging.getLogger(__name__).debug("falha ao garantir arquivo de controle no startup", exc_info=True)
 
     _run_loop(interval=args.interval, cycles=args.cycles, verbose_level=getattr(args, "verbose", 0) or 0)
 

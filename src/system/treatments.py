@@ -29,9 +29,9 @@ def cleanup_temp_files(days: int = 7) -> None:
     try:
         for item in sorted(tmpdir.iterdir()):
             process_temp_item(item, max_age)
-    except Exception as exc:
+    except OSError as exc:
         # Be conservative: log and don't raise when scanning tempdir fails
-        logger.debug("cleanup_temp_files: scanning %s failed: %s", tmpdir, exc)
+        logger.debug("cleanup_temp_files: scanning %s failed: %s", tmpdir, exc, exc_info=True)
 
 
 def check_disk_usage(threshold_pct: int = 90) -> List[str]:
@@ -108,7 +108,8 @@ def trim_process_working_set_windows(pid: int) -> bool:
             return bool(res)
         finally:
             kernel32.CloseHandle(h)
-    except Exception:
+    except Exception as exc:
+        logger.debug("trim_process_working_set_windows falhou: %s", exc, exc_info=True)
         return False
 
 
@@ -119,7 +120,7 @@ def reap_zombie_processes() -> int:
     try:
         reaped = reap_children_nonblocking()
     except Exception as exc:
-        logger.debug("cleanup_processes: reap failed: %s", exc)
+        logger.debug("cleanup_processes: reap falhou: %s", exc, exc_info=True)
         return 0
     count = len(reaped)
     if count:
@@ -150,8 +151,8 @@ def reapply_network_config() -> None:
 
         try:
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-        except Exception as exc:
-            logger.debug("reapply_network_config: %s failed: %s", cmd, exc)
+        except (subprocess.SubprocessError, OSError) as exc:
+            logger.debug("reapply_network_config: %s falhou: %s", cmd, exc, exc_info=True)
             continue
 
         logger.debug("reapply_network_config: %s => %s", cmd, getattr(proc, "returncode", None))
@@ -179,7 +180,7 @@ def _online_check(timeout: float = 2.0) -> bool:
     try:
         with socket.create_connection(("8.8.8.8", 53), timeout=timeout):
             return True
-    except Exception:
+    except OSError:
         return False
 
 

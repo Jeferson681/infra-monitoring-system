@@ -83,12 +83,12 @@ def _maybe_run_aux_cleanup(state: Any, now: float) -> None:
                     if hasattr(state, "last_treatment_run") and isinstance(state.last_treatment_run, dict):
                         state.last_treatment_run[aux_name] = now
                     logger.info("tentativa_tratamento: auxiliar %s resultado=%s", aux_name, aux_res)
-                except Exception:
-                    logger.debug("tentativa_tratamento: auxiliar %s falhou", aux_name)
+                except (OSError, RuntimeError, ValueError, TypeError, AttributeError) as exc:
+                    logger.debug("tentativa_tratamento: auxiliar %s falhou: %s", aux_name, exc, exc_info=True)
         else:
             logger.debug("tentativa_tratamento: auxiliar %s em cooldown, pulando", aux_name)
-    except Exception:
-        logger.debug("tentativa_tratamento: erro verificando/realizando auxiliar %s", aux_name)
+    except (OSError, RuntimeError, ValueError, TypeError, AttributeError) as exc:
+        logger.debug("tentativa_tratamento: erro verificando/realizando auxiliar %s: %s", aux_name, exc, exc_info=True)
 
 
 def _run_reap_aux(state: Any, action_name: str, result, now: float) -> object | None:
@@ -101,13 +101,15 @@ def _run_reap_aux(state: Any, action_name: str, result, now: float) -> object | 
         if action_name != "reap_zombie_processes":
             try:
                 reap_result = treatments.reap_zombie_processes()
-            except Exception:
+            except (OSError, RuntimeError, ValueError, TypeError, AttributeError) as exc:
+                logger.debug("tentativa_tratamento: reap_zombie_processes falhou: %s", exc, exc_info=True)
                 reap_result = None
             if hasattr(state, "last_treatment_run") and isinstance(state.last_treatment_run, dict):
                 state.last_treatment_run["reap_zombie_processes"] = now
         else:
             reap_result = result
-    except Exception:
+    except (OSError, RuntimeError, ValueError, TypeError, AttributeError) as exc:
+        logger.debug("tentativa_tratamento: erro ao executar aux reap_zombie_processes: %s", exc, exc_info=True)
         reap_result = None
     return reap_result
 
@@ -181,6 +183,6 @@ def attempt_treatment(state: Any, name: str, _details: dict) -> dict | bool:  # 
             state.last_treatment_run[action_name] = now
         logger.debug("tentativa_tratamento: %s retornou %s (reap=%s)", action_name, result, reap_result)
         return {"action": action_name, "result": result}
-    except Exception as exc:
-        logger.warning("tentativa_tratamento: %s falhou para %s: %s", action_name, name, exc)
+    except (OSError, RuntimeError, ValueError, TypeError, AttributeError) as exc:
+        logger.warning("tentativa_tratamento: %s falhou para %s: %s", action_name, name, exc, exc_info=True)
         return False

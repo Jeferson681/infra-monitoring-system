@@ -40,6 +40,7 @@ _METRIC_INTERVALS: dict[str, float] = {
     "cpu_percent": 1.0,
     "memory_percent": 5.0,
     "disk_percent": 10.0,
+    "cpu_freq_ghz": 30.0,
     "network": 2.0,  # agrupa bytes_sent/bytes_recv
     "ping_ms": 5.0,
     "latency_ms": 5.0,
@@ -66,8 +67,8 @@ def _is_stale(key: str) -> bool:
         last = float(_CACHE.get(key, {}).get("ts", 0.0))
         interval = float(_METRIC_INTERVALS.get(key, 1.0))
         return (_now() - last) >= interval
-    except Exception as exc:
-        logger.debug("_is_stale check failed for key %s: %s", key, exc, exc_info=True)
+    except (TypeError, ValueError) as exc:
+        logger.debug("_is_stale falhou para key %s: %s", key, exc, exc_info=True)
         return True
 
 
@@ -83,8 +84,8 @@ def _cache_get_or_refresh(key: str, collector, *args, **kwargs):
     if key not in _METRIC_INTERVALS:
         try:
             return collector(*args, **kwargs)
-        except Exception as exc:
-            logger.debug("collector failed for unknown key %s: %s", key, exc, exc_info=True)
+        except (TypeError, ValueError, RuntimeError, OSError) as exc:
+            logger.debug("collector falhou para key desconhecida %s: %s", key, exc, exc_info=True)
             return None
 
     # if not stale, return cached value
@@ -94,8 +95,8 @@ def _cache_get_or_refresh(key: str, collector, *args, **kwargs):
     def _refresh_no_lock():
         try:
             val = collector(*args, **kwargs)
-        except Exception as exc:
-            logger.debug("collector refresh failed for key %s: %s", key, exc, exc_info=True)
+        except (TypeError, ValueError, RuntimeError, OSError) as exc:
+            logger.debug("falha ao atualizar collector para key %s: %s", key, exc, exc_info=True)
             val = None
         _CACHE[key]["value"] = val
         _CACHE[key]["ts"] = _now()
@@ -115,8 +116,8 @@ def _cache_get_or_refresh(key: str, collector, *args, **kwargs):
     finally:
         try:
             lock.release()
-        except Exception as exc:
-            logger.debug("lock.release() failed: %s", exc, exc_info=True)
+        except RuntimeError as exc:
+            logger.debug("lock.release() falhou: %s", exc, exc_info=True)
 
 
 def collect_metrics() -> dict[str, float | int | str | None]:
@@ -137,12 +138,16 @@ def collect_metrics() -> dict[str, float | int | str | None]:
     try:
         for k in _CACHE.keys():
             _CACHE[k]["ts"] = 0.0
-    except Exception as exc:
-        logger.debug("failed to reset cache timestamps: %s", exc, exc_info=True)
+    except (AttributeError, TypeError) as exc:
+        logger.debug("falha ao resetar timestamps do cache: %s", exc, exc_info=True)
 
     # percentuais (garante 0..100 ou None) via cache
     cpu = _safe_float(_cache_get_or_refresh("cpu_percent", get_cpu_percent))
     metrics["cpu_percent"] = None if cpu is None else max(0.0, min(100.0, cpu))
+
+    # cpu frequency in GHz (may be None on some platforms)
+    cpu_freq = _safe_float(_cache_get_or_refresh("cpu_freq_ghz", get_cpu_freq_ghz))
+    metrics["cpu_freq_ghz"] = None if cpu_freq is None else float(cpu_freq)
 
     mem = _safe_float(_cache_get_or_refresh("memory_percent", get_memory_percent))
     metrics["memory_percent"] = None if mem is None else max(0.0, min(100.0, mem))
@@ -222,7 +227,7 @@ def get_cpu_percent() -> float | None:
     global _cpu_warmed_up
     try:
         val = psutil.cpu_percent(interval=0.0)
-    except Exception:
+    except (OSError, RuntimeError):
         return None
 
     # Se não aquecido e valor for 0.0, tentar pequena amostra bloqueante e
@@ -233,8 +238,8 @@ def get_cpu_percent() -> float | None:
     if not _cpu_warmed_up and abs(val - 0.0) <= eps:
         try:
             val2 = psutil.cpu_percent(interval=0.05)
-        except Exception as exc:
-            logger.debug("cpu_percent short sample failed: %s", exc, exc_info=True)
+        except (OSError, RuntimeError) as exc:
+            logger.debug("amostra curta cpu_percent falhou: %s", exc, exc_info=True)
             val2 = None
         _cpu_warmed_up = True
         if val2 is None:
@@ -242,6 +247,34 @@ def get_cpu_percent() -> float | None:
         return None if abs(val2 - 0.0) <= eps else val2
 
     return val
+
+
+def get_cpu_freq_ghz() -> float | None:
+    """Retorne a frequência atual da CPU em GHz ou None se indisponível.
+
+    Usa psutil.cpu_freq() que normalmente retorna valores em MHz; convertemos
+    para GHz dividindo por 1000. Tratamos exceções e valores nulos.
+    """
+    try:
+        f = psutil.cpu_freq()
+    except (OSError, RuntimeError) as exc:
+        logger.debug("psutil.cpu_freq() falhou: %s", exc, exc_info=True)
+        return None
+
+    if not f:
+        return None
+
+    # 'current' costuma estar em MHz; proteger contra None
+    curr = getattr(f, "current", None)
+    if curr is None:
+        return None
+    try:
+        ghz = float(curr) / 1000.0
+        if not math.isfinite(ghz):
+            return None
+        return ghz
+    except (TypeError, ValueError):
+        return None
 
 
 def get_memory_percent() -> float:
@@ -308,8 +341,8 @@ def get_temperature() -> float | None:
         script_path = Path(__file__).resolve().parents[2] / "system" / "scripts" / "temp.sh"
         if script_path.exists() and os.access(script_path, os.X_OK):
             return _get_temp_from_script(script_path)
-    except Exception as exc:
-        logger.debug("get_temperature (script) failed: %s", exc, exc_info=True)
+    except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
+        logger.debug("get_temperature (script) falhou: %s", exc, exc_info=True)
 
     return None
 
@@ -323,8 +356,8 @@ def _get_temp_from_script(script_path: Path) -> float | None:
     try:
         # executar o script com timeout para evitar bloqueios
         proc = subprocess.run([str(script_path)], capture_output=True, text=True, timeout=5)
-    except Exception as exc:
-        logger.debug("_get_temp_from_script run failed: %s", exc, exc_info=True)
+    except (subprocess.SubprocessError, OSError) as exc:
+        logger.debug("_get_temp_from_script falhou ao executar: %s", exc, exc_info=True)
         return None
 
     out = (proc.stdout or "").strip()
@@ -340,8 +373,8 @@ def _get_temp_from_script(script_path: Path) -> float | None:
         if not math.isfinite(v):
             return None
         return v
-    except Exception as exc:
-        logger.debug("get_cpu_percent failed: %s", exc, exc_info=True)
+    except (ValueError, TypeError) as exc:
+        logger.debug("_get_temp_from_script: parse de float falhou: %s", exc, exc_info=True)
         return None
 
 
@@ -353,8 +386,8 @@ def _temperature_collector() -> float | None:
         script_path = Path(__file__).resolve().parents[2] / "system" / "scripts" / "temp.sh"
         if script_path.exists() and os.access(script_path, os.X_OK):
             return _get_temp_from_script(script_path)
-    except Exception as exc:
-        logger.debug("_temperature_collector failed: %s", exc, exc_info=True)
+    except (OSError, subprocess.SubprocessError) as exc:
+        logger.debug("_temperature_collector falhou: %s", exc, exc_info=True)
     return None
 
 
@@ -403,13 +436,15 @@ def get_network_latency(host: str = "8.8.8.8", port: int = 53, timeout: float = 
                 if math.isfinite(v):
                     _last_latency_estimated = False
                     return v
-            except Exception:
+            except (ValueError, TypeError) as exc:
+                logger.debug("get_network_latency: parse de ping falhou: %s", exc, exc_info=True)
                 pass
     except subprocess.CalledProcessError:
-        # ping returned non-zero exit code; try TCP fallback
+        # ping retornou com código !=0; tentar fallback TCP
         pass
-    except Exception:
+    except (subprocess.SubprocessError, OSError) as exc:
         # qualquer outro erro (timeout, binário ausente etc.) -> fallback
+        logger.debug("get_network_latency: ping falhou: %s", exc, exc_info=True)
         pass
 
     # Fallback via socket/TCP
@@ -432,7 +467,7 @@ def get_latency(host: str = "8.8.8.8", port: int = 53, timeout: float = 2.0) -> 
 
 
 def get_ping(host: str = "8.8.8.8", timeout: float = 1.0) -> float | None:
-    """Return a convenience ping (port 53, short timeout)."""
+    """Retorna ping de conveniência (porta 53, timeout curto)."""
     return get_network_latency(host=host, port=53, timeout=timeout)
 
 
@@ -441,8 +476,8 @@ def get_memory_info() -> tuple[int | None, int | None]:
     try:
         vm = psutil.virtual_memory()
         return int(getattr(vm, "used", 0)), int(getattr(vm, "total", 0))
-    except Exception as exc:
-        logger.debug("get_memory_info failed: %s", exc, exc_info=True)
+    except (OSError, RuntimeError, AttributeError) as exc:
+        logger.debug("get_memory_info falhou: %s", exc, exc_info=True)
         return None, None
 
 
@@ -469,10 +504,11 @@ def get_disk_usage_info(path: str | None = None) -> tuple[int | None, int | None
         try:
             du = psutil.disk_usage(str(candidates[0]))
             return int(getattr(du, "used", 0)), int(getattr(du, "total", 0))
-        except Exception:
+        except OSError as exc:
+            logger.debug("get_disk_usage_info: psutil.disk_usage falhou: %s", exc, exc_info=True)
             return None, None
-    except Exception as exc:
-        logger.debug("get_disk_usage_info failed: %s", exc)
+    except OSError as exc:
+        logger.debug("get_disk_usage_info falhou: %s", exc, exc_info=True)
         return None, None
 
 
