@@ -99,7 +99,7 @@ def normalize_message_for_human(msg, max_len: int | None = 10000) -> str:
     """Normaliza mensagem para linha legível por humanos."""
     try:
         s = "" if msg is None else str(msg)
-    except Exception:
+    except (TypeError, ValueError):
         s = "<unrepr>"
     s = s.replace("\n", " ").replace("\r", " ")
     return s[:max_len] if max_len and len(s) > max_len else s
@@ -117,7 +117,16 @@ def build_json_entry(ts: str, level: str, msg, extra: dict | None = None) -> dic
 
 
 def build_human_line(ts: str, level: str, msg_str: str, extras: dict | None = None) -> str:
-    """Compõe linha legível por humanos: `<ts> [LEVEL] msg extras`."""
+    """Compõe linha legível por humanos.
+
+    Formato resultante:
+      <ts> [LEVEL] [extras...]
+      <msg_str>
+
+    Onde <msg_str> pode conter múltiplas linhas (preservadas). Esta mudança
+    garante que o cabeçalho com data e nível fique numa linha separada e que a
+    primeira métrica (por exemplo, CPU) comece na linha seguinte.
+    """
     extras_part = ""
     if extras and isinstance(extras, dict):
         kvs = []
@@ -127,7 +136,19 @@ def build_human_line(ts: str, level: str, msg_str: str, extras: dict | None = No
             kvs.append(f"{k}={sval}")
         if kvs:
             extras_part = " " + " ".join(kvs)
-    return f"{ts} [{level}] {msg_str}{extras_part}\n"
+
+    # Ensure msg_str is a string and preserve internal newlines.
+    try:
+        body = "" if msg_str is None else str(msg_str)
+    except Exception:
+        body = "<unrepr>"
+
+    # Trim trailing whitespace/newlines but keep internal line breaks.
+    body = body.rstrip("\r\n")
+
+    header = f"{ts} [{level}]{extras_part}\n"
+    # Append an extra blank line to separate entries visually.
+    return header + body + "\n\n"
 
 
 def format_date_for_log(dt=None) -> str:
@@ -138,7 +159,7 @@ def format_date_for_log(dt=None) -> str:
         if isinstance(dt, date):
             return dt.isoformat()
         return dt.date().isoformat()
-    except Exception:
+    except (AttributeError, TypeError):
         return datetime.now(timezone.utc).date().isoformat()
 
 
@@ -149,7 +170,7 @@ def is_older_than(p: Path, seconds: int) -> bool:
     """Return True se o ficheiro tiver mtime mais antigo que `seconds`."""
     try:
         st = p.stat()
-    except Exception as exc:
+    except OSError as exc:
         logger.warning("is_older_than: falha ao acessar %s: %s", p, exc)
         return False
     now_ts = datetime.now(timezone.utc).timestamp()
@@ -160,7 +181,7 @@ def archive_file_is_old(p: Path, now_ts: float, retention_days: int) -> bool:
     """Return True se o ficheiro em archive for mais antigo que `retention_days`."""
     try:
         st = p.stat()
-    except Exception as exc:
+    except OSError as exc:
         logger.warning("archive_file_is_old: falha ao acessar %s: %s", p, exc)
         return False
     cutoff = now_ts - retention_days * 86400
@@ -200,7 +221,7 @@ def _copy_replace_fallback(s: Path, d: Path) -> bool:
             pass
         return True
     except OSError as exc:
-        logger.debug("atomic_move_to_archive: copy fallback failed: %s", exc)
+        logger.debug("atomic_move_to_archive: copy fallback failed: %s", exc, exc_info=True)
         if tmp.exists():
             tmp.unlink(missing_ok=True)
         return False

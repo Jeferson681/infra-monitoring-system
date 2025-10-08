@@ -49,14 +49,14 @@ def parse_ping_output(output: str, is_windows: bool = True) -> float:
         if m:
             try:
                 return float(m.group(1))
-            except Exception:
+            except (ValueError, TypeError):
                 return -1.0
     else:
         m = unix_re.search(output)
         if m:
             try:
                 return float(m.group(1))
-            except Exception:
+            except (ValueError, TypeError):
                 return -1.0
     return -1.0
 
@@ -66,5 +66,5 @@ def validate_host_port(host: str, port: int) -> bool:
     try:
         socket.inet_aton(host)
         return 0 < port < 65536
-    except Exception:
+    except (OSError, ValueError):
         return False

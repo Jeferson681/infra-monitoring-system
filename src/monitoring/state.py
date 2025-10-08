@@ -26,7 +26,7 @@ def _annotate_alerts_on_lines(nf: dict, alerts: list[dict]) -> None:
             level = details.get("level")
             if not level:
                 continue
-            label = "WARNING" if level == STATE_WARNING else ("CRITIC" if level == STATE_CRITIC else None)
+            label = "WARNING" if level == STATE_WARNING else ("CRITICAL" if level == STATE_CRITIC else None)
             if not label:
                 continue
             if not metric_name:
@@ -42,12 +42,23 @@ def _annotate_alerts_on_lines(nf: dict, alerts: list[dict]) -> None:
                 if any(ln_l.startswith(p) for p in prefix_candidates):
                     lines[i] = f"{ln} ({label}: acima do limite)"
                     break
-    except Exception:
+    except (AttributeError, TypeError) as exc:
+        logger.debug("_annotate_alerts_on_lines falhou: %s", exc, exc_info=True)
         return
 
 
 class SystemState:  # noqa: C901
+    """Representa o estado do sistema e gerencia alertas/snapshots.
+
+    Mantém o conjunto de alertas ativos, políticas de cooldowns, e fornece
+    builders para snapshots usados pela interface/saída.
+    """
+
     def __init__(self) -> None:  # noqa: C901
+        """Inicializa o estado, carrega políticas e define snapshot builders.
+
+        Não realiza operações I/O pesadas; apenas configura estruturas em memória.
+        """
         self.active_alerts: dict[str, dict] = {}
         self.last_state: str = STATE_STABLE
         self.last_snapshot: dict | None = None
@@ -57,7 +68,8 @@ class SystemState:  # noqa: C901
         try:
             cfg = load_settings() or {}
             policies = cfg.get("treatment_policies", {}) or {}
-        except Exception:
+        except (OSError, RuntimeError, ValueError, TypeError) as exc:
+            logger.debug("load_settings falhou: %s", exc, exc_info=True)
             policies = {}
         self.sustained_critic_seconds: int = int(policies.get("sustained_crit_seconds", 5 * 60))
         self.min_critical_alerts: int = int(policies.get("min_critical_alerts", 1))
@@ -139,6 +151,11 @@ class SystemState:  # noqa: C901
         }
 
     def evaluate_metrics(self, metrics: dict | None = None) -> dict:  # noqa: C901
+        """Avalia métricas, atualiza o estado e executa tratamentos se necessário.
+
+        Se `metrics` for None, tenta coletar via `monitoring.metrics.collect_metrics`.
+        Retorna um dict com o estado atual e snapshots apropriados.
+        """
         if metrics is None:
             try:
                 from monitoring.metrics import collect_metrics  # type: ignore
@@ -217,7 +234,25 @@ class SystemState:  # noqa: C901
         after_state = self._evaluate_against_thresholds(metrics_after, thresholds, store=False)
         self.active_alerts = self._collect_alerts(metrics_after, thresholds)
         self.last_state = after_state
+        # Ensure the 'after' snapshot reflects the freshly collected metrics.
+        # snapshot_builders use normalize_for_display(getattr(self, 'last_metrics', {})),
+        # so update self.last_metrics before building the 'after' snapshot.
+        try:
+            prev_last_metrics = getattr(self, "last_metrics", None)
+            self.last_metrics = dict(metrics_after or {})
+        except Exception:
+            prev_last_metrics = None
+
         after = self.snapshot_builders["after_critic"]()
+
+        # restore previous last_metrics if something upstream expects it to remain
+        # as the pre-treatment metrics; but keep last_before_critic/last_after_critic
+        # for historical snapshots.
+        try:
+            if prev_last_metrics is not None:
+                self.last_metrics = prev_last_metrics
+        except Exception as exc:
+            logger.debug("restoring last_metrics failed: %s", exc, exc_info=True)
         self.last_after_critic = after
         self.last_snapshot = {"before": before, "after": after}
         return {"state": self.last_state, "before": before, "after": after}
@@ -259,17 +294,21 @@ class SystemState:  # noqa: C901
         return alerts
 
     def snapshot_before_critic(self) -> dict:
+        """Retorna um snapshot resumido do estado imediatamente antes de um crítico."""
         alerts = [{"name": k, **v} for k, v in self.active_alerts.items()]
         return {"state": self.last_state, "alerts": alerts}
 
     def snapshot_after_critic(self) -> dict:
+        """Retorna um par de snapshots (before/after) usados após tentativa de tratamento."""
         before = self.snapshot_before_critic()
         after = self.snapshot_before_critic()
         return {"before": before, "after": after}
 
     def snapshot_warning(self) -> dict:
+        """Retorna um snapshot representando o estado de alerta (warning)."""
         return self.snapshot_before_critic()
 
     def snapshot_stable(self) -> dict:
+        """Retorna um snapshot representando estado estável (sem críticos)."""
         alerts = [{"name": k, **v} for k, v in self.active_alerts.items()]
         return {"state": STATE_STABLE, "alerts": alerts}

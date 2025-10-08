@@ -16,7 +16,7 @@ from pathlib import Path
 
 STATE_STABLE = "STABLE"
 STATE_WARNING = "WARNING"
-STATE_CRITIC = "CRITIC"
+STATE_CRITIC = "CRITICAL"
 
 METRIC_NAMES = [
     "cpu_percent",
