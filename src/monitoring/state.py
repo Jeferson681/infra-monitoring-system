@@ -1,314 +1,228 @@
-from typing import Callable
+"""System State Manager.
+
+# 0. Module purpose
+# Este módulo gere o estado do sistema: coleta resultados de avaliação e
+# produz snapshots usados pelo emissor central (core._emit_snapshot).
+# 1. Imports/Constants
+# 2. Classe SystemState e helpers
+"""
+
+from __future__ import annotations
 import time
-import logging
+from datetime import datetime, timezone
+from threading import Thread
+from typing import Any, Optional
 
-from config.settings import (
-    get_valid_thresholds,
-    STATE_STABLE,
-    STATE_WARNING,
-    STATE_CRITIC,
-)
 from config.settings import load_settings
-from monitoring.handlers import attempt_treatment
-from monitoring.formatters import normalize_for_display
-from system import treatments as treatments
 
-logger = logging.getLogger(__name__)
-
-
-def _annotate_alerts_on_lines(nf: dict, alerts: list[dict]) -> None:
-    try:
-        lines = nf.get("summary_long") or []
-        if not isinstance(lines, list):
-            return
-        mapping = {a.get("name"): a for a in alerts}
-        for metric_name, details in mapping.items():
-            level = details.get("level")
-            if not level:
-                continue
-            label = "WARNING" if level == STATE_WARNING else ("CRITICAL" if level == STATE_CRITIC else None)
-            if not label:
-                continue
-            if not metric_name:
-                continue
-            prefix_candidates = [
-                metric_name.replace("_", " ").lower(),
-                metric_name.lower(),
-            ]
-            for i, ln in enumerate(lines):
-                if not isinstance(ln, str):
-                    continue
-                ln_l = ln.lower()
-                if any(ln_l.startswith(p) for p in prefix_candidates):
-                    lines[i] = f"{ln} ({label}: acima do limite)"
-                    break
-    except (AttributeError, TypeError) as exc:
-        logger.debug("_annotate_alerts_on_lines falhou: %s", exc, exc_info=True)
-        return
+# Estados possíveis
+STATE_STABLE = "stable"
+STATE_WARNING = "warning"
+STATE_CRITICAL = "critical"
+STATE_POST_TREATMENT = "post_treatment"
 
 
-class SystemState:  # noqa: C901
-    """Representa o estado do sistema e gerencia alertas/snapshots.
+class SystemState:
+    """Gerencia o estado do sistema e constrói snapshots para auditoria."""
 
-    Mantém o conjunto de alertas ativos, políticas de cooldowns, e fornece
-    builders para snapshots usados pela interface/saída.
-    """
-
-    def __init__(self) -> None:  # noqa: C901
-        """Inicializa o estado, carrega políticas e define snapshot builders.
-
-        Não realiza operações I/O pesadas; apenas configura estruturas em memória.
-        """
-        self.active_alerts: dict[str, dict] = {}
-        self.last_state: str = STATE_STABLE
-        self.last_snapshot: dict | None = None
-        self.last_before_critic: dict | None = None
-        self.last_after_critic: dict | None = None
-        self.critic_since: dict[str, float] = {}
+    def __init__(
+        self,
+        thresholds: dict[str, Any],
+        *,
+        critical_duration: int | None = None,
+        post_treatment_wait_seconds: int = 10,
+    ):
+        """Inicializa o gerenciador com thresholds e políticas de tratamento."""
+        self.thresholds = thresholds
+        # load settings to obtain treatment policies if available
         try:
             cfg = load_settings() or {}
             policies = cfg.get("treatment_policies", {}) or {}
-        except (OSError, RuntimeError, ValueError, TypeError) as exc:
-            logger.debug("load_settings falhou: %s", exc, exc_info=True)
+        except (OSError, ValueError):
+            # fallback: não conseguir ler settings -> usar políticas padrão
             policies = {}
-        self.sustained_critic_seconds: int = int(policies.get("sustained_crit_seconds", 5 * 60))
-        self.min_critical_alerts: int = int(policies.get("min_critical_alerts", 1))
-        try:
-            self.cleanup_temp_age_days: int = int(policies.get("cleanup_temp_age_days", 7))
-        except Exception:
-            logger.debug(
-                "invalid cleanup_temp_age_days in policies, using default: %s",
-                policies.get("cleanup_temp_age_days"),
-                exc_info=True,
-            )
-            self.cleanup_temp_age_days = 7
-        default_cooldowns = {
-            "cleanup_temp_files": 3 * 24 * 3600,
-            "check_disk_usage": 24 * 3600,
-            "trim_process_working_set_windows": 60 * 60,
-            "reap_zombie_processes": 60 * 60,
-            "reapply_network_config": 30 * 60,
-        }
-        self.treatment_cooldowns: dict[str, int] = dict(default_cooldowns)
-        pc = policies.get("treatment_cooldowns") or {}
-        for k, v in pc.items():
-            try:
-                self.treatment_cooldowns[k] = int(v)
-            except Exception as exc:
-                logger.debug("invalid cooldown override for %s: %s", k, exc, exc_info=True)
-                continue
-        self.last_treatment_run: dict[str, float] = {}
 
-        def _stable() -> dict:
-            alerts = [{"name": k, **v} for k, v in self.active_alerts.items()]
-            nf = normalize_for_display(getattr(self, "last_metrics", {}))
-            return {"state": STATE_STABLE, "alerts": alerts, **nf}
+        # sustained critical seconds (how long in critical before activating treatments)
+        if critical_duration is None:
+            self.sustained_crit_seconds = int(policies.get("sustained_crit_seconds", 5 * 60))
+        else:
+            self.sustained_crit_seconds = int(critical_duration)
 
-        def _warning() -> dict:
-            alerts = [{"name": k, **v} for k, v in self.active_alerts.items()]
-            nf = normalize_for_display(getattr(self, "last_metrics", {}))
-            single = None
-            if alerts:
-                single = alerts[0]["name"]
-            if single:
-                nf["summary_short"] = f"{self.last_state}: {nf.get('summary_short', '')} ({single})"
-                nf["summary_long"] = [f"STATUS {self.last_state}:"] + nf.get("summary_long", [])
-            if alerts:
-                _annotate_alerts_on_lines(nf, alerts)
-            return {"state": self.last_state, "alerts": alerts, **nf}
+        # wait time after treatments to recollect metrics (allow metrics to settle)
+        self.post_treatment_wait_seconds = int(post_treatment_wait_seconds)
+        # Snapshots principais
+        self.current_snapshot: Optional[dict[str, Any]] = None
+        self.post_treatment_snapshot: Optional[dict[str, Any]] = None
 
-        def _before_critic() -> dict:
-            alerts = [{"name": k, **v} for k, v in self.active_alerts.items()]
-            nf = normalize_for_display(getattr(self, "last_metrics", {}))
-            single = None
-            if alerts:
-                single = alerts[0]["name"]
-            if single:
-                nf["summary_short"] = f"{self.last_state}: {nf.get('summary_short', '')} ({single})"
-                nf["summary_long"] = [f"STATUS {self.last_state}:"] + nf.get("summary_long", [])
-            if alerts:
-                _annotate_alerts_on_lines(nf, alerts)
-            return {"state": self.last_state, "alerts": alerts, **nf}
+        # Controle interno (booleans em vez de dicts)
+        self.is_critical_active = False
+        self.treatment_active = False
+        self.critical_start_time = 0.0
+        # last_state kept for compatibility (can be removed later)
+        self.last_state = STATE_STABLE
 
-        def _after_critic() -> dict:
-            alerts = [{"name": k, **v} for k, v in self.active_alerts.items()]
-            nf = normalize_for_display(getattr(self, "last_metrics", {}))
-            single = None
-            if alerts:
-                single = alerts[0]["name"]
-            if single:
-                nf["summary_short"] = f"{self.last_state}: {nf.get('summary_short', '')} ({single})"
-                nf["summary_long"] = [f"STATUS {self.last_state}:"] + nf.get("summary_long", [])
-            if alerts:
-                _annotate_alerts_on_lines(nf, alerts)
-            return {"state": self.last_state, "alerts": alerts, **nf}
+    # ================================================================
+    # Avaliação principal
+    # ================================================================
 
-        self.snapshot_builders: dict[str, Callable[[], dict]] = {
-            "stable": _stable,
-            "warning": _warning,
-            "before_critic": _before_critic,
-            "after_critic": _after_critic,
-        }
-
-    def evaluate_metrics(self, metrics: dict | None = None) -> dict:  # noqa: C901
-        """Avalia métricas, atualiza o estado e executa tratamentos se necessário.
-
-        Se `metrics` for None, tenta coletar via `monitoring.metrics.collect_metrics`.
-        Retorna um dict com o estado atual e snapshots apropriados.
-        """
-        if metrics is None:
-            try:
-                from monitoring.metrics import collect_metrics  # type: ignore
-
-                metrics = collect_metrics()
-            except Exception as exc:
-                logger.debug("import/chamada de collect_metrics falhou: %s", exc, exc_info=True)
-                metrics = {}
-
-        try:
-            self.last_metrics = dict(metrics or {})
-            try:
-                from monitoring.metrics import get_memory_info, get_disk_usage_info  # type: ignore
-
-                mu, mt = get_memory_info()
-                du, dt = get_disk_usage_info()
-                if mu is not None and mt is not None:
-                    self.last_metrics.setdefault("memory_used_bytes", mu)
-                    self.last_metrics.setdefault("memory_total_bytes", mt)
-                if du is not None and dt is not None:
-                    self.last_metrics.setdefault("disk_used_bytes", du)
-                    self.last_metrics.setdefault("disk_total_bytes", dt)
-            except Exception as exc:
-                logger.debug("enriquecimento de métricas falhou: %s", exc, exc_info=True)
-                pass
-        except Exception as exc:
-            logger.debug("falha ao atribuir last_metrics: %s", exc, exc_info=True)
-            self.last_metrics = metrics or {}
-
-        thresholds = get_valid_thresholds()
-        self.active_alerts = {}
-        state = STATE_STABLE
-        state = self._evaluate_against_thresholds(metrics, thresholds)
-        self.last_state = state
-        now = time.monotonic()
-        for m, details in self.active_alerts.items():
-            if details.get("level") == STATE_CRITIC:
-                self.critic_since.setdefault(m, now)
-        for k in tuple(self.critic_since.keys()):
-            if k not in self.active_alerts or self.active_alerts.get(k, {}).get("level") != STATE_CRITIC:
-                self.critic_since.pop(k, None)
-
-        if state in (STATE_STABLE, STATE_WARNING):
-            key = "stable" if state == STATE_STABLE else "warning"
-            snap = self.snapshot_builders[key]()
-            self.last_snapshot = snap
-            return {"state": state, "snapshot": snap}
-
-        before = self.snapshot_builders["before_critic"]()
-        self.last_before_critic = before
-        critic_count = sum(1 for d in self.active_alerts.values() if d.get("level") == STATE_CRITIC)
-        if critic_count >= self.min_critical_alerts:
-            for name, details in self.active_alerts.items():
-                if details.get("level") != STATE_CRITIC:
-                    continue
-                try:
-                    res = attempt_treatment(self, name, details)
-                    if isinstance(res, dict):
-                        import logging
-
-                        logging.getLogger(__name__).info(
-                            "tratamento executado: %s resultado=%s",
-                            res.get("action"),
-                            res.get("result"),
-                        )
-                except Exception as exc:
-                    logger.debug("tentativa de tratamento gerou exceção: %s", exc, exc_info=True)
-                    pass
-
-        try:
-            from monitoring.metrics import collect_metrics as _collect  # type: ignore
-
-            metrics_after = _collect()
-        except Exception:
-            metrics_after = {}
-        after_state = self._evaluate_against_thresholds(metrics_after, thresholds, store=False)
-        self.active_alerts = self._collect_alerts(metrics_after, thresholds)
-        self.last_state = after_state
-        # Ensure the 'after' snapshot reflects the freshly collected metrics.
-        # snapshot_builders use normalize_for_display(getattr(self, 'last_metrics', {})),
-        # so update self.last_metrics before building the 'after' snapshot.
-        try:
-            prev_last_metrics = getattr(self, "last_metrics", None)
-            self.last_metrics = dict(metrics_after or {})
-        except Exception:
-            prev_last_metrics = None
-
-        after = self.snapshot_builders["after_critic"]()
-
-        # restore previous last_metrics if something upstream expects it to remain
-        # as the pre-treatment metrics; but keep last_before_critic/last_after_critic
-        # for historical snapshots.
-        try:
-            if prev_last_metrics is not None:
-                self.last_metrics = prev_last_metrics
-        except Exception as exc:
-            logger.debug("restoring last_metrics failed: %s", exc, exc_info=True)
-        self.last_after_critic = after
-        self.last_snapshot = {"before": before, "after": after}
-        return {"state": self.last_state, "before": before, "after": after}
-
-    def _evaluate_against_thresholds(self, metrics: dict, thresholds: dict, store: bool = True) -> str:
-        state = STATE_STABLE
-        alerts: dict[str, dict] = {}
-        for name, limits in thresholds.items():
-            value = metrics.get(name)
-            if value is None:
-                continue
-            critic = limits.get("critic")
-            if critic is not None and value >= critic:
-                alerts[name] = {"value": value, "level": STATE_CRITIC}
-                if store:
-                    self.active_alerts = alerts
-                return STATE_CRITIC
-            alert = limits.get("alert")
-            if alert is not None and value >= alert:
-                alerts[name] = {"value": value, "level": STATE_WARNING}
-                state = STATE_WARNING
-        if store:
-            self.active_alerts = alerts
+    def evaluate_metrics(self, metrics: dict[str, Any]) -> str:
+        # Função principal: avalia métricas e atualiza snapshots
+        """Avalia métricas e atualiza snapshots; retorna o estado resultante."""
+        state = self._evaluate_against_thresholds(metrics)
+        self._update_snapshots(state, metrics)
         return state
 
-    def _collect_alerts(self, metrics: dict, thresholds: dict) -> dict:
-        alerts: dict[str, dict] = {}
-        for name, limits in thresholds.items():
-            value = metrics.get(name)
-            if value is None:
+    def _evaluate_against_thresholds(self, metrics: dict[str, Any]) -> str:
+        # Helper auxiliar: compara métricas com thresholds
+        """Compara métricas com thresholds e determina o estado (stable/warning/critical)."""
+        for name, value in metrics.items():
+            limits = self.thresholds.get(name, {}) or {}
+            warn = limits.get("warning")
+            # aceitar 'critic' (settings default) ou 'critical' por compatibilidade
+            crit = limits.get("critic") if "critic" in limits else limits.get("critical")
+
+            try:
+                if crit is not None and value is not None and value >= crit:
+                    return STATE_CRITICAL
+                if warn is not None and value is not None and value >= warn:
+                    return STATE_WARNING
+            except TypeError:
+                # valor não comparável (None ou tipo inesperado) — ignorar
                 continue
-            critic = limits.get("critic")
-            if critic is not None and value >= critic:
-                alerts[name] = {"value": value, "level": STATE_CRITIC}
-                return alerts
-            alert = limits.get("alert")
-            if alert is not None and value >= alert:
-                alerts[name] = {"value": value, "level": STATE_WARNING}
+        return STATE_STABLE
+
+    # ================================================================
+    # Construção e controle de snapshots
+    # ================================================================
+
+    # Helper principal: atualiza snapshot corrente e agenda pós-tratamento
+    def _update_snapshots(self, state: str, metrics: dict[str, Any]):
+        """Atualiza o snapshot corrente e agenda pós-tratamento se necessário."""
+        now = time.time()
+        self.current_snapshot = self._build_snapshot(state, metrics)
+
+        if state == STATE_CRITICAL:
+            # Primeira detecção crítica
+            if not self.is_critical_active:
+                self.is_critical_active = True
+                self.critical_start_time = now
+
+            # Após X segundos críticos → ativa tratamento
+            elif (now - self.critical_start_time) >= self.sustained_crit_seconds and not self.treatment_active:
+                self._activate_treatment(metrics)
+
+        else:
+            # Reset completo quando sai do crítico
+            self.is_critical_active = False
+            self.treatment_active = False
+            self.post_treatment_snapshot = None
+
+        self.last_state = state
+
+    # Helper auxiliar: constrói snapshot padrão
+    def _build_snapshot(self, state: str, metrics: dict[str, Any]) -> dict[str, Any]:
+        """Cria snapshot padrão com timestamp e métricas."""
+        return {"state": state, "timestamp": datetime.now(timezone.utc).isoformat(), "metrics": metrics}
+
+    # Helper auxiliar: calcula alerts a partir de métricas (reduz complexidade do worker)
+    def _compute_alerts(self, metrics: dict[str, Any]) -> list[dict[str, Any]]:
+        """Retorna lista de alerts (name, value, level) para as métricas fornecidas."""
+        alerts: list[dict[str, Any]] = []
+        try:
+            for name, limits in (self.thresholds or {}).items():
+                val = metrics.get(name) if isinstance(metrics, dict) else None
+                if val is None:
+                    continue
+                alert = self._classify_metric(name, limits, val)
+                if alert:
+                    alerts.append(alert)
+        except (TypeError, KeyError, ValueError):
+            return []
         return alerts
 
-    def snapshot_before_critic(self) -> dict:
-        """Retorna um snapshot resumido do estado imediatamente antes de um crítico."""
-        alerts = [{"name": k, **v} for k, v in self.active_alerts.items()]
-        return {"state": self.last_state, "alerts": alerts}
+    def _classify_metric(self, name: str, limits: dict[str, Any], val: Any) -> Optional[dict[str, Any]]:
+        """Classifica uma métrica segundo thresholds e devolve alert dict ou None.
 
-    def snapshot_after_critic(self) -> dict:
-        """Retorna um par de snapshots (before/after) usados após tentativa de tratamento."""
-        before = self.snapshot_before_critic()
-        after = self.snapshot_before_critic()
-        return {"before": before, "after": after}
+        Mantém o mesmo comportamento e captura TypeError localmente.
+        """
+        crit = limits.get("critic") if "critic" in limits else limits.get("critical")
+        warn = limits.get("warning")
+        try:
+            if crit is not None and val >= crit:
+                return {"name": name, "value": val, "level": STATE_CRITICAL}
+            if warn is not None and val >= warn:
+                return {"name": name, "value": val, "level": STATE_WARNING}
+        except TypeError:
+            return None
+        return None
 
-    def snapshot_warning(self) -> dict:
-        """Retorna um snapshot representando o estado de alerta (warning)."""
-        return self.snapshot_before_critic()
+    # Helper principal: inicia execução de pós-tratamento em background
+    def _activate_treatment(self, metrics: dict[str, Any]):
+        """Inicia thread que recolhe métricas após aplicação de tratamentos."""
+        if self.treatment_active:
+            return
+        self.treatment_active = True
 
-    def snapshot_stable(self) -> dict:
-        """Retorna um snapshot representando estado estável (sem críticos)."""
-        alerts = [{"name": k, **v} for k, v in self.active_alerts.items()]
-        return {"state": STATE_STABLE, "alerts": alerts}
+        def _worker(metrics_snapshot: dict[str, Any]):
+            try:
+                time.sleep(self.post_treatment_wait_seconds)
+                from monitoring.metrics import collect_metrics as _collect  # type: ignore
+
+                metrics_after = self._safe_collect(_collect)
+            except (InterruptedError, RuntimeError):
+                self.treatment_active = False
+                return
+
+            alerts_after = self._compute_alerts(metrics_after)
+
+            self.post_treatment_snapshot = {
+                "state": STATE_POST_TREATMENT,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "metrics": metrics_after,
+                "alerts": alerts_after,
+            }
+
+            self.treatment_active = False
+
+        thr = Thread(target=_worker, args=(metrics,), daemon=True)
+        thr.start()
+
+    def _safe_collect(self, collect_fn) -> dict[str, Any]:
+        """Executa a função de coleta protegida por tratamento de exceções.
+
+        Mantém o comportamento original: em caso de falha retorna dict vazio.
+        """
+        try:
+            return collect_fn()
+        except (OSError, RuntimeError, ValueError, TypeError):
+            return {}
+
+    # ================================================================
+    # Emissão e escrita de logs
+    # ================================================================
+
+    # emit_snapshot moved to core._emit_snapshot to centralize formatting/emission
+
+    # write_log removed: emission centralized in core._emit_snapshot
+
+    # ================================================================
+    # Utilitários e debug
+    # ================================================================
+
+    # Utilitário: representação legível para debug
+    def normalize_for_display(self) -> dict[str, Any]:
+        """Retorna representação legível do estado atual."""
+        output = {"current": self.current_snapshot}
+        if self.treatment_active and self.post_treatment_snapshot:
+            output["post_treatment"] = self.post_treatment_snapshot
+        return output
+
+    # Utilitário de teste: reinicia estado interno
+    def reset(self):
+        """Reinicia todo o estado interno para testes ou reuso."""
+        self.current_snapshot = None
+        self.post_treatment_snapshot = None
+        self.is_critical_active = False
+        self.treatment_active = False
+        self.critical_start_time = 0.0
+        self.last_state = STATE_STABLE

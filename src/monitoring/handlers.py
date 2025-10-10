@@ -119,7 +119,7 @@ def _run_reap_aux(state: Any, action_name: str, result, now: float) -> object | 
 # ========================
 
 
-def attempt_treatment(state: Any, name: str, _details: dict) -> dict | bool:  # noqa: C901
+def attempt_treatment(state: Any, name: str, _details: dict) -> dict | bool:
     """Executa o tratamento automático para uma métrica crítica.
 
     Verifica persistência (sustained), respeita cooldowns e executa a ação

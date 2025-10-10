@@ -327,26 +327,6 @@ def get_disk_percent(path: str | None = None) -> float | None:
         return None
 
 
-def get_temperature() -> float | None:
-    """Retorne a temperatura do sistema (C) executando o script POSIX empacotado.
-
-    Suportado apenas em sistemas POSIX. Retorne None em não-POSIX.
-    O script `src/system/scripts/temp.sh` deve existir e ser executável.
-    """
-    # Suportado apenas em POSIX; evitar tentativas em Windows/ambientes NT-like
-    if os.name != "posix":
-        return None
-
-    try:
-        script_path = Path(__file__).resolve().parents[2] / "system" / "scripts" / "temp.sh"
-        if script_path.exists() and os.access(script_path, os.X_OK):
-            return _get_temp_from_script(script_path)
-    except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
-        logger.debug("get_temperature (script) falhou: %s", exc, exc_info=True)
-
-    return None
-
-
 def _get_temp_from_script(script_path: Path) -> float | None:
     """Execute o script `temp.sh` de forma segura e parseie um float de temperatura.
 
@@ -438,14 +418,14 @@ def get_network_latency(host: str = "8.8.8.8", port: int = 53, timeout: float = 
                     return v
             except (ValueError, TypeError) as exc:
                 logger.debug("get_network_latency: parse de ping falhou: %s", exc, exc_info=True)
-                pass
+                # parsing failed, continue to fallback
     except subprocess.CalledProcessError:
         # ping retornou com código !=0; tentar fallback TCP
-        pass
+        logger.debug("get_network_latency: ping returned non-zero exit status")
     except (subprocess.SubprocessError, OSError) as exc:
         # qualquer outro erro (timeout, binário ausente etc.) -> fallback
         logger.debug("get_network_latency: ping falhou: %s", exc, exc_info=True)
-        pass
+        # continue to TCP fallback
 
     # Fallback via socket/TCP
     try:
@@ -464,11 +444,6 @@ def get_network_latency(host: str = "8.8.8.8", port: int = 53, timeout: float = 
 def get_latency(host: str = "8.8.8.8", port: int = 53, timeout: float = 2.0) -> float | None:
     """Alias para `get_network_latency` (compatibilidade)."""
     return get_network_latency(host=host, port=port, timeout=timeout)
-
-
-def get_ping(host: str = "8.8.8.8", timeout: float = 1.0) -> float | None:
-    """Retorna ping de conveniência (porta 53, timeout curto)."""
-    return get_network_latency(host=host, port=53, timeout=timeout)
 
 
 def get_memory_info() -> tuple[int | None, int | None]:

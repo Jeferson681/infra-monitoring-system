@@ -10,43 +10,49 @@ from system.logs import write_log, get_log_paths
 
 # do not import iter_jsonl_objects from averages (may be removed); decode JSONL inline
 
+# Common keys used when scanning for timestamp-like fields
+KEYS_TO_MATCH = {"ts", "timestamp", "time", "date", "last_time", "created_at", "data/hora"}
+
+
+def _find_candidate_files(root: Path) -> List[Path]:
+    t = datetime.date.today().strftime("%Y-%m-%d")
+    return [
+        root / "logs" / "json" / "monitoring" / f"monitoring-{t}.jsonl",
+        root / "logs" / "json" / f"monitoring-{t}.jsonl",
+        root / "json" / "monitoring" / f"monitoring-{t}.jsonl",
+        root / "json" / f"monitoring-{t}.jsonl",
+    ]
+
+
+def _iter_jsonl_file(path: Path) -> Iterator[tuple[dict, Path, int]]:
+    """Yield JSON objects from a single file path, skipping malformed lines."""
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            for lineno, ln in enumerate(fh, start=1):
+                ln = ln.strip()
+                if not ln:
+                    continue
+                try:
+                    obj = json.loads(ln)
+                except json.JSONDecodeError:
+                    # ignore malformed JSON lines
+                    continue
+                if isinstance(obj, dict):
+                    yield obj, path, lineno
+    except Exception as exc:
+        logging.getLogger(__name__).debug("_iter_jsonl_file: failed reading %s: %s", path, exc, exc_info=True)
+
 
 def _iter_jsonl_today(logs_root: Path) -> Iterator[tuple[dict, Path, int]]:
     """Itera objetos JSON válidos do arquivo do dia em possíveis localizações.
 
     Abre o arquivo candidato e decodifica cada linha JSON (ignora linhas inválidas).
     """
-
-    def _find_candidate_files(root: Path) -> List[Path]:
-        t = datetime.date.today().strftime("%Y-%m-%d")
-        return [
-            root / "logs" / "json" / "monitoring" / f"monitoring-{t}.jsonl",
-            root / "logs" / "json" / f"monitoring-{t}.jsonl",
-            root / "json" / "monitoring" / f"monitoring-{t}.jsonl",
-            root / "json" / f"monitoring-{t}.jsonl",
-        ]
-
     for c in _find_candidate_files(logs_root):
         if not c.exists():
             continue
-        try:
-            with c.open("r", encoding="utf-8") as fh:
-                for lineno, ln in enumerate(fh, start=1):
-                    ln = ln.strip()
-                    if not ln:
-                        continue
-                    try:
-                        obj = json.loads(ln)
-                    except json.JSONDecodeError:
-                        # ignore malformed JSON lines
-                        continue
-                    if isinstance(obj, dict):
-                        # yield tuple: (object, file path, line number)
-                        yield obj, c, lineno
-        except Exception as exc:
-            # ignore file read errors and try next candidate (log debug)
-            logging.getLogger(__name__).debug("_iter_jsonl_today: failed reading %s: %s", c, exc, exc_info=True)
-        return
+        for obj_tuple in _iter_jsonl_file(c):
+            yield obj_tuple
 
 
 # --- Extracted helpers for epoch parsing (moved to module level to reduce
@@ -124,7 +130,7 @@ def _scan_keys_in_obj(container, depth: int = 3) -> Optional[float]:
         return None
     if not isinstance(container, (dict, list)):
         return _parse_epoch_from_value(container)
-    keys_to_match = {"ts", "timestamp", "time", "date", "last_time", "created_at", "data/hora"}
+    keys_to_match = KEYS_TO_MATCH
     # If container is a dict: inspect direct keys, likely subtrees and shallow values
     if isinstance(container, dict):
         cand = _scan_direct_keys(container, keys_to_match)
@@ -149,6 +155,7 @@ def _scan_list_for_keys(lst: list, depth: int) -> Optional[float]:
     for item in lst:
         cand = _scan_keys_in_obj(item, depth)
         if cand is not None:
+            # prefer latest (max) timestamp found
             if best is None or cand > best:
                 best = cand
     return best
@@ -199,35 +206,48 @@ def _extract_epoch(obj: dict) -> Optional[float]:
     # preserve existing priority and behavior by delegating to those helpers.
 
     # preserve existing priority and behavior
-    # 1) metrics_raw.timestamp (numeric or string)
-    m = obj.get("metrics_raw") or {}
-    if isinstance(m, dict) and (v := m.get("timestamp")) is not None:
-        n = _parse_epoch_from_value(v)
-        if n is not None:
-            return n
+    # Delegates to small, focused helpers (keeps behavior and priority order)
+    n = _extract_from_metrics_raw(obj)
+    if n is not None:
+        return n
+    n = _extract_from_top_level(obj)
+    if n is not None:
+        return n
+    n = _check_localized_date_keys(obj)
+    if n is not None:
+        return n
+    n = _extract_from_common_subtrees(obj)
+    if n is not None:
+        return n
+    return _dfs_scan_for_timestamp(obj)
 
-    # 2) top-level numeric fields or strings
+
+def _extract_from_metrics_raw(obj: dict) -> Optional[float]:
+    m = obj.get("metrics_raw") or {}
+    if isinstance(m, dict):
+        v = m.get("timestamp")
+        if v is not None:
+            return _parse_epoch_from_value(v)
+    return None
+
+
+def _extract_from_top_level(obj: dict) -> Optional[float]:
     for key in ("ts", "timestamp"):
         if key in obj:
             v = obj.get(key)
             n = _parse_epoch_from_value(v)
             if n is not None:
                 return n
-    # 3) Data/hora-like localized keys
-    n = _check_localized_date_keys(obj)
-    if n is not None:
-        return n
+    return None
 
-    # 4) limited-scope scan in likely subtrees (metrics_raw, meta, events)
+
+def _extract_from_common_subtrees(obj: dict) -> Optional[float]:
     for subtree in (obj.get("metrics_raw"), obj.get("meta"), obj.get("events")):
         if subtree is not None:
             n = _scan_keys_in_obj(subtree, depth=3)
             if n is not None:
                 return n
-
-    # 5) fallback: broader DFS scan across the whole object (no depth limit)
-    n = _dfs_scan_for_timestamp(obj)
-    return n
+    return None
 
 
 def _check_localized_date_keys(obj: dict) -> Optional[float]:
@@ -265,7 +285,7 @@ def _dfs_scan_for_timestamp(node: Any) -> Optional[float]:
 
 def _dfs_scan_dict(d: dict) -> Optional[float]:
     """Scan a dict node for timestamp-like keys/values during DFS."""
-    keys_to_match = {"ts", "timestamp", "time", "date", "last_time", "created_at", "data/hora"}
+    keys_to_match = KEYS_TO_MATCH
     for k, v in d.items():
         try:
             ks = str(k).lower()
@@ -303,6 +323,7 @@ def _scan_subtree_for_timestamp(subtree: Any, depth: int) -> Optional[float]:
         for item in subtree:
             cand = _scan_keys_in_obj(item, depth - 1)
             if cand is not None:
+                # prefer latest (max) timestamp found
                 if best is None or cand > best:
                     best = cand
         return best
@@ -332,25 +353,7 @@ def _compute_averages_and_counts(window: List[tuple], metric_keys: List[str]):
     state_counts: Dict[str, int] = {}
 
     for o, _ts, _p, _ln in window:
-        rel = extract_relevant(o)
-        st = _normalize_state(rel.get("state"))
-        if st is not None:
-            state_counts[st] = state_counts.get(st, 0) + 1
-
-        for k in metric_keys:
-            v = rel.get(k)
-            if v is None:
-                continue
-            try:
-                num = float(v)
-            except (TypeError, ValueError):
-                continue
-            sums[k] = sums.get(k, 0.0) + num
-            counts[k] = (counts.get(k, 0) or 0) + 1
-            if st is not None:
-                d = counts_by_state_per_metric.get(k) or {}
-                d[st] = d.get(st, 0) + 1
-                counts_by_state_per_metric[k] = d
+        _process_window_item(o, metric_keys, sums, counts, counts_by_state_per_metric, state_counts)
 
     averages: Dict[str, Optional[float]] = {}
     for k in metric_keys:
@@ -361,6 +364,39 @@ def _compute_averages_and_counts(window: List[tuple], metric_keys: List[str]):
             averages[k] = sums.get(k, 0.0) / float(cnt)
 
     return averages, counts, counts_by_state_per_metric, state_counts
+
+
+def _process_window_item(
+    o: dict,
+    metric_keys: List[str],
+    sums: Dict[str, float],
+    counts: Dict[str, int],
+    counts_by_state_per_metric: Dict[str, Dict[str, int]],
+    state_counts: Dict[str, int],
+) -> None:
+    """Process a single window item and update aggregates in-place.
+
+    Extracted to reduce complexity of the aggregator while preserving logic.
+    """
+    rel = extract_relevant(o)
+    st = _normalize_state(rel.get("state"))
+    if st is not None:
+        state_counts[st] = state_counts.get(st, 0) + 1
+
+    for k in metric_keys:
+        v = rel.get(k)
+        if v is None:
+            continue
+        try:
+            num = float(v)
+        except (TypeError, ValueError):
+            continue
+        sums[k] = sums.get(k, 0.0) + num
+        counts[k] = (counts.get(k, 0) or 0) + 1
+        if st is not None:
+            d = counts_by_state_per_metric.get(k) or {}
+            d[st] = d.get(st, 0) + 1
+            counts_by_state_per_metric[k] = d
 
 
 def _compute_state_durations(sorted_window: List[tuple]) -> tuple[Dict[str, float], Dict[str, str]]:
@@ -416,55 +452,6 @@ def _build_used_files_lines(window: List[tuple]) -> Dict[str, tuple[int, int]]:
         else:
             used_files[k] = (ln, ln)
     return used_files
-
-
-# canonical metric keys used across aggregation
-METRIC_KEYS = (
-    "cpu_percent",
-    "cpu_freq_ghz",
-    "memory_percent",
-    "memory_used_bytes",
-    "memory_total_bytes",
-    "disk_percent",
-    "disk_used_bytes",
-    "disk_total_bytes",
-    "bytes_sent",
-    "bytes_recv",
-    "ping_ms",
-    "latency_ms",
-    "temperature",
-)
-
-
-def _collect_items_from_objs(objs: List[tuple]) -> List[tuple]:
-    """Collect (obj, ts, path, lineno) items from iterator results, defensive unpack.
-
-    Extracts epoch using _extract_epoch and skips malformed entries.
-    """
-    items: List[tuple[dict, float, Path, int]] = []
-    for entry in objs:
-        try:
-            o, src_path, src_ln = entry
-        except (ValueError, TypeError):
-            # defensive: skip malformed iterator entries
-            continue
-        ts = _extract_epoch(o)
-        if ts is not None:
-            items.append((o, ts, src_path, src_ln))
-    return items
-
-
-def _select_window(items: List[tuple], seconds: int) -> List[tuple]:
-    """Return filtered window of items whose ts is within last `seconds` of max timestamp.
-
-    Items are tuples (o, ts, path, lineno).
-    """
-    if not items:
-        return []
-    last_ts = max(ts for (_, ts, __, ___) in items)
-    cutoff = last_ts - float(seconds)
-    window = [(o, ts, p, ln) for (o, ts, p, ln) in items if cutoff <= ts <= last_ts]
-    return window
 
 
 def extract_relevant(obj: dict) -> Dict[str, Any]:
@@ -623,51 +610,7 @@ def _safe_persist_last_time(last_ts: float, logs_root: Path | None) -> None:
         logging.getLogger(__name__).debug("persist_last_time failed: %s", exc, exc_info=True)
 
 
-def extract_window_entries(logs_root: Path, seconds: int = 10) -> List[Dict[str, Any]]:
-    """Retorna uma lista com os dados relevantes extraídos de todas as linhas.
-
-    no intervalo de `seconds` segundos a partir da última linha disponível.
-
-    Cada item da lista contém as chaves retornadas por `extract_relevant` mais
-    `timestamp_epoch` e `timestamp_iso`.
-    """
-    objs: List[tuple[dict, Path, int]] = list(_iter_jsonl_today(logs_root))
-    if not objs:
-        return []
-
-    items: List[tuple[dict, float, Path, int]] = []
-    for entry in objs:
-        try:
-            o, p, ln = entry
-        except ValueError:
-            # skip malformed iterator entries
-            continue
-        ts = _extract_epoch(o)
-        if ts is not None:
-            items.append((o, ts, p, ln))
-    if not items:
-        return []
-
-    last_ts = max(ts for (_, ts, __, ___) in items)
-    cutoff = last_ts - float(seconds)
-
-    window = [(o, ts, p, ln) for (o, ts, p, ln) in items if cutoff <= ts <= last_ts]
-    if not window:
-        return []
-
-    out: List[Dict[str, Any]] = []
-    for o, ts, p, ln in window:
-        r = extract_relevant(o)
-        r["timestamp_epoch"] = ts
-        r["timestamp_iso"] = datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc).isoformat()
-        # also expose source metadata for debugging if needed
-        r["_src_file"] = str(p)
-        r["_src_line"] = int(ln)
-        out.append(r)
-
-    return out
-
-
+# vulture: ignore
 def get_fixed_log_path(name: str = "average_metric") -> Path:
     """Return the fixed log path logs/log/{name}.log using get_log_paths()."""
     lp = get_log_paths()
@@ -765,10 +708,7 @@ def _decorate_metric_lines(lines: List[str], counts_by_state: Dict[str, Any]) ->
     """
 
     def _state_suffix_for_metric_key(mkey: str) -> str:
-        d = counts_by_state.get(mkey) or {}
-        warn = int(d.get("WARNING", d.get("WARN", 0) or 0))
-        critical = int(d.get("CRITICAL", d.get("CRITIC", d.get("CRIT", 0) or 0)) or 0)
-        return f" (WARNING={warn} CRITICAL={critical})"
+        return _compute_suffix_for_metric_key(counts_by_state, mkey)
 
     mapping = {
         "CPU:": "cpu_percent",
@@ -835,7 +775,7 @@ def write_average_log(
             level="INFO",
             message=human_text,
             extra=None,
-            human_enable=True,
+            human_enable=bool(human_enable),
             json_enable=json_enable,
             safe_log_enable=safe_log_enable,
             log=log,
@@ -845,6 +785,13 @@ def write_average_log(
     except Exception as exc:
         # do not crash if logging subsystem fails; log debug
         logging.getLogger(__name__).debug("write_log failed: %s", exc, exc_info=True)
+
+
+def _compute_suffix_for_metric_key(counts_by_state: Dict[str, Any], mkey: str) -> str:
+    d = counts_by_state.get(mkey) or {}
+    warn = int(d.get("WARNING", d.get("WARN", 0) or 0))
+    critical = int(d.get("CRITICAL", d.get("CRITIC", d.get("CRIT", 0) or 0)) or 0)
+    return f" (WARNING={warn} CRITICAL={critical})"
 
 
 # store last timestamp in a single JSON under logs/.cache/last_ts.json
@@ -863,10 +810,11 @@ def get_last_ts_file(name: str = "last_ts", logs_root: Path | None = None) -> Pa
     """
     if logs_root is None:
         lp = get_log_paths()
-        logs_root = lp.root
-    path = Path(logs_root) / LAST_TS_DIR
-    path.mkdir(parents=True, exist_ok=True)
-    return path / f"{name}.json"
+        cache_parent = lp.cache_dir
+    else:
+        cache_parent = Path(logs_root) / LAST_TS_DIR
+    cache_parent.mkdir(parents=True, exist_ok=True)
+    return cache_parent / f"{name}.json"
 
 
 def persist_last_time(last_ts: Optional[float] = None, name: str = "last_ts", logs_root: Path | None = None) -> Path:
@@ -901,7 +849,7 @@ def read_last_time(name: str = "last_ts", logs_root: Path | None = None) -> Opti
         if v is None:
             return None
         return float(v)
-    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+    except (OSError, TypeError, ValueError):
         return None
 
 
@@ -940,7 +888,7 @@ try:
     except Exception:
         existing = None
 
-    if existing is None or float(existing) == 0.0:
+    if existing is None or abs(float(existing) - 0.0) <= 1e-9:
         # Persistir timestamp atual (persist_last_time cuida do diretório)
         try:
             persist_last_time()
