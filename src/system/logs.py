@@ -5,7 +5,8 @@ rotação, compressão e limpeza de arquivos de archive.
 """
 
 import os
-import errno
+
+# errno not needed after removing local _ensure_dir_writable
 import logging
 import functools
 import time
@@ -25,6 +26,7 @@ from system.log_helpers import (
     try_rotate_file,
     write_json,
     write_text,
+    ensure_dir_writable,
 )
 
 logger = logging.getLogger(__name__)
@@ -66,48 +68,14 @@ class LogPaths:
     json_dir: Path
     archive_dir: Path
     debug_dir: Path
+    cache_dir: Path
 
     def __iter__(self):
         """Iterador simples que retorna tupla com os principais paths."""
         return iter((self.root, self.log_dir, self.json_dir, self.archive_dir))
 
 
-# Garante que um diretório existe e é gravável; usado por get_log_paths
-def _ensure_dir_writable(p: Path) -> Path:
-    """Cria diretório e valida escrita mínima.
-
-    Tenta criar o diretório e gravar um arquivo de teste para garantir
-    permissões mínimas de escrita.
-    """
-    try:
-        p.mkdir(parents=True, exist_ok=True)
-        test = p / f".touch-{os.getpid()}"
-        with open(test, "w") as f:
-            f.write("ok")
-        test.unlink(missing_ok=True)
-    except Exception as exc:
-        logger.warning("Falha em logdir %s: %s", p, exc, exc_info=True)
-        try:
-            if isinstance(exc, OSError):
-                if exc.errno == errno.ENOSPC:
-                    logger.warning("Disco cheio em %s", p)
-                elif exc.errno == errno.EROFS:
-                    logger.warning("Filesystem read-only em %s", p)
-                elif exc.errno == errno.EACCES:
-                    logger.warning("Permissão negada em %s", p)
-        except Exception as exc2:
-            logger.debug("_ensure_dir_writable: nested error while inspecting exception: %s", exc2)
-        try:
-            if os.name != "nt":
-                p.chmod(0o700)
-                logger.info("chmod 700 em %s", p)
-        except Exception as exc2:
-            logger.debug("_ensure_dir_writable: chmod attempt failed: %s", exc2)
-    return p
-
-
 @functools.lru_cache(maxsize=8)
-# Resolve e cria os caminhos de logs; consumido por todas as rotinas de logging
 def get_log_paths(root: str | Path | None = None) -> LogPaths:
     """Resolve raiz de logs e garante diretórios criados e graváveis.
 
@@ -117,35 +85,24 @@ def get_log_paths(root: str | Path | None = None) -> LogPaths:
     try:
         log_root = Path(root) if root else Path(LOG_ROOT)
     except Exception as exc:
-        # fallback: projeto/logs
         logger.debug("get_log_paths: falha ao resolver root: %s", exc, exc_info=True)
         project_root = Path(__file__).resolve().parents[2]
         log_root = project_root / "logs"
 
-    log_root = _ensure_dir_writable(log_root)
-    log_dir = _ensure_dir_writable(log_root / "log")
-    json_dir = _ensure_dir_writable(log_root / "json")
-    archive_dir = _ensure_dir_writable(log_root / "archive")
-    debug_dir = _ensure_dir_writable(log_root / "debug")
+    # ensure_dir_writable returns bool; call for side-effects and keep Path values
+    ensure_dir_writable(log_root)
+    log_dir = log_root / "log"
+    ensure_dir_writable(log_dir)
+    json_dir = log_root / "json"
+    ensure_dir_writable(json_dir)
+    archive_dir = log_root / "archive"
+    ensure_dir_writable(archive_dir)
+    debug_dir = log_root / "debug"
+    ensure_dir_writable(debug_dir)
+    cache_dir = log_root / ".cache"
+    ensure_dir_writable(cache_dir)
 
-    return LogPaths(log_root, log_dir, json_dir, archive_dir, debug_dir)
-
-
-# Limpa cache de resolução de paths; útil para testes que alteram LOG_ROOT
-def invalidate_get_log_paths_cache() -> None:
-    """Limpa cache da função get_log_paths.
-
-    Usado em testes para forçar re-resolução dos diretórios de logs.
-    """
-    try:
-        get_log_paths.cache_clear()
-    except Exception as exc:
-        logger.debug("invalidate_get_log_paths_cache: cache_clear failed: %s", exc, exc_info=True)
-
-
-# ========================
-# 2. Normalização e Utilidades
-# ========================
+    return LogPaths(log_root, log_dir, json_dir, archive_dir, debug_dir, cache_dir)
 
 
 # Gera o nome base para arquivos de log; consumido por write_log
@@ -264,8 +221,7 @@ def _hourly_allows_write(lp: LogPaths, name: str, hourly: bool, hourly_window_se
         return True
     try:
         key = sanitize_log_name(name, name)
-        cache_dir = lp.root / ".cache"
-        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_dir = lp.cache_dir
         ts_path = cache_dir / f".last_human_{key}.ts"
         now_int = int(time.time())
         if ts_path.exists():
@@ -306,7 +262,7 @@ def _perform_human_write(
         write_text(plain_path, human_line)
         if hourly:
             try:
-                ts_file = lp.root / ".cache" / (f".last_human_{sanitize_log_name(name, name)}.ts")
+                ts_file = lp.cache_dir / (f".last_human_{sanitize_log_name(name, name)}.ts")
                 with open(ts_file, "w", encoding="utf-8") as f:
                     f.write(str(int(time.time())))
             except Exception as exc:

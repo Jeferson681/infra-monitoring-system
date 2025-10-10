@@ -3,10 +3,11 @@
 Mantido intencionalmente pequeno e sem dependências pesadas.
 """
 
+# vulture: ignore
+
 from __future__ import annotations
 import logging
 import os
-import re
 import socket
 from typing import List, Tuple
 
@@ -33,32 +34,6 @@ def reap_children_nonblocking() -> List[Tuple[int, int]]:
         except OSError:
             pass  # plataforma ou permissão
     return reaped
-
-
-def parse_ping_output(output: str, is_windows: bool = True) -> float:
-    """Extrai tempo médio de resposta (ms) a partir da saída do `ping`.
-
-    Aceita variações regionais ("Tempo" / "time"), aceita valores com casas
-    decimais e ignora case. Retorna -1.0 se não for possível extrair.
-    """
-    # aceitar floats tanto em Windows quanto em Unix-like; ser case-insensitive
-    win_re = re.compile(r"(?:Tempo|time)[=:]?\s*(\d+(?:\.\d+)?)\s*ms", re.IGNORECASE)
-    unix_re = re.compile(r"time=(\d+(?:\.\d+)?)\s*ms", re.IGNORECASE)
-    if is_windows:
-        m = win_re.search(output)
-        if m:
-            try:
-                return float(m.group(1))
-            except (ValueError, TypeError):
-                return -1.0
-    else:
-        m = unix_re.search(output)
-        if m:
-            try:
-                return float(m.group(1))
-            except (ValueError, TypeError):
-                return -1.0
-    return -1.0
 
 
 def validate_host_port(host: str, port: int) -> bool:

@@ -1,0 +1,38 @@
+bloco 1
+src\core\tray.py:12: unused function 'init_tray' (60% confidence)
+src\core\tray.py:18: unused function 'update_tray' (60% confidence)
+
+bloco 2
+src\exporter\exporter.py:8: unused function 'start_exporter' (60% confidence)
+src\exporter\exporter.py:14: unused function 'expose_metric' (60% confidence)
+
+bloco 3
+src\monitoring\averages.py:422: unused variable 'METRIC_KEYS' (60% confidence)
+src\monitoring\averages.py:440: unused function '_collect_items_from_objs' (60% confidence)
+src\monitoring\averages.py:459: unused function '_select_window' (60% confidence)
+src\monitoring\averages.py:629: unused function 'extract_window_entries' (60% confidence)
+src\monitoring\averages.py:675: unused function 'get_fixed_log_path' (60% confidence)
+
+bloco 4
+src\monitoring\metrics.py:331: unused function 'get_temperature' (60% confidence)
+src\monitoring\metrics.py:471: unused function 'get_ping' (60% confidence)
+
+bloco 5
+src\monitoring\state.py:65: unused attribute 'last_before_critic' (60% confidence)
+src\monitoring\state.py:66: unused attribute 'last_after_critic' (60% confidence)
+src\monitoring\state.py:208: unused attribute 'last_before_critic' (60% confidence)
+src\monitoring\state.py:256: unused attribute 'last_after_critic' (60% confidence)
+src\monitoring\state.py:301: unused method 'snapshot_after_critic' (60% confidence)
+src\monitoring\state.py:307: unused method 'snapshot_warning' (60% confidence)
+src\monitoring\state.py:311: unused method 'snapshot_stable' (60% confidence)
+
+bloco 6
+src\system\helpers.py:39: unused function 'parse_ping_output' (60% confidence)
+src\system\log_helpers.py:333: unused function 'find_writable_log_root' (60% confidence)
+src\system\logs.py:135: unused function 'invalidate_get_log_paths_cache' (60% confidence)
+
+bloco 7
+src\system\treatments.py:22: unused function 'cleanup_temp_files' (60% confidence)
+src\system\treatments.py:39: unused function 'check_disk_usage' (60% confidence)
+src\system\treatments.py:93: unused function 'trim_process_working_set_windows' (60% confidence)
+src\system\treatments.py:135: unused function 'reapply_network_config' (60% confidence)

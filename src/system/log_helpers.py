@@ -1,3 +1,4 @@
+# vulture: ignore
 """Helpers de baixo nível para o subsistema de logging.
 
 Fornece compressão, verificação de idade de ficheiros,
@@ -326,20 +327,4 @@ def ensure_dir_writable(p: Path) -> bool:
         return True
     except OSError as exc:
         logger.warning("ensure_dir_writable: failed for %s: %s", p, exc)
-        if os.name != "nt":
-            try:
-                p.chmod(0o700)
-            except OSError:
-                logger.debug("ensure_dir_writable: chmod falhou em %s", p)
-        return False
-
-
-def find_writable_log_root(candidates: list[Path]) -> Path | None:
-    """Retorna o primeiro path gravável da lista `candidates` ou None."""
-    for c in candidates:
-        try:
-            if ensure_dir_writable(c):
-                return c
-        except OSError:
-            continue
-    return None
+    return False

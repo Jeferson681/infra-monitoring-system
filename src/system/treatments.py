@@ -1,3 +1,4 @@
+# vulture: ignore
 """Tratamentos automáticos simples (memória, rede, disco, logs)."""
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from system.helpers import reap_children_nonblocking
 logger = logging.getLogger(__name__)
 
 
+# vulture: ignore
 def cleanup_temp_files(days: int = 7) -> None:
     """Remove arquivos temporários antigos."""
     tmpdir = Path(tempfile.gettempdir())
@@ -34,6 +36,7 @@ def cleanup_temp_files(days: int = 7) -> None:
         logger.debug("cleanup_temp_files: scanning %s failed: %s", tmpdir, exc, exc_info=True)
 
 
+# vulture: ignore
 def check_disk_usage(threshold_pct: int = 90) -> List[str]:
     """Verifica uso de disco e alerta se acima do limite.
 
@@ -87,6 +90,7 @@ def _iter_roots() -> list[Path]:
     return [Path("/")]
 
 
+# vulture: ignore
 def trim_process_working_set_windows(pid: int) -> bool:
     """Tenta reduzir memória de um processo no Windows (EmptyWorkingSet)."""
     if os.name != "nt":
@@ -128,6 +132,7 @@ def reap_zombie_processes() -> int:
     return count
 
 
+# vulture: ignore
 def reapply_network_config() -> None:
     """Tenta restaurar conectividade de rede (Linux/Win/mac).
 
