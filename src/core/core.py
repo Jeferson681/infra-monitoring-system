@@ -5,13 +5,16 @@ Loop principal, emissão de snapshots e execução de rotinas de manutenção
 """
 
 import logging
+from ..monitoring.formatters import normalize_for_display, format_snapshot_human
 
-from system.logs import write_log, rotate_logs, compress_old_logs, safe_remove, get_log_paths
-from system.logs import ensure_log_dirs_exist
-from monitoring.state import SystemState
-from config.settings import get_valid_thresholds
-from monitoring.metrics import collect_metrics as _collect_metrics
-from monitoring.averages import aggregate_last_seconds, write_average_log, ensure_last_ts_exists
+from ..system.logs import write_log, rotate_logs, compress_old_logs, safe_remove, get_log_paths
+from ..system.logs import ensure_log_dirs_exist
+from ..monitoring.state import SystemState
+from ..config.settings import get_valid_thresholds
+from ..monitoring.metrics import collect_metrics as _collect_metrics
+from ..monitoring.averages import aggregate_last_seconds, write_average_log, ensure_last_ts_exists
+
+_NO_DATA_STR = "Sem dados"
 
 # ========================
 # 0. Funções auxiliares para intervalos e manutenção
@@ -20,7 +23,11 @@ from monitoring.averages import aggregate_last_seconds, write_average_log, ensur
 
 # Auxilia _run_loop; criado para centralizar leitura dos intervalos de manutenção
 def _read_maintenance_intervals() -> tuple[int, int, int, int]:
-    """Lê intervalos de manutenção a partir do ambiente com defaults."""
+    """Lê intervalos de manutenção a partir do ambiente com defaults.
+
+    Retorna uma tupla com (rotate_interval, compress_interval, safe_remove_interval, hourly_interval)
+    em segundos. Valores inválidos nas variáveis de ambiente são substituídos por defaults seguros.
+    """
     import os
 
     try:
@@ -50,6 +57,10 @@ def _read_maintenance_intervals() -> tuple[int, int, int, int]:
 
 
 def _maintenance_rotate(now: float, last_rotate: float, rotate_interval: int) -> float:
+    """Execute rotação de logs quando o intervalo for atingido.
+
+    Retorna o novo timestamp de `last_rotate` (usado para agendamento).
+    """
     if now - last_rotate >= rotate_interval:
         try:
             rotate_logs()
@@ -63,6 +74,10 @@ def _maintenance_rotate(now: float, last_rotate: float, rotate_interval: int) ->
 
 
 def _maintenance_compress(now: float, last_compress: float, compress_interval: int) -> float:
+    """Execute compressão de logs quando o intervalo for atingido.
+
+    Retorna o novo timestamp de `last_compress`.
+    """
     if now - last_compress >= compress_interval:
         try:
             compress_old_logs()
@@ -76,6 +91,10 @@ def _maintenance_compress(now: float, last_compress: float, compress_interval: i
 
 
 def _maintenance_safe_remove(now: float, last_safe_remove: float, safe_remove_interval: int) -> float:
+    """Execute remoção segura (safe remove) quando o intervalo for atingido.
+
+    Retorna o novo timestamp de `last_safe_remove`.
+    """
     if now - last_safe_remove >= safe_remove_interval:
         try:
             safe_remove()
@@ -89,6 +108,11 @@ def _maintenance_safe_remove(now: float, last_safe_remove: float, safe_remove_in
 
 
 def _maintenance_hourly(now: float, last_hourly: float, hourly_interval: int) -> float:
+    """Agende e execute tarefa horária de agregação de métricas.
+
+    Tenta agregar os últimos `hourly_interval` segundos de logs e gravá-los.
+    Retorna o novo timestamp de `last_hourly` em sucesso, senão retorna o valor antigo.
+    """
     try:
         if now - last_hourly >= hourly_interval:
             try:
@@ -121,9 +145,10 @@ def _run_maintenance(
     last_hourly: float,
     intervals: tuple[int, int, int, int],
 ) -> tuple[float, float, float, float]:
-    """Executa tarefas de manutenção se os intervalos estiverem ultrapassados.
+    """Executa tarefas de manutenção periódicas.
 
-    Retorna os timestamps atualizados (last_rotate, last_compress, last_safe_remove, last_hourly).
+    Recebe os timestamps de referência e os intervalos e retorna os timestamps
+    potencialmente atualizados após executar as tarefas necessárias.
     """
     rotate_interval, compress_interval, safe_remove_interval, hourly_interval = intervals
 
@@ -142,43 +167,89 @@ def _run_maintenance(
 
 # Auxilia _emit_snapshot; criado para formatar mensagem humana do snapshot
 def _format_human_msg(snapshot: dict | None, result: dict) -> str:
-    """Formatar mensagem humana a partir do snapshot/result."""
-    if isinstance(snapshot, dict):
-        long_lines = snapshot.get("summary_long") or []
-        if isinstance(long_lines, list) and long_lines:
-            return "\n".join(str(x) for x in long_lines)
-        return snapshot.get("summary_short") or f"state={result.get('state')}"
-    return f"state={result.get('state')}"
+    """Formata uma mensagem legível a partir do snapshot/result.
+
+    Prioriza campos 'summary_short' e 'summary_long' quando disponíveis. Caso
+    contrário, delega para o formatador comum ou constrói um fallback simples.
+    """
+    # Delegate full human message formatting to the centralized formatter
+    try:
+        return format_snapshot_human(snapshot, result)
+    except Exception:
+        # fallback to minimal representation on error
+        return f"state={result.get('state')}"
 
 
 # Auxilia _emit_snapshot; criado para imprimir resumo curto do snapshot
 def _print_snapshot_short(snap: dict | None) -> None:
-    summary_short = snap.get("summary_short") if isinstance(snap, dict) else None
-    print(summary_short or "Sem dados")
+    """Imprime um resumo curto do snapshot na saída padrão.
+
+    Mostra 'Sem dados' quando o snapshot não estiver disponível.
+    """
+    if not isinstance(snap, dict):
+        print(_NO_DATA_STR)
+        return
+
+    summary_short = snap.get("summary_short")
+    if summary_short:
+        print(summary_short)
+        return
+
+    # Build short summary from metrics using shared formatter when available
+    metrics = snap.get("metrics")
+    if isinstance(metrics, dict):
+        nf = normalize_for_display(metrics)
+        print(nf.get("summary_short") or _NO_DATA_STR)
+        return
+
+    print(_NO_DATA_STR)
 
 
 # Auxilia _emit_snapshot; criado para imprimir resumo longo do snapshot
 def _print_snapshot_long(snap: dict | None) -> None:
-    summary_long = snap.get("summary_long") if isinstance(snap, dict) else None
+    """Imprime versão longa do snapshot na saída padrão.
+
+    Quando não houver resumo longo tenta montar um a partir das métricas.
+    """
+    if not isinstance(snap, dict):
+        print("SNAPSHOT: Sem dados")
+        return
+
+    summary_long = snap.get("summary_long")
     if summary_long and isinstance(summary_long, list):
         for line in summary_long:
             print(line)
-    else:
-        print("SNAPSHOT:", snap)
+        return
+
+    # If no explicit long summary, build one from metrics using shared formatter
+    metrics = snap.get("metrics")
+    if isinstance(metrics, dict):
+        nf = normalize_for_display(metrics)
+        long_lines = nf.get("summary_long") or []
+        if isinstance(long_lines, list) and long_lines:
+            for line in long_lines:
+                print(line)
+            return
+
+    # Fallback: preserve original SNAPSHOT: <repr>
+    print("SNAPSHOT:", snap)
 
 
 # Auxilia _run_loop; criado para emitir snapshot formatado para logs e saída
 def _emit_snapshot(snapshot: dict | None, result: dict, verbose_level: int) -> None:
-    """Emitir snapshot formatado para logs e, opcionalmente, para a saída.
+    """Emita o snapshot para os subsistemas de logging e, opcionalmente, para stdout.
 
-    Se `verbose_level` for > 0, imprime uma versão humana do snapshot.
+    - Escreve ambos os formatos (humano e JSON) para os logs.
+    - Se `verbose_level` > 0, também imprime uma versão humana (curta/longa).
     """
     import logging
 
     try:
         human_msg = _format_human_msg(snapshot, result)
         try:
-            write_log("monitoring", "INFO", human_msg, extra=snapshot, human_enable=False)
+            # write only JSON for the main monitoring feed (single-line JSONL);
+            # do not write the human text to the canonical `monitoring` file here.
+            write_log("monitoring", "INFO", human_msg, extra=snapshot, human_enable=False, json_enable=True)
         except Exception as exc:
             # fallback: não permitir que falha de logging quebre a emissão do snapshot
             logging.getLogger(__name__).info("Falha ao escrever log via write_log: %s", exc)
@@ -201,9 +272,12 @@ def _emit_snapshot(snapshot: dict | None, result: dict, verbose_level: int) -> N
 
 # Função principal do módulo; executa o loop de coleta e manutenção
 def _run_loop(interval: float, cycles: int, verbose_level: int) -> None:
-    """Loop principal de coleta e execução de tarefas de manutenção.
+    """Loop principal do monitor que coleta métricas e executa manutenção.
 
-    Executa coletas periódicas e aciona rotinas como rotação/compressão.
+    Parâmetros:
+        interval: atraso entre ciclos em segundos (float).
+        cycles: número de ciclos a executar (0 = infinito).
+        verbose_level: controla o nível de saída humana (0 = silencioso).
     """
     # build validated thresholds and create SystemState
     thresholds = get_valid_thresholds()
@@ -251,9 +325,10 @@ def _run_loop(interval: float, cycles: int, verbose_level: int) -> None:
 
 
 def _ensure_runtime_checks() -> None:
-    """Ensure lightweight runtime checks: log dirs and last_ts file.
+    """Verificações leves de runtime executadas antes de cada coleta.
 
-    Extracted to reduce complexity inside the main loop.
+    Garante que os diretórios de logs existem e que o arquivo last_ts está presente.
+    Falhas são tratadas em modo 'best-effort' para não interromper o loop.
     """
     try:
         ensure_log_dirs_exist()
@@ -268,7 +343,10 @@ def _ensure_runtime_checks() -> None:
 
 
 def _collect_and_emit(state: SystemState, verbose_level: int) -> dict:
-    """Collect metrics, evaluate state and emit snapshot. Returns result dict."""
+    """Coleta métricas, avalia o estado e emite o snapshot.
+
+    Retorna o dicionário de resultado: {'state': <str>, 'metrics': <dict>}.
+    """
     try:
         metrics = _collect_metrics()
     except Exception:

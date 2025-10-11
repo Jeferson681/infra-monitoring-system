@@ -5,8 +5,6 @@ Preferir operações em Python puro e seguras; quando necessário usa
 fallbacks externos de forma controlada.
 """
 
-from __future__ import annotations
-
 import time
 import math
 import logging
@@ -20,7 +18,7 @@ import platform
 import psutil
 from pathlib import Path
 
-from system.helpers import validate_host_port
+from ..system.helpers import validate_host_port, _disk_candidate_paths
 
 logger = logging.getLogger(__name__)
 
@@ -59,10 +57,18 @@ _LOCKS: dict[str, threading.Lock] = {k: threading.Lock() for k in _METRIC_INTERV
 
 
 def _now() -> float:
+    """Retorne um timestamp monotônico (em segundos).
+
+    Usado internamente para medir envelhecimento do cache sem depender do relógio do sistema.
+    """
     return time.monotonic()
 
 
 def _is_stale(key: str) -> bool:
+    """Retorne True se o valor em cache para `key` estiver stale.
+
+    Considera o intervalo configurado em `_METRIC_INTERVALS`.
+    """
     try:
         last = float(_CACHE.get(key, {}).get("ts", 0.0))
         interval = float(_METRIC_INTERVALS.get(key, 1.0))
@@ -73,12 +79,10 @@ def _is_stale(key: str) -> bool:
 
 
 def _cache_get_or_refresh(key: str, collector, *args, **kwargs):
-    """Retorne valor em cache para `key`, atualizando chamando `collector` quando estiver stale.
+    """Retorne o valor em cache para `key`, atualizando quando stale.
 
-    `collector` é um callable que será invocado como collector(*args, **kwargs)
-    e deve retornar o valor cru da métrica. Tentamos adquirir o lock por chave
-    sem bloqueio; se já houver coleta em progresso, retornamos o valor em
-    cache (mesmo que stale) para não bloquear o chamador.
+    `collector` é um callable que será invocado para refazer a medição. Para
+    chaves conhecidas usa locks por chave para evitar coletas concorrentes.
     """
     # se a chave for desconhecida, chame o collector diretamente
     if key not in _METRIC_INTERVALS:
@@ -121,31 +125,40 @@ def _cache_get_or_refresh(key: str, collector, *args, **kwargs):
 
 
 def collect_metrics() -> dict[str, float | int | str | None]:
-    """Colete e normalize minimamente as métricas do sistema.
+    """Collect and normalize system metrics and return a flat mapping.
 
-    Retorne um dicionário com chaves fixas e valores primitivos (float/int/None):
-    - percentuais como float em 0.0..100.0 ou None
-    - bytes_* como int não-negativo ou None
-    - ping_ms / latency_ms como float (ms) ou None
-    - timestamp como epoch float
+    The result contains primitive values (float/int/str/None) suitable for
+    serialization and formatting. Uses internal caching to reduce cost of
+    expensive system calls.
     """
     metrics: dict[str, float | int | str | None] = {}
 
-    # Forçar refresh dos timestamps do cache no início da coleta
-    # para evitar interferência em testes e garantir que collectors
-    # monkeypatched sejam invocados. Mantém o cache simples e seguro
-    # entre execuções repetidas de teste.
+    # Break logic into helpers to keep this function readable and reduce
+    # cyclomatic/cognitive complexity while preserving exact behavior.
+    _reset_cache_timestamps()
+    _collect_percent_metrics(metrics)
+    _collect_memory_and_bytes(metrics)
+    _collect_network_metrics(metrics)
+    _collect_latency_metrics(metrics)
+    _collect_temperature_and_timestamp(metrics)
+    _collect_disk_usage_bytes(metrics)
+
+    return metrics
+
+
+def _reset_cache_timestamps() -> None:
+    """Force a cache timestamp reset to ensure collectors run in tests."""
     try:
         for k in _CACHE.keys():
             _CACHE[k]["ts"] = 0.0
     except (AttributeError, TypeError) as exc:
         logger.debug("falha ao resetar timestamps do cache: %s", exc, exc_info=True)
 
-    # percentuais (garante 0..100 ou None) via cache
+
+def _collect_percent_metrics(metrics: dict[str, float | int | str | None]) -> None:
     cpu = _safe_float(_cache_get_or_refresh("cpu_percent", get_cpu_percent))
     metrics["cpu_percent"] = None if cpu is None else max(0.0, min(100.0, cpu))
 
-    # cpu frequency in GHz (may be None on some platforms)
     cpu_freq = _safe_float(_cache_get_or_refresh("cpu_freq_ghz", get_cpu_freq_ghz))
     metrics["cpu_freq_ghz"] = None if cpu_freq is None else float(cpu_freq)
 
@@ -155,39 +168,63 @@ def collect_metrics() -> dict[str, float | int | str | None]:
     disk = _safe_float(_cache_get_or_refresh("disk_percent", get_disk_percent))
     metrics["disk_percent"] = None if disk is None else max(0.0, min(100.0, disk))
 
-    # network: agrupado (bytes_sent/bytes_recv)
+
+def _collect_memory_and_bytes(metrics: dict[str, float | int | str | None]) -> None:
+    try:
+        vm = psutil.virtual_memory()
+        metrics["memory_used_bytes"] = int(getattr(vm, "used", 0))
+        metrics["memory_total_bytes"] = int(getattr(vm, "total", 0))
+    except Exception:
+        metrics["memory_used_bytes"] = None
+        metrics["memory_total_bytes"] = None
+
+
+def _collect_network_metrics(metrics: dict[str, float | int | str | None]) -> None:
     net = _cache_get_or_refresh("network", lambda: get_network_stats()) or {}
-    # não usar default 0 aqui: se o contador for negativo devemos mapear para None
     metrics["bytes_sent"] = _safe_counter(net.get("bytes_sent"))
     metrics["bytes_recv"] = _safe_counter(net.get("bytes_recv"))
 
-    # tempos: mapear valores negativos/invalidos para None (ping)
-    # Usamos a mesma implementação de latency para "ping" (porta 53, menor
-    # timeout) e para latency geral (porta 80 por padrão). A implementação
-    # única de `get_latency` contém um mini-fallback interno.
+
+def _collect_latency_metrics(metrics: dict[str, float | int | str | None]) -> None:
     ping = _safe_float(_cache_get_or_refresh("ping_ms", lambda: get_latency("8.8.8.8", 53, 1.0)))
     metrics["ping_ms"] = None if (ping is None or ping < 0.0) else ping
 
-    # latency: chamar get_latency (cachado). Como só existe um método, usamos
-    # 'tcp' como método quando houver valor disponível.
     latency = _safe_float(_cache_get_or_refresh("latency_ms", lambda: get_latency()))
     latency_method = "tcp" if latency is not None else None
 
     metrics["latency_ms"] = None if (latency is None or latency < 0.0) else latency
     metrics["latency_method"] = latency_method
-    # expose whether the last latency measurement was an estimation/fallback
     try:
         metrics["latency_estimated"] = bool(_last_latency_estimated)
     except Exception:
         metrics["latency_estimated"] = False
 
-    # temperature (cached) via script-based collector
-    metrics["temperature"] = _cache_get_or_refresh("temperature", _temperature_collector)
 
-    # timestamp para permitir cálculo de taxas posteriormente
+def _collect_temperature_and_timestamp(metrics: dict[str, float | int | str | None]) -> None:
+    metrics["temperature"] = _cache_get_or_refresh("temperature", _temperature_collector)
     metrics["timestamp"] = time.time()
 
-    return metrics
+
+def _collect_disk_usage_bytes(metrics: dict[str, float | int | str | None]) -> None:
+    try:
+        disk_used = None
+        disk_total = None
+        candidates: list[object] = []
+        candidates = _disk_candidate_paths()
+        for p in candidates:
+            try:
+                du = psutil.disk_usage(str(p))
+                disk_used = int(getattr(du, "used", 0))
+                disk_total = int(getattr(du, "total", 0))
+                break
+            except OSError:
+                # problemas de I/O/permissão — tentar próximo candidato
+                continue
+        metrics["disk_used_bytes"] = disk_used
+        metrics["disk_total_bytes"] = disk_total
+    except Exception:
+        metrics["disk_used_bytes"] = None
+        metrics["disk_total_bytes"] = None
 
 
 def _safe_float(val: object) -> float | None:
@@ -296,19 +333,7 @@ def get_disk_percent(path: str | None = None) -> float | None:
         candidates: list[object] = []
         if path:
             candidates.append(Path(path))
-
-        try:
-            anchor = Path().anchor
-            if anchor:
-                candidates.append(Path(anchor))
-        except AttributeError:
-            # fallback: anchor may not be available on algumas plataformas
-            pass  # nosec
-
-        # sempre garantir '/' como fallback final em POSIX; também adicionamos
-        # o literal '/' para testes que esperam essa string em ambientes não-POSIX
-        candidates.append(Path("/"))
-        candidates.append("/")
+        candidates.extend(_disk_candidate_paths())
 
         for p in candidates:
             try:
@@ -337,24 +362,31 @@ def _get_temp_from_script(script_path: Path) -> float | None:
         # executar o script com timeout para evitar bloqueios
         proc = subprocess.run([str(script_path)], capture_output=True, text=True, timeout=5)
     except (subprocess.SubprocessError, OSError) as exc:
-        logger.debug("_get_temp_from_script falhou ao executar: %s", exc, exc_info=True)
+        logger.error("_get_temp_from_script falhou ao executar: %s", exc, exc_info=True)
         return None
 
     out = (proc.stdout or "").strip()
     if not out:
         return None
 
-    # tente extrair um número de ponto flutuante da saída
-    m = re.search(r"([-+]?\d*\.?\d+)", out)
+    return _parse_first_float_from_text(out)
+
+
+def _parse_first_float_from_text(text: str) -> float | None:
+    """Tente extrair o primeiro número float de `text` e retorná-lo como float.
+
+    Retorna None se não houver número ou se o valor não for finito.
+    """
+    if not text:
+        return None
+    m = re.search(r"([-+]?\d*\.?\d+)", text)
     if not m:
         return None
     try:
         v = float(m.group(1))
-        if not math.isfinite(v):
-            return None
-        return v
+        return v if math.isfinite(v) else None
     except (ValueError, TypeError) as exc:
-        logger.debug("_get_temp_from_script: parse de float falhou: %s", exc, exc_info=True)
+        logger.error("_parse_first_float_from_text: parse falhou: %s", exc, exc_info=True)
         return None
 
 
@@ -367,7 +399,7 @@ def _temperature_collector() -> float | None:
         if script_path.exists() and os.access(script_path, os.X_OK):
             return _get_temp_from_script(script_path)
     except (OSError, subprocess.SubprocessError) as exc:
-        logger.debug("_temperature_collector falhou: %s", exc, exc_info=True)
+        logger.error("_temperature_collector falhou: %s", exc, exc_info=True)
     return None
 
 
@@ -399,26 +431,40 @@ def get_network_latency(host: str = "8.8.8.8", port: int = 53, timeout: float = 
         logger.debug("validate_host_port failed for %s:%s, falling back to localhost", host, port)
         host = "127.0.0.1"
 
-    system = platform.system().lower()
-    if system.startswith("win"):
-        cmd = ["ping", "-n", "1", "-w", str(int(timeout * 1000)), host]
-    else:
-        # -W expects seconds on many ping implementations; use int(timeout)
-        cmd = ["ping", "-c", "1", "-W", str(int(timeout)), host]
+    def _build_ping_cmd(host: str, timeout: float) -> list[str]:
+        """Monte o comando de ping apropriado para a plataforma.
+
+        Usa timeouts em ms no Windows e em segundos na maioria dos Unix.
+        """
+        system = platform.system().lower()
+        if system.startswith("win"):
+            return ["ping", "-n", "1", "-w", str(int(timeout * 1000)), host]
+        # -W frequentemente espera segundos; arredondar para int
+        return ["ping", "-c", "1", "-W", str(int(timeout)), host]
+
+    def _parse_ping_output_for_ms(output: str) -> float | None:
+        """Parseie a saída do ping e retorne o tempo em ms, ou None se não achar.
+
+        A regex procura o padrão `= <num> ms` comum em muitas implementações.
+        """
+        m = re.search(r"=\s*([\d.]+)\s*ms", output)
+        if not m:
+            return None
+        try:
+            v = float(m.group(1))
+            return v if math.isfinite(v) else None
+        except (ValueError, TypeError) as exc:
+            logger.debug("get_network_latency: parse de ping falhou: %s", exc, exc_info=True)
+            return None
 
     # Tenta via ping do sistema
+    cmd = _build_ping_cmd(host, timeout)
     try:
         out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, text=True, timeout=float(timeout or 2.0))
-        m = re.search(r"=\s*([\d.]+)\s*ms", out)
-        if m:
-            try:
-                v = float(m.group(1))
-                if math.isfinite(v):
-                    _last_latency_estimated = False
-                    return v
-            except (ValueError, TypeError) as exc:
-                logger.debug("get_network_latency: parse de ping falhou: %s", exc, exc_info=True)
-                # parsing failed, continue to fallback
+        parsed = _parse_ping_output_for_ms(out)
+        if parsed is not None:
+            _last_latency_estimated = False
+            return parsed
     except subprocess.CalledProcessError:
         # ping retornou com código !=0; tentar fallback TCP
         logger.debug("get_network_latency: ping returned non-zero exit status")
@@ -426,8 +472,16 @@ def get_network_latency(host: str = "8.8.8.8", port: int = 53, timeout: float = 
         # qualquer outro erro (timeout, binário ausente etc.) -> fallback
         logger.debug("get_network_latency: ping falhou: %s", exc, exc_info=True)
         # continue to TCP fallback
+    return _tcp_latency_fallback(host, port, timeout)
 
-    # Fallback via socket/TCP
+
+def _tcp_latency_fallback(host: str, port: int, timeout: float) -> float | None:
+    """Tentar medir latência via conexão TCP; marca _last_latency_estimated.
+
+    Retorna valor em ms ou None. Mantém a flag `_last_latency_estimated` como True
+    quando entrar no fallback, para indicar que a medida não veio do ping ICMP.
+    """
+    global _last_latency_estimated
     try:
         start = time.perf_counter()
         with socket.create_connection((host, port), timeout=timeout):
@@ -463,13 +517,9 @@ def get_disk_usage_info(path: str | None = None) -> tuple[int | None, int | None
         if path:
             candidates.append(Path(path))
         try:
-            anchor = Path().anchor
-            if anchor:
-                candidates.append(Path(anchor))
+            candidates.extend(_disk_candidate_paths())
         except Exception as exc:
-            logger.debug("Path.anchor unavailable: %s", exc, exc_info=True)
-        candidates.append(Path("/"))
-        candidates.append("/")
+            logger.debug("building disk candidates falhou: %s", exc, exc_info=True)
         for p in candidates:
             try:
                 du = psutil.disk_usage(str(p))

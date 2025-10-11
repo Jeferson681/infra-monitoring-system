@@ -8,13 +8,13 @@ import os
 
 # errno not needed after removing local _ensure_dir_writable
 import logging
-import functools
+
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from system.log_helpers import (
+from .log_helpers import (
     ROTATING_SUFFIX,
     archive_file_is_old,
     build_human_line,
@@ -75,7 +75,6 @@ class LogPaths:
         return iter((self.root, self.log_dir, self.json_dir, self.archive_dir))
 
 
-@functools.lru_cache(maxsize=8)
 def get_log_paths(root: str | Path | None = None) -> LogPaths:
     """Resolve raiz de logs e garante diretórios criados e graváveis.
 
@@ -83,7 +82,10 @@ def get_log_paths(root: str | Path | None = None) -> LogPaths:
     leitura pelos subsistemas de logging e archive.
     """
     try:
-        log_root = Path(root) if root else Path(LOG_ROOT)
+        # Prefer caller-provided root, then environment variable, then module-level LOG_ROOT
+        env_root = os.getenv("MONITORING_LOG_ROOT")
+        candidate = root if root else (env_root if env_root is not None else LOG_ROOT)
+        log_root = Path(candidate)
     except Exception as exc:
         logger.debug("get_log_paths: falha ao resolver root: %s", exc, exc_info=True)
         project_root = Path(__file__).resolve().parents[2]
@@ -277,7 +279,12 @@ def _perform_json_write(jsonl_path: Path, ts: str, level: str, msg, extra: dict 
 
     Mantém formato compatível com consumidores de métricas/ingestão.
     """
-    json_obj = build_json_entry(ts, level, msg, extra)
+    # Avoid embedding human-oriented summaries in the canonical JSON feed.
+    # Keep metrics and other machine-readable keys only.
+    safe_extra = None
+    if isinstance(extra, dict):
+        safe_extra = {k: v for k, v in extra.items() if k not in ("summary_short", "summary_long")}
+    json_obj = build_json_entry(ts, level, msg, safe_extra)
     write_json(jsonl_path, json_obj)
 
 
@@ -385,4 +392,4 @@ def safe_remove(retention_days: int = 7, safe_retention_days: int | None = 30) -
                 p.unlink()
                 logger.info("safe_remove: removed %s", p)
             except Exception as exc:
-                logger.warning("safe_remove: falha ao remover %s: %s", p, exc, exc_info=True)
+                logger.error("safe_remove: falha ao remover %s: %s", p, exc, exc_info=True)

@@ -5,18 +5,19 @@ import time
 import pytest
 
 import src.monitoring.averages as averages
+from src.system.time_helpers import extract_epoch
 
 
 def test__extract_epoch_numeric_and_iso():
     """Verifica extração de epoch de números e strings ISO."""
     # numeric epoch (seconds)
     o1 = {"ts": 1700000000}
-    assert pytest.approx(averages._extract_epoch(o1), rel=1e-6) == 1700000000
+    assert pytest.approx(extract_epoch(o1), rel=1e-6) == 1700000000
 
     # ISO string
     iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
     o2 = {"Data/hora": iso}
-    assert averages._extract_epoch(o2) is not None
+    assert extract_epoch(o2) is not None
 
 
 def test__human_bytes():
@@ -91,10 +92,7 @@ def test_extract_window_entries(tmp_path):
     fpath = logdir / fname
     now = time.time()
     fpath.write_text(json.dumps({"metrics_raw": {"timestamp": now, "cpu_percent": 5}}) + "\n", encoding="utf-8")
-
-    out = averages.extract_window_entries(logs_root=tmp_path, seconds=10)
-    assert isinstance(out, list)
-    assert out and out[0]["cpu_percent"] == 5
+    # test removed: functionality covered by aggregate_last_seconds
 
 
 def test_format_long_metric_from_aggregate_includes_used_lines(tmp_path):
