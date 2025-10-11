@@ -4,18 +4,22 @@ Move a inicialização (parsing de args, configuração de logging, handler de d
 para este módulo para que `core` exponha apenas lógica de runtime.
 """
 
-from core.args import parse_args, get_log_config
+from .core.args import parse_args, get_log_config
 import logging as _logging
 import sys
-from system.logs import get_debug_file_path
-from core.core import _run_loop
+from .system.logs import get_debug_file_path
+from .core.core import _run_loop
 
 # Use existing averages helper to ensure hourly/cache state exists
-from monitoring.averages import get_last_ts_file
+from .monitoring.averages import ensure_default_last_ts
 
 
 def main(argv: list[str] | None = None) -> None:
-    """Inicializa logging e inicia o loop principal do programa."""
+    """Inicializa logging, handlers de debug e inicia o loop principal.
+
+    Parâmetros:
+        argv: lista de argumentos (para testes); quando None usa sys.argv.
+    """
     args = parse_args(argv)
     log_conf = get_log_config(args)
 
@@ -53,8 +57,7 @@ def main(argv: list[str] | None = None) -> None:
 
     # garantir arquivo de controle (.cache/last_ts.json) antes de iniciar o loop
     try:
-        # calling get_last_ts_file will create the .cache dir and default file
-        get_last_ts_file()
+        ensure_default_last_ts()
     except Exception:
         _logging.getLogger(__name__).debug("falha ao garantir arquivo de controle no startup", exc_info=True)
 

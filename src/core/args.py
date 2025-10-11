@@ -10,7 +10,19 @@ Este módulo fornece um parser simples que expõe:
 
 As funções retornam objetos compatíveis com argparse.Namespace para
 serem consumidos por `src.main`.
+
+Nota: Ajusta sys.path automaticamente se necessário para evitar erros de importação
+quando o programa é executado como script ou módulo.
 """
+
+# Ajuste automático do sys.path para execução direta ou via -m
+import sys
+from pathlib import Path
+
+if __name__ == "__main__" or (hasattr(sys, "_getframe") and sys._getframe(1).f_globals.get("__name__") == "__main__"):
+    src_path = Path(__file__).resolve().parent.parent
+    if str(src_path) not in sys.path:
+        sys.path.insert(0, str(src_path))
 
 import argparse
 from typing import Sequence

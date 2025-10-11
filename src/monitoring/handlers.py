@@ -8,7 +8,7 @@ import time
 import logging
 from typing import Any
 
-from system import treatments
+from ..system import treatments
 
 
 logger = logging.getLogger(__name__)
@@ -21,9 +21,9 @@ logger = logging.getLogger(__name__)
 
 # Auxilia: attempt_treatment — seleciona ação por nome da métrica
 def _select_action(metric_lower: str) -> tuple[str | None, tuple]:
-    """Seleciona a ação mais apropriada para uma métrica normalizada.
+    """Selecione a ação apropriada para uma métrica normalizada.
 
-    Retorna (action_name, args) ou (None, () ) quando não há ação.
+    Retorna uma tupla (action_name, args) ou (None, ()) quando não houver ação.
     """
     # retornamos apenas o nome da ação e os argumentos; a função é
     # resolvida dinamicamente por getattr(treatments, action_name) quando
@@ -46,7 +46,10 @@ def _select_action(metric_lower: str) -> tuple[str | None, tuple]:
 
 # Auxilia: attempt_treatment — verifica se a ação está em cooldown
 def _on_cooldown(state: Any, action_name: str, now: float) -> bool:
-    """Retorna True se a ação ainda está em cooldown."""
+    """Retorne True se a ação ainda estiver em cooldown.
+
+    `state` é esperado fornecer dicts `treatment_cooldowns` e `last_treatment_run`.
+    """
     cooldown = getattr(state, "treatment_cooldowns", {}).get(action_name, 0)
     last = getattr(state, "last_treatment_run", {}).get(action_name, 0)
     return now - last < cooldown
@@ -70,7 +73,7 @@ def _run_main_action(state: Any, action_name: str, action_func, action_args):
 def _maybe_run_aux_cleanup(state: Any, now: float) -> None:
     """Tente executar `cleanup_temp_files` como ação auxiliar (melhor esforço).
 
-    Atualize `state.last_treatment_run` quando executar com sucesso.
+    Atualize `state.last_treatment_run` com o timestamp quando executado com sucesso.
     """
     aux_name = "cleanup_temp_files"
     try:
@@ -95,7 +98,7 @@ def _run_reap_aux(state: Any, action_name: str, result, now: float) -> object | 
     """Execute (ou marque) a ação auxiliar `reap_zombie_processes`.
 
     Retorne o resultado do auxiliar (`reap_result`) preservando o comportamento
-    original em casos de exceção.
+    original em caso de exceção.
     """
     try:
         if action_name != "reap_zombie_processes":
@@ -120,10 +123,11 @@ def _run_reap_aux(state: Any, action_name: str, result, now: float) -> object | 
 
 
 def attempt_treatment(state: Any, name: str, _details: dict) -> dict | bool:
-    """Executa o tratamento automático para uma métrica crítica.
+    """Execute o tratamento automático para uma métrica crítica.
 
-    Verifica persistência (sustained), respeita cooldowns e executa a ação
-    correspondente; retorna dict com resultados ou False em falha.
+    - Verifica se a métrica cumpriu o período de sustento antes de agir.
+    - Respeita cooldowns configurados no `state`.
+    - Retorna um dict com {'action': <name>, 'result': <...>} em sucesso ou False.
     """
     now = time.monotonic()
 

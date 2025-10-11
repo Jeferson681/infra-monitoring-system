@@ -1,0 +1,71 @@
+# Ignore runtime logs and generated artifacts
+/logs/
+# Specifically ignore JSONL log dumps (may be large)
+/logs/**/*.jsonl
+
+# Keep various log directories ignored explicitly
+/logs/**
+
+# Cache and temp
+.cache/
+*.pyc
+__pycache__/
+
+# Virtual env
+.venv/
+env/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Wheels
+*.whl
+
+# Local env files
+.env
+.env.local
+
+# Editor settings
+.vscode/
+
+# Coverage
+.coverage
+coverage.xml
+htmlcov/
+
+# Node modules (if any helper scripts)
+node_modules/
+
+# Ignore test artifacts and generated test caches
+tests/__pycache__/
+pytest_cache/
+
+# Misc
+*.log
+.DS_Store
+# Ignore runtime logs and generated artifacts
+/logs/
+/logs/**/json
+# Specifically ignore JSONL log dumps (may be large)
+/logs/**/*.jsonl
+
+# Cache and temp
+.cache/
+*.pyc
+__pycache__/
+
+# Virtual env
+.venv/
+env/
+
+# Local env files
+.env
+.env.local
+
+# Editor settings
+.vscode/
+
+# Coverage
+.coverage

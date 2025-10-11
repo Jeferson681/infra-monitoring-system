@@ -1,7 +1,6 @@
 # vulture: ignore
 """Tratamentos automáticos simples (memória, rede, disco, logs)."""
 
-from __future__ import annotations
 import logging
 import os
 import shutil
@@ -13,15 +12,19 @@ from typing import List
 import string
 import sys
 
-from system.log_helpers import process_temp_item
-from system.helpers import reap_children_nonblocking
+from .log_helpers import process_temp_item
+from .helpers import reap_children_nonblocking
 
 logger = logging.getLogger(__name__)
 
 
 # vulture: ignore
 def cleanup_temp_files(days: int = 7) -> None:
-    """Remove arquivos temporários antigos."""
+    """Remova arquivos temporários antigos do diretório temporário do sistema.
+
+    Varre o diretório temporário do sistema e remove itens cuja idade excede
+    `days`. Projetada para ser usada como ação auxiliar de manutenção.
+    """
     tmpdir = Path(tempfile.gettempdir())
     max_age = days * 86400
     if not tmpdir.exists():
@@ -38,9 +41,10 @@ def cleanup_temp_files(days: int = 7) -> None:
 
 # vulture: ignore
 def check_disk_usage(threshold_pct: int = 90) -> List[str]:
-    """Verifica uso de disco e alerta se acima do limite.
+    """Verifique o uso de disco e registre/retorne problemas acima do limite.
 
-    Retorna lista de mensagens com problemas encontrados.
+    Retorna uma lista de mensagens descrevendo volumes cujo uso excede
+    `threshold_pct`.
     """
     roots = _iter_roots()
     issues: List[str] = []
@@ -64,19 +68,18 @@ def check_disk_usage(threshold_pct: int = 90) -> List[str]:
 
 
 def _disk_usage_pct(r: Path) -> int:
-    """Retorna a percentagem usada do filesystem em `r` como inteiro.
+    """Retorne a percentagem usada do filesystem em `r` como inteiro.
 
-    Lança a exceção do `shutil.disk_usage` para ser tratada pelo chamador.
+    Lança as exceções de `shutil.disk_usage` para que o chamador possa tratar.
     """
     usage = shutil.disk_usage(r)
     return int((usage.used / usage.total * 100) if usage.total else 0)
 
 
 def _iter_roots() -> list[Path]:
-    """Retorna lista de raízes a verificar para uso de disco.
+    """Retorne a lista de raízes a verificar para uso de disco.
 
-    Em Windows retorna todas as letras de drive; em outros sistemas retorna
-    a raiz '/'.
+    Em Windows retorna as letras de drive existentes; em POSIX retorna ['/'].
     """
     if os.name == "nt":
         # Retornar apenas as letras que existem no sistema para evitar
@@ -92,7 +95,10 @@ def _iter_roots() -> list[Path]:
 
 # vulture: ignore
 def trim_process_working_set_windows(pid: int) -> bool:
-    """Tenta reduzir memória de um processo no Windows (EmptyWorkingSet)."""
+    """Tente reduzir o working set de um processo no Windows usando EmptyWorkingSet.
+
+    Retorna True em sucesso, False em plataformas não-Windows ou em falha.
+    """
     if os.name != "nt":
         return False
     try:
@@ -118,7 +124,10 @@ def trim_process_working_set_windows(pid: int) -> bool:
 
 
 def reap_zombie_processes() -> int:
-    """Recolhe processos zumbis (POSIX)."""
+    """Recolha processos zumbi em plataformas POSIX.
+
+    Retorna o número de processos recolhidos.
+    """
     if os.name != "posix":
         return 0
     try:
@@ -134,11 +143,10 @@ def reap_zombie_processes() -> int:
 
 # vulture: ignore
 def reapply_network_config() -> None:
-    """Tenta restaurar conectividade de rede (Linux/Win/mac).
+    """Tente restaurar a conectividade de rede executando comandos por plataforma.
 
-    Usa `_platform_candidates` para obter comandos por plataforma e
-    `_online_check` para verificar conectividade; pula comandos
-    inexistentes e interrompe cedo quando a rede volta.
+    Usa `_platform_candidates` para obter comandos adequados ao sistema e
+    `_online_check` para interromper quando a conectividade for restabelecida.
     """
     if _online_check():
         return
@@ -157,7 +165,7 @@ def reapply_network_config() -> None:
         try:
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         except (subprocess.SubprocessError, OSError) as exc:
-            logger.debug("reapply_network_config: %s falhou: %s", cmd, exc, exc_info=True)
+            logger.error("reapply_network_config: %s falhou: %s", cmd, exc, exc_info=True)
             continue
 
         logger.debug("reapply_network_config: %s => %s", cmd, getattr(proc, "returncode", None))
@@ -169,7 +177,7 @@ def reapply_network_config() -> None:
 
 
 def _platform_candidates(p: str) -> list:
-    """Retorna lista de comandos candidatos por plataforma."""
+    """Retorne uma lista de comandos candidatos para restaurar rede, por plataforma."""
     p = (p or "").lower()
     if p.startswith("linux"):
         return [["resolvectl", "flush-caches"], ["nmcli", "networking", "on"]]
@@ -181,7 +189,10 @@ def _platform_candidates(p: str) -> list:
 
 
 def _online_check(timeout: float = 2.0) -> bool:
-    """Verifica conectividade exterior com timeout curto."""
+    """Verifique conectividade externa tentando abrir conexão TCP com timeout.
+
+    Retorna True se a conexão for bem-sucedida, False em caso contrário.
+    """
     try:
         with socket.create_connection(("8.8.8.8", 53), timeout=timeout):
             return True

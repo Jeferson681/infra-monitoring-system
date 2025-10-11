@@ -6,12 +6,12 @@ movimentações atômicas e escrita durável em disco.
 """
 
 from pathlib import Path
+import os
 from datetime import datetime, timezone, date
 import logging
 import gzip
 import shutil
 import time
-import os
 import json as _json
 import re
 
@@ -37,7 +37,12 @@ except (ImportError, AttributeError):
 # Escrita segura
 # -----------------------
 def write_text(path: Path, text: str) -> None:
-    """Anexa texto a `path`, com lock e fsync se configurado."""
+    """Anexe texto a `path` de forma segura, usando lock e fsync quando possível.
+
+    Esta função tenta criar o diretório pai e aplica um lock exclusivo quando
+    a biblioteca `portalocker` estiver disponível. Em caso de falha grava
+    uma mensagem de warning e segue em modo best-effort.
+    """
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as fh:
@@ -65,19 +70,23 @@ def write_text(path: Path, text: str) -> None:
                     except Exception as exc:
                         logger.debug("write_text: portalocker.unlock falhou em %s: %s", path, exc)
     except OSError as exc:
-        logger.warning("write_text: falhou em %s: %s", path, exc)
+        logger.error("write_text: falhou em %s: %s", path, exc, exc_info=True)
 
 
 def write_json(path: Path, obj: dict) -> None:
-    """Serializa `obj` em JSONL e anexa a `path`."""
+    """Serialize um objeto como JSONL e anexe ao ficheiro `path`.
+
+    Em caso de objetos não serializáveis por padrão, usa `default=str` como
+    fallback e emite um warning.
+    """
     try:
         line = _json.dumps(obj, ensure_ascii=False) + "\n"
     except (TypeError, ValueError) as exc:
         try:
             line = _json.dumps(obj, ensure_ascii=False, default=str) + "\n"
-            logger.warning("write_json: fallback default=str usado em %s: %s", path, exc)
+            logger.error("write_json: fallback default=str usado em %s: %s", path, exc, exc_info=True)
         except Exception as exc2:
-            logger.warning("write_json: falhou em %s: %s; %s", path, exc, exc2)
+            logger.error("write_json: falhou em %s: %s; %s", path, exc, exc2, exc_info=True)
             return
     write_text(path, line)
 
@@ -86,7 +95,10 @@ def write_json(path: Path, obj: dict) -> None:
 # Normalização e formatação
 # -----------------------
 def sanitize_log_name(raw_name: str, fallback: str = "debug_log") -> str:
-    """Sanitiza nome base de ficheiro de log."""
+    """Sanitize o nome base de um ficheiro de log para uso seguro no filesystem.
+
+    Remove caracteres potencialmente perigosos e limita o comprimento.
+    """
     rn = Path(raw_name or fallback).name.lstrip(".")
     name = re.sub(r"[^A-Za-z0-9._-]+", "_", rn)
     if not name:
@@ -97,7 +109,10 @@ def sanitize_log_name(raw_name: str, fallback: str = "debug_log") -> str:
 
 
 def normalize_message_for_human(msg, max_len: int | None = 10000) -> str:
-    """Normaliza mensagem para linha legível por humanos."""
+    """Normalize uma mensagem para apresentação humana, removendo novas linhas.
+
+    Corta a mensagem para `max_len` quando definido.
+    """
     try:
         s = "" if msg is None else str(msg)
     except (TypeError, ValueError):
@@ -107,7 +122,10 @@ def normalize_message_for_human(msg, max_len: int | None = 10000) -> str:
 
 
 def build_json_entry(ts: str, level: str, msg, extra: dict | None = None) -> dict:
-    """Constrói dicionário serializável para JSONL."""
+    """Construa um dicionário pronto para ser serializado em JSONL.
+
+    Insere campos `ts`, `level`, `msg` e mescla `extra` quando fornecido.
+    """
     entry = {"ts": ts, "level": level, "msg": msg}
     if extra and isinstance(extra, dict):
         for k, v in extra.items():
@@ -118,16 +136,26 @@ def build_json_entry(ts: str, level: str, msg, extra: dict | None = None) -> dic
 
 
 def build_human_line(ts: str, level: str, msg_str: str, extras: dict | None = None) -> str:
-    """Compõe linha legível por humanos.
+    r"""Compõe linha legível por humanos.
 
-    Formato resultante:
-      <ts> [LEVEL] [extras...]
-      <msg_str>
+    Por compatibilidade com consumidores existentes, o formato legacy é uma
+    única linha com timestamp, nível, extras e a mensagem flattenada. O novo
+    formato multilinha (header + body) pode ser ativado via
+    variavel de ambiente `MONITORING_HUMAN_MULTILINE=1`.
 
-    Onde <msg_str> pode conter múltiplas linhas (preservadas). Esta mudança
-    garante que o cabeçalho com data e nível fique numa linha separada e que a
-    primeira métrica (por exemplo, CPU) comece na linha seguinte.
+    Legacy (padrão):
+      <ts> [LEVEL] [extras...] <msg_str>\n
+    Multilinha (opt-in):
+      <ts> [LEVEL] [extras...]\n
+      <msg_str>\n\n
     """
+    # decide se usamos o comportamento multilinha baseado em env var
+    use_multiline = os.environ.get("MONITORING_HUMAN_MULTILINE", "0") in ("1", "true", "yes")
+    # Additionally, if the message contains internal newlines, prefer multiline
+    # to preserve human formatting even when the env var isn't set.
+    if not use_multiline and isinstance(msg_str, str) and ("\n" in msg_str or "\r" in msg_str):
+        use_multiline = True
+
     extras_part = ""
     if extras and isinstance(extras, dict):
         kvs = []
@@ -138,18 +166,21 @@ def build_human_line(ts: str, level: str, msg_str: str, extras: dict | None = No
         if kvs:
             extras_part = " " + " ".join(kvs)
 
-    # Ensure msg_str is a string and preserve internal newlines.
+    # Ensure msg_str is a string
     try:
         body = "" if msg_str is None else str(msg_str)
     except Exception:
         body = "<unrepr>"
 
-    # Trim trailing whitespace/newlines but keep internal line breaks.
-    body = body.rstrip("\r\n")
-
-    header = f"{ts} [{level}]{extras_part}\n"
-    # Append an extra blank line to separate entries visually.
-    return header + body + "\n\n"
+    if use_multiline:
+        # Multiline: preserve internal newlines, trim trailing newlines and keep a blank separator
+        body = body.rstrip("\r\n")
+        header = f"{ts} [{level}]{extras_part}\n"
+        return header + body + "\n\n"
+    else:
+        # Legacy single-line: flatten internal newlines to spaces
+        single = body.replace("\n", " ").replace("\r", " ").strip()
+        return f"{ts} [{level}]{extras_part} {single}\n"
 
 
 def format_date_for_log(dt=None) -> str:
@@ -172,7 +203,7 @@ def is_older_than(p: Path, seconds: int) -> bool:
     try:
         st = p.stat()
     except OSError as exc:
-        logger.warning("is_older_than: falha ao acessar %s: %s", p, exc)
+        logger.error("is_older_than: falha ao acessar %s: %s", p, exc, exc_info=True)
         return False
     now_ts = datetime.now(timezone.utc).timestamp()
     return st.st_mtime <= (now_ts - int(seconds))
@@ -183,7 +214,7 @@ def archive_file_is_old(p: Path, now_ts: float, retention_days: int) -> bool:
     try:
         st = p.stat()
     except OSError as exc:
-        logger.warning("archive_file_is_old: falha ao acessar %s: %s", p, exc)
+        logger.error("archive_file_is_old: falha ao acessar %s: %s", p, exc, exc_info=True)
         return False
     cutoff = now_ts - retention_days * 86400
     return st.st_mtime < cutoff
@@ -245,7 +276,7 @@ def atomic_move_to_archive(src: Path, dst_rotating: Path) -> bool:
         if dst_rotating.exists() and not src.exists():
             dst_rotating.unlink()
     except Exception as exc3:
-        logger.warning("atomic_move_to_archive: cleanup failed on %s: %s", dst_rotating, exc3)
+        logger.error("atomic_move_to_archive: cleanup failed on %s: %s", dst_rotating, exc3, exc_info=True)
     return False
 
 
@@ -259,7 +290,7 @@ def compress_file(src: Path, dst_gz: Path) -> bool:
         os.replace(str(tmp), str(dst_gz))
         return True
     except OSError as exc:
-        logger.warning("compress_file: falha %s -> %s: %s", src, dst_gz, exc)
+        logger.error("compress_file: falha %s -> %s: %s", src, dst_gz, exc, exc_info=True)
         tmp.unlink(missing_ok=True)
         return False
 
@@ -308,7 +339,7 @@ def process_temp_item(item: Path, max_age: int) -> None:
             shutil.rmtree(item, ignore_errors=True)
             logger.info("Removido diretório %s", item)
     except OSError as exc:
-        logger.warning("Falha processando %s: %s", item, exc)
+        logger.error("Falha processando %s: %s", item, exc, exc_info=True)
 
 
 # -----------------------
@@ -320,11 +351,28 @@ def ensure_dir_writable(p: Path) -> bool:
         p.mkdir(parents=True, exist_ok=True)
         test = p / f".touch-{os.getpid()}"
         try:
-            with open(test, "w") as f:
+            # open in append mode to minimize permission surprises
+            with open(test, "a", encoding="utf-8") as f:
                 f.write("ok")
+                f.flush()
+        except PermissionError as exc:
+            logger.error("ensure_dir_writable: permission denied writing to %s: %s", p, exc, exc_info=True)
+            return False
+        except OSError as exc:
+            logger.error("ensure_dir_writable: write test failed for %s: %s", p, exc, exc_info=True)
+            return False
         finally:
-            test.unlink(missing_ok=True)
+            try:
+                if test.exists():
+                    test.unlink()
+            except Exception:
+                # ignore cleanup failures; best-effort only
+                # nosec B110 - cleanup must not raise in best-effort path
+                pass
         return True
+    except PermissionError as exc:
+        logger.error("ensure_dir_writable: permission denied creating %s: %s", p, exc, exc_info=True)
+        return False
     except OSError as exc:
-        logger.warning("ensure_dir_writable: failed for %s: %s", p, exc)
-    return False
+        logger.error("ensure_dir_writable: failed for %s: %s", p, exc, exc_info=True)
+        return False

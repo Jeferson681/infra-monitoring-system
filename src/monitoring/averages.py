@@ -3,15 +3,14 @@ from typing import Iterator, Optional, Dict, Any, List
 import json
 import datetime
 import logging
-from monitoring.formatters import _build_long_from_metrics
-from system.logs import write_log, get_log_paths
+from .formatters import _build_long_from_metrics, _fmt_bytes_human, format_used_files_lines, format_duration
+from .state import compute_metric_states
+from ..system.logs import write_log, get_log_paths
+from ..system.time_helpers import extract_epoch
 
 # imports kept minimal; avoid unused imports that ruff flags
 
 # do not import iter_jsonl_objects from averages (may be removed); decode JSONL inline
-
-# Common keys used when scanning for timestamp-like fields
-KEYS_TO_MATCH = {"ts", "timestamp", "time", "date", "last_time", "created_at", "data/hora"}
 
 
 def _find_candidate_files(root: Path) -> List[Path]:
@@ -40,7 +39,7 @@ def _iter_jsonl_file(path: Path) -> Iterator[tuple[dict, Path, int]]:
                 if isinstance(obj, dict):
                     yield obj, path, lineno
     except Exception as exc:
-        logging.getLogger(__name__).debug("_iter_jsonl_file: failed reading %s: %s", path, exc, exc_info=True)
+        logging.getLogger(__name__).error("_iter_jsonl_file: failed reading %s: %s", path, exc, exc_info=True)
 
 
 def _iter_jsonl_today(logs_root: Path) -> Iterator[tuple[dict, Path, int]]:
@@ -57,289 +56,23 @@ def _iter_jsonl_today(logs_root: Path) -> Iterator[tuple[dict, Path, int]]:
 
 # --- Extracted helpers for epoch parsing (moved to module level to reduce
 # complexity inside _extract_epoch)
-def _epoch_from_numeric(v) -> Optional[float]:
-    try:
-        n = float(v)
-    except (TypeError, ValueError):
-        return None
-    # heurística: valores maiores que ~1e12 provavelmente são ms
-    if n > 1e12:
-        return n / 1000.0
-    return n
-
-
-def _parse_date_string(s: str) -> Optional[float]:
-    if not isinstance(s, str):
-        return None
-    t = s.strip()
-    if not t:
-        return None
-    # numeric-looking string
-    try:
-        n = float(t)
-        if n > 1e12:
-            return n / 1000.0
-        return n
-    except (TypeError, ValueError):
-        pass
-
-    # normalize trailing Z
-    if t.endswith("Z"):
-        t2 = t[:-1] + "+00:00"
-    else:
-        t2 = t
-
-    # try ISO
-    try:
-        dt = datetime.datetime.fromisoformat(t2)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=datetime.timezone.utc)
-        return dt.timestamp()
-    except ValueError:
-        pass
-
-    # common formats
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
-        try:
-            dt = datetime.datetime.strptime(t, fmt)
-            dt = dt.replace(tzinfo=datetime.timezone.utc)
-            return dt.timestamp()
-        except ValueError:
-            continue
-
-    return None
-
-
-def _parse_epoch_from_value(v) -> Optional[float]:
-    if v is None:
-        return None
-    # numeric (or numeric-like)
-    n = _epoch_from_numeric(v)
-    if n is not None:
-        return n
-    # strings
-    if isinstance(v, str):
-        s = _parse_date_string(v)
-        if s is not None:
-            return s
-    return None
-
-
-def _scan_keys_in_obj(container, depth: int = 3) -> Optional[float]:
-    if depth < 0 or container is None:
-        return None
-    if not isinstance(container, (dict, list)):
-        return _parse_epoch_from_value(container)
-    keys_to_match = KEYS_TO_MATCH
-    # If container is a dict: inspect direct keys, likely subtrees and shallow values
-    if isinstance(container, dict):
-        cand = _scan_direct_keys(container, keys_to_match)
-        if cand is not None:
-            return cand
-        for subtree in _iter_likely_subtrees(container):
-            cand = _scan_subtree_for_timestamp(subtree, depth - 1)
-            if cand is not None:
-                return cand
-        cand = _scan_values_shallow(container, depth - 1)
-        if cand is not None:
-            return cand
-        return None
-
-    # container is a list: delegate to helper that returns the best timestamp
-    return _scan_list_for_keys(container, depth - 1)
-
-
-def _scan_list_for_keys(lst: list, depth: int) -> Optional[float]:
-    """Scan a list for timestamp-like entries and prefer the latest found."""
-    best = None
-    for item in lst:
-        cand = _scan_keys_in_obj(item, depth)
-        if cand is not None:
-            # prefer latest (max) timestamp found
-            if best is None or cand > best:
-                best = cand
-    return best
-
-
-def _scan_direct_keys(container: dict, keys_to_match: set) -> Optional[float]:
-    """Check direct keys in a dict for timestamp-like entries."""
-    for k, v in container.items():
-        try:
-            ks = str(k).lower()
-        except Exception:
-            ks = None
-        if ks and ks in keys_to_match:
-            cand = _parse_epoch_from_value(v)
-            if cand is not None:
-                return cand
-    return None
-
-
-def _iter_likely_subtrees(container: dict) -> Iterator[Any]:
-    """Yield likely subtrees for timestamp scanning from a container dict."""
-    for k in ("metrics_raw", "meta", "data", "payload", "event", "events"):
-        if k in container:
-            yield container.get(k)
-
-
-def _scan_values_shallow(container: dict, depth: int) -> Optional[float]:
-    """Shallow-scan all values of a container and recurse limited by depth."""
-    for v in container.values():
-        if isinstance(v, (dict, list)):
-            cand = _scan_keys_in_obj(v, depth)
-            if cand is not None:
-                return cand
-    return None
-
-
-def _extract_epoch(obj: dict) -> Optional[float]:
-    """Tenta extrair um timestamp epoch (float) de um objeto de log.
-
-    Procura em (metrics_raw.timestamp), ts, timestamp ou em campos legíveis
-    como 'Data/hora' no formato YYYY-MM-DD HH:MM:SS ou ISO.
-    Retorna None se não for possível obter uma epoch válida.
-    """
-    # Monolithic implementation with local helpers. Preserves existing priority
-    # while adding controlled scans and centralized parsing logic.
-
-    # Use module-level parsing helpers (extracted) to keep this function small.
-    # preserve existing priority and behavior by delegating to those helpers.
-
-    # preserve existing priority and behavior
-    # Delegates to small, focused helpers (keeps behavior and priority order)
-    n = _extract_from_metrics_raw(obj)
-    if n is not None:
-        return n
-    n = _extract_from_top_level(obj)
-    if n is not None:
-        return n
-    n = _check_localized_date_keys(obj)
-    if n is not None:
-        return n
-    n = _extract_from_common_subtrees(obj)
-    if n is not None:
-        return n
-    return _dfs_scan_for_timestamp(obj)
-
-
-def _extract_from_metrics_raw(obj: dict) -> Optional[float]:
-    m = obj.get("metrics_raw") or {}
-    if isinstance(m, dict):
-        v = m.get("timestamp")
-        if v is not None:
-            return _parse_epoch_from_value(v)
-    return None
-
-
-def _extract_from_top_level(obj: dict) -> Optional[float]:
-    for key in ("ts", "timestamp"):
-        if key in obj:
-            v = obj.get(key)
-            n = _parse_epoch_from_value(v)
-            if n is not None:
-                return n
-    return None
-
-
-def _extract_from_common_subtrees(obj: dict) -> Optional[float]:
-    for subtree in (obj.get("metrics_raw"), obj.get("meta"), obj.get("events")):
-        if subtree is not None:
-            n = _scan_keys_in_obj(subtree, depth=3)
-            if n is not None:
-                return n
-    return None
-
-
-def _check_localized_date_keys(obj: dict) -> Optional[float]:
-    """Check known localized/date-ish top-level keys for parseable timestamps."""
-    for key in ("Data/hora", "Data/Hora", "data/hora", "date", "Date"):
-        if key in obj:
-            v = obj.get(key)
-            n = _parse_epoch_from_value(v)
-            if n is not None:
-                return n
-    return None
-
-
-def _dfs_scan_for_timestamp(node: Any) -> Optional[float]:
-    """DFS scan of an object tree to find timestamp-like keys/values.
-
-    Kept as a separate helper to reduce complexity in _extract_epoch.
-    """
-    stack: list[Any] = [node]
-    while stack:
-        nd = stack.pop()
-        if not isinstance(nd, (dict, list)):
-            continue
-        if isinstance(nd, dict):
-            n = _dfs_scan_dict(nd)
-            if n is not None:
-                return n
-            continue
-        # nd is a list
-        n = _dfs_scan_list(nd)
-        if n is not None:
-            return n
-    return None
-
-
-def _dfs_scan_dict(d: dict) -> Optional[float]:
-    """Scan a dict node for timestamp-like keys/values during DFS."""
-    keys_to_match = KEYS_TO_MATCH
-    for k, v in d.items():
-        try:
-            ks = str(k).lower()
-        except Exception:
-            ks = None
-        if ks and ks in keys_to_match:
-            n = _parse_epoch_from_value(v)
-            if n is not None:
-                return n
-        if isinstance(v, (dict, list)):
-            # enqueue for further DFS handled in the main loop of _dfs_scan_for_timestamp
-            # return None here so caller loops and handles lists/dicts centrally
-            return None
-    return None
-
-
-def _dfs_scan_list(lst: list) -> Optional[float]:
-    """Scan a list node for dict/list children during DFS."""
-    for item in lst:
-        if isinstance(item, (dict, list)):
-            n = _dfs_scan_for_timestamp(item)
-            if n is not None:
-                return n
-    return None
-
-
-def _scan_subtree_for_timestamp(subtree: Any, depth: int) -> Optional[float]:
-    """Scan a subtree (list or dict) and return the best timestamp found.
-
-    This helper delegates to _scan_keys_in_obj as appropriate. Extracted to
-    simplify _scan_keys_in_obj.
-    """
-    if isinstance(subtree, list):
-        best = None
-        for item in subtree:
-            cand = _scan_keys_in_obj(item, depth - 1)
-            if cand is not None:
-                # prefer latest (max) timestamp found
-                if best is None or cand > best:
-                    best = cand
-        return best
-    return _scan_keys_in_obj(subtree, depth)
 
 
 def _human_bytes(b: Optional[float]) -> Optional[str]:
+    """Compatibility wrapper: delegate to formatters._fmt_bytes_human.
+
+    Keeps the old averages._human_bytes API used by tests and callers.
+    Returns None when input is None or invalid.
+    """
     if b is None:
         return None
     try:
-        b = float(b)
+        return _fmt_bytes_human(int(b))
     except Exception:
         return None
-    # present as GB with two decimals when appropriate
-    gb = b / (1024**3)
-    return f"{gb:.2f} GB"
+
+
+# _human_bytes removed: use formatters._fmt_bytes_human directly where needed.
 
 
 def _compute_averages_and_counts(window: List[tuple], metric_keys: List[str]):
@@ -379,9 +112,26 @@ def _process_window_item(
     Extracted to reduce complexity of the aggregator while preserving logic.
     """
     rel = extract_relevant(o)
-    st = _normalize_state(rel.get("state"))
-    if st is not None:
-        state_counts[st] = state_counts.get(st, 0) + 1
+    st_global = _normalize_state(rel.get("state"))
+    if st_global is not None:
+        state_counts[st_global] = state_counts.get(st_global, 0) + 1
+
+    # Use compute_metric_states (centralizado em state.py) para obter estados individuais
+    metrics_for_state = {k: rel.get(k) for k in metric_keys}
+    # manter compatibilidade; pode ser atualizado para passar thresholds reais
+    thresholds = {}  # type: Dict[str, Dict[str, Any]]
+    metric_states = compute_metric_states(metrics_for_state, thresholds)
+
+    # Mapeamento de métrica para campo de estado individual (consistente com state.py)
+    state_field_map = {
+        "cpu_percent": "state_cpu",
+        "memory_used_bytes": "state_ram",
+        "disk_used_bytes": "state_disk",
+        "ping_ms": "state_ping",
+        "latency_ms": "state_latency",
+        "bytes_sent": "state_bytes_sent",
+        "bytes_recv": "state_bytes_recv",
+    }
 
     for k in metric_keys:
         v = rel.get(k)
@@ -393,9 +143,16 @@ def _process_window_item(
             continue
         sums[k] = sums.get(k, 0.0) + num
         counts[k] = (counts.get(k, 0) or 0) + 1
-        if st is not None:
+        # Estado individual da métrica, se existir
+        st_metric = None
+        state_field = state_field_map.get(k)
+        if state_field and metric_states.get(state_field):
+            st_metric = _normalize_state(metric_states.get(state_field))
+        else:
+            st_metric = st_global
+        if st_metric is not None:
             d = counts_by_state_per_metric.get(k) or {}
-            d[st] = d.get(st, 0) + 1
+            d[st_metric] = d.get(st_metric, 0) + 1
             counts_by_state_per_metric[k] = d
 
 
@@ -411,15 +168,9 @@ def _compute_state_durations(sorted_window: List[tuple]) -> tuple[Dict[str, floa
             continue
         state_durations[st] = state_durations.get(st, 0.0) + float(dur)
 
-    def _format_duration(s: float) -> str:
-        try:
-            secs = int(round(float(s)))
-        except Exception:
-            return "0:00:00"
-        return str(datetime.timedelta(seconds=secs))
-
+    # Use centralized formatter for durations to keep presentation consistent
     state_durations_human: Dict[str, str] = (
-        {k: _format_duration(v) for k, v in state_durations.items()} if state_durations else {}
+        {k: format_duration(v) for k, v in state_durations.items()} if state_durations else {}
     )
     return state_durations, state_durations_human
 
@@ -455,13 +206,26 @@ def _build_used_files_lines(window: List[tuple]) -> Dict[str, tuple[int, int]]:
 
 
 def extract_relevant(obj: dict) -> Dict[str, Any]:
-    """Extrai os campos relevantes de um objeto de log.
+    """Extraia campos relevantes de um objeto de log para agregação.
 
-    Retorna um dicionário com: state e as métricas listadas pelo usuário.
+    Retorna um dicionário com 'state' e as métricas brutas mapeadas para chaves
+    previsíveis usadas pelo agregado e formatadores.
+
+    Nota: historicamente o agregador procurava por `metrics_raw` enquanto o
+    emissor atual escreve `metrics` no JSONL. Para ser resiliente a ambas as
+    formas, prefira `metrics` e faça fallback para `metrics_raw`.
     """
-    m = obj.get("metrics_raw") or {}
+    # Prefer 'metrics' (escrito pelo feed) e caia para 'metrics_raw' se ausente
+    m = obj.get("metrics") or obj.get("metrics_raw") or {}
+    # Extrai também os estados individuais se existirem
     return {
-        "state": obj.get("state"),
+        "state_cpu": obj.get("state_cpu"),
+        "state_ram": obj.get("state_ram"),
+        "state_disk": obj.get("state_disk"),
+        "state_ping": obj.get("state_ping"),
+        "state_latency": obj.get("state_latency"),
+        "state_bytes_sent": obj.get("state_bytes_sent"),
+        "state_bytes_recv": obj.get("state_bytes_recv"),
         "cpu_percent": m.get("cpu_percent"),
         "cpu_freq_ghz": m.get("cpu_freq_ghz"),
         "memory_percent": m.get("memory_percent"),
@@ -481,15 +245,10 @@ def extract_relevant(obj: dict) -> Dict[str, Any]:
 
 
 def _normalize_state(s: Optional[str]) -> Optional[str]:
-    """Normalize state strings to canonical uppercase values.
+    """Normalize strings de estado para valores canônicos em maiúsculas.
 
-        Maps common variants to canonical names used in counting/formatting.
-
-    Examples:
-            'CRITIC' or 'CRIT' -> 'CRITICAL'
-            'WARN' -> 'WARNING'
-    Returns None if input is falsy.
-
+    Exemplos: 'CRITICAL' ou 'CRIT' -> 'CRITICAL'; 'WARN' -> 'WARNING'.
+    Retorna None quando a entrada for falsy.
     """
     if not s:
         return None
@@ -497,7 +256,7 @@ def _normalize_state(s: Optional[str]) -> Optional[str]:
         su = str(s).strip().upper()
     except Exception:
         return None
-    if su in ("CRITIC", "CRIT", "CRITICAL"):
+    if su in ("CRITICAL", "CRIT"):
         return "CRITICAL"
     if su in ("WARN", "WARNING"):
         return "WARNING"
@@ -505,10 +264,10 @@ def _normalize_state(s: Optional[str]) -> Optional[str]:
 
 
 def aggregate_last_seconds(logs_root: Path, seconds: int = 10) -> Optional[Dict[str, Any]]:
-    """Aggregate metrics from the last `seconds` seconds available in today's JSONL.
+    """Agregue métricas dos últimos `seconds` segundos a partir dos JSONL do dia.
 
-    Returns a dict with averages, counts and metadata or None when no data.
-    Designed to be lightweight and robust to malformed lines.
+    Retorna um dicionário contendo médias, contagens e metadados, ou None se
+    não houver dados válidos. Projetado para ser resiliente a linhas JSON inválidas.
     """
     objs: List[tuple[dict, Path, int]] = list(_iter_jsonl_today(logs_root))
     if not objs:
@@ -521,7 +280,7 @@ def aggregate_last_seconds(logs_root: Path, seconds: int = 10) -> Optional[Dict[
             o, src_path, src_ln = entry
         except ValueError:
             continue
-        ts = _extract_epoch(o)
+        ts = extract_epoch(o)
         if ts is not None:
             items.append((o, ts, src_path, src_ln))
     if not items:
@@ -592,7 +351,7 @@ def aggregate_last_seconds(logs_root: Path, seconds: int = 10) -> Optional[Dict[
 
 
 def _add_human_bytes(averages: Dict[str, Any]) -> None:
-    """Add human-readable bytes fields to averages dict when present."""
+    """Adicione campos legíveis (GB) ao dicionário de médias quando aplicável."""
     try:
         if averages.get("bytes_sent") is not None:
             averages["bytes_sent_human"] = _human_bytes(averages["bytes_sent"])
@@ -603,18 +362,14 @@ def _add_human_bytes(averages: Dict[str, Any]) -> None:
 
 
 def _safe_persist_last_time(last_ts: float, logs_root: Path | None) -> None:
-    """Persist last_ts but never raise to caller; log debug on failure."""
+    """Persista last_ts em arquivo sem propagar exceções para o chamador.
+
+    Registra em debug se ocorrer falha e segue em modo best-effort.
+    """
     try:
         persist_last_time(last_ts=last_ts, logs_root=logs_root)
     except Exception as exc:
         logging.getLogger(__name__).debug("persist_last_time failed: %s", exc, exc_info=True)
-
-
-# vulture: ignore
-def get_fixed_log_path(name: str = "average_metric") -> Path:
-    """Return the fixed log path logs/log/{name}.log using get_log_paths()."""
-    lp = get_log_paths()
-    return lp.log_dir / f"{name}.log"
 
 
 def format_long_metric_from_aggregate(aggregate: Dict[str, Any]) -> str:
@@ -640,7 +395,7 @@ def format_long_metric_from_aggregate(aggregate: Dict[str, Any]) -> str:
     try:
         used = aggregate.get("used_files_lines") if isinstance(aggregate, dict) else None
         if used:
-            out_lines.extend(_format_used_files_lines(used))
+            out_lines.extend(format_used_files_lines(used))
     except Exception as exc:
         logging.getLogger(__name__).debug(
             "format_long_metric_from_aggregate used_files_lines section failed: %s",
@@ -651,30 +406,12 @@ def format_long_metric_from_aggregate(aggregate: Dict[str, Any]) -> str:
     return "\n".join(out_lines)
 
 
-def _format_used_files_lines(used: Dict[str, Any]) -> List[str]:
-    """Format a used_files_lines dict into a list of human-readable lines.
-
-    Expects a mapping of path->(min_line, max_line). Returns list like:
-    ['','Linhas usadas:', 'file1 linhas 12 a 24', 'file2 linha 50']
-    """
-    out: List[str] = ["", "Linhas usadas:"]
-    for k in sorted(used.keys()):
-        try:
-            rng = used.get(k)
-        except (AttributeError, TypeError):
-            continue
-        if not isinstance(rng, (list, tuple)) or len(rng) < 2:
-            continue
-        a, b = int(rng[0]), int(rng[1])
-        try:
-            fname = Path(k).name
-        except Exception:
-            fname = str(k)
-        if a == b:
-            out.append(f"{fname} linha {a}")
-        else:
-            out.append(f"{fname} linhas {a} a {b}")
-    return out
+# vulture: ignore
+# NOTE: The functions `extract_window_entries`, `get_fixed_log_path` and
+# `_format_used_files_lines` were intentionally removed as part of a
+# cleanup: their behavior overlapped with other public APIs and they were
+# only used by tests. If needed in the future, their implementations can
+# be restored from version control.
 
 
 def _build_metrics_src_from_aggregate(aggregate: Dict[str, Any]) -> Dict[str, Any]:
@@ -689,11 +426,12 @@ def _build_metrics_src_from_aggregate(aggregate: Dict[str, Any]) -> Dict[str, An
 
     ts_iso = aggregate.get("time_to")
     if ts_iso:
+        # Delegate parsing to centralized helper to support many timestamp formats
         try:
-            dt = datetime.datetime.fromisoformat(ts_iso)
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=datetime.timezone.utc)
-            metrics_src["timestamp"] = dt.timestamp()
+            from ..system.time_helpers import extract_epoch as _extract_epoch  # local import
+
+            parsed = _extract_epoch({"time_to": ts_iso}) if not isinstance(ts_iso, (int, float)) else float(ts_iso)
+            metrics_src["timestamp"] = parsed if parsed is not None else ts_iso
         except Exception:
             metrics_src["timestamp"] = ts_iso
 
@@ -710,6 +448,8 @@ def _decorate_metric_lines(lines: List[str], counts_by_state: Dict[str, Any]) ->
     def _state_suffix_for_metric_key(mkey: str) -> str:
         return _compute_suffix_for_metric_key(counts_by_state, mkey)
 
+    # Mapeamento atualizado: cada prefixo de linha para a chave de métrica,
+    # e também para o campo de estado individual correspondente
     mapping = {
         "CPU:": "cpu_percent",
         "RAM:": "memory_used_bytes",
@@ -735,6 +475,12 @@ def _decorate_metric_lines(lines: List[str], counts_by_state: Dict[str, Any]) ->
     for i, ln in enumerate(lines):
         for prefix, key in mapping.items():
             if ln.startswith(prefix):
+                # Use the metric key (e.g. 'cpu_percent') to lookup per-metric
+                # state counts. Previously the code passed the state field
+                # name (e.g. 'state_cpu') which does not match the keys in
+                # counts_per_metric_by_state and prevented suffixes from
+                # appearing. Pass `key` so _compute_suffix_for_metric_key
+                # finds the correct counts dict.
                 suffix = _state_suffix_for_metric_key(key).lstrip()
                 target_col = max_len + 3
                 current_len = len(ln)
@@ -790,38 +536,34 @@ def write_average_log(
 def _compute_suffix_for_metric_key(counts_by_state: Dict[str, Any], mkey: str) -> str:
     d = counts_by_state.get(mkey) or {}
     warn = int(d.get("WARNING", d.get("WARN", 0) or 0))
-    critical = int(d.get("CRITICAL", d.get("CRITIC", d.get("CRIT", 0) or 0)) or 0)
-    return f" (WARNING={warn} CRITICAL={critical})"
+    critical = int(d.get("CRITICAL", d.get("CRIT", 0)) or 0)
+    if warn > 0 or critical > 0:
+        return f" (WARNING={warn} CRITICAL={critical})"
+    return ""
 
 
-# store last timestamp in a single JSON under logs/.cache/last_ts.json
-# previously this used Path('logs') / '.cache' which, when combined with a
-# provided logs_root resulted in duplicate 'logs/logs/.cache'. Use a relative
-# '.cache' directory so get_last_ts_file(logs_root) resolves to
-# <logs_root>/.cache/last_ts.json as intended.
-LAST_TS_DIR = Path(".cache")
+LAST_TS_DIR = Path(".cache")  # sempre relativo ao logs_root
 
 
 def get_last_ts_file(name: str = "last_ts", logs_root: Path | None = None) -> Path:
-    """Return the Path to the last_ts JSON file and ensure parent exists.
+    """Retorne o Path para o ficheiro last_ts JSON e garanta que o pai exista.
 
-    If `logs_root` is None, resolve it from the logging subsystem so the
-    cache lives under the same logs root used by `get_log_paths()`.
+    Se `logs_root` for None, resolve a partir do subsistema de logging para
+    que o cache fique sob o mesmo `logs_root` usado por `get_log_paths()`.
     """
     if logs_root is None:
         lp = get_log_paths()
-        cache_parent = lp.cache_dir
-    else:
-        cache_parent = Path(logs_root) / LAST_TS_DIR
+        logs_root = lp.root
+    cache_parent = Path(logs_root) / LAST_TS_DIR
     cache_parent.mkdir(parents=True, exist_ok=True)
     return cache_parent / f"{name}.json"
 
 
 def persist_last_time(last_ts: Optional[float] = None, name: str = "last_ts", logs_root: Path | None = None) -> Path:
-    """Persist a single JSON file with the last_time (epoch) and ISO.
+    """Persista um JSON único com o último timestamp (epoch) e ISO.
 
-    Overwrites the file with a small JSON object. If last_ts is None, uses
-    current UTC timestamp.
+    Substitui o ficheiro com um pequeno objeto JSON. Se `last_ts` for None,
+    utiliza o timestamp UTC atual.
     """
     if last_ts is None:
         last_ts = datetime.datetime.now(datetime.timezone.utc).timestamp()
@@ -838,7 +580,7 @@ def persist_last_time(last_ts: Optional[float] = None, name: str = "last_ts", lo
 
 
 def read_last_time(name: str = "last_ts", logs_root: Path | None = None) -> Optional[float]:
-    """Read the JSON file and return the numeric last_time (epoch) or None."""
+    """Leia o ficheiro JSON e retorne o valor numérico `last_time` (epoch) ou None."""
     fpath = get_last_ts_file(name=name, logs_root=logs_root)
     if not fpath.exists():
         return None
@@ -849,7 +591,8 @@ def read_last_time(name: str = "last_ts", logs_root: Path | None = None) -> Opti
         if v is None:
             return None
         return float(v)
-    except (OSError, TypeError, ValueError):
+    except (OSError, TypeError, ValueError) as exc:
+        logging.getLogger(__name__).error("read_last_time: failed reading %s: %s", fpath, exc, exc_info=True)
         return None
 
 
@@ -866,7 +609,7 @@ def ensure_last_ts_exists(name: str = "last_ts", logs_root: Path | None = None) 
     try:
         fpath = get_last_ts_file(name=name, logs_root=logs_root)
     except Exception as exc:
-        logger.debug("ensure_last_ts_exists: falha ao resolver caminho: %s", exc, exc_info=True)
+        logger.error("ensure_last_ts_exists: falha ao resolver caminho: %s", exc, exc_info=True)
         return
 
     if not fpath.exists():
@@ -875,26 +618,29 @@ def ensure_last_ts_exists(name: str = "last_ts", logs_root: Path | None = None) 
             persist_last_time(last_ts=None, name=name, logs_root=logs_root)
             logger.debug("ensure_last_ts_exists: criado %s", fpath)
         except Exception as exc:
-            logger.debug("ensure_last_ts_exists: não foi possível criar %s: %s", fpath, exc, exc_info=True)
+            logger.error("ensure_last_ts_exists: não foi possível criar %s: %s", fpath, exc, exc_info=True)
 
 
-# Garantir que o arquivo default exista ao importar o módulo.
-# Se faltar ou contiver last_time = 0.0 (criado por versões antigas), regravar
-# com o timestamp atual para evitar janelas inválidas.
-try:
-    _default_file = get_last_ts_file()
+def ensure_default_last_ts() -> None:
+    """Ensure the default last_ts file exists and contains a non-zero timestamp.
+
+    This function centralizes what used to run at import time. It should be
+    called by the runtime entrypoint (e.g. `main`) during startup so importing
+    this module does not perform file I/O.
+    """
     try:
-        existing = read_last_time()
-    except Exception:
-        existing = None
-
-    if existing is None or abs(float(existing) - 0.0) <= 1e-9:
-        # Persistir timestamp atual (persist_last_time cuida do diretório)
+        _default_file = get_last_ts_file()
         try:
-            persist_last_time()
-        except Exception as exc:
-            # fallback: não falhar na importação
-            logging.getLogger(__name__).debug("persist_last_time on import-time init failed: %s", exc, exc_info=True)
-except Exception as exc:
-    # não falhar na importação caso algo dê errado; log debug
-    logging.getLogger(__name__).debug("post-import last_ts init failed: %s", exc, exc_info=True)
+            existing = read_last_time()
+        except Exception:
+            existing = None
+
+        if existing is None or abs(float(existing) - 0.0) <= 1e-9:
+            # Persistir timestamp atual (persist_last_time cuida do diretório)
+            try:
+                persist_last_time()
+            except Exception as exc:
+                # fallback: log debug but do not raise
+                logging.getLogger(__name__).debug("persist_last_time on startup init failed: %s", exc, exc_info=True)
+    except Exception as exc:
+        logging.getLogger(__name__).debug("startup last_ts init failed: %s", exc, exc_info=True)
