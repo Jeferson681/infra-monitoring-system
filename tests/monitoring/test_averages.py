@@ -30,7 +30,7 @@ def test_extract_relevant_and_normalize_state():
     """Confirma extração de campos relevantes e normalização de estado."""
     obj = {"state": "crit", "metrics_raw": {"cpu_percent": 12.5}}
     rel = averages.extract_relevant(obj)
-    assert rel["cpu_percent"] == 12.5
+    assert rel["cpu_percent"] == pytest.approx(12.5)
     assert averages._normalize_state("crit") == "CRITICAL"
     assert averages._normalize_state(None) is None
 

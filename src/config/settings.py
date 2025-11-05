@@ -14,12 +14,10 @@ Comentários e mensagens de log estão em português.
 
 import os
 from pathlib import Path
+from ..system.helpers import merge_env_items
 
 
-# ========================
 # Constantes e padrões globais
-# ========================
-
 STATE_STABLE = "STABLE"
 STATE_WARNING = "WARNING"
 STATE_CRITICAL = "CRITICAL"
@@ -76,14 +74,9 @@ DEFAULT_TREATMENT_POLICIES = {
     },
     "cleanup_temp_age_days": 7,
 }
+# Carregamento das configurações
 
 
-# ========================
-# 1. Carregamento das configurações
-# ========================
-
-
-# Função principal do módulo; carrega todas as configurações do ambiente
 def load_settings() -> dict:
     """Carrega configurações combinando DEFAULTS + .env + ambiente.
 
@@ -104,7 +97,8 @@ def load_settings() -> dict:
     project_root = Path(__file__).resolve().parents[2]
     env_path = Path(os.getenv("MONITORING_ENV_FILE", project_root / ".env"))
 
-    env_items = _merge_env_items(env_path, logger)
+    # Mescla .env com variáveis de ambiente do processo
+    env_items = merge_env_items(env_path, dict(os.environ))
     _apply_threshold_overrides(env_items, thresholds, logger)
 
     treatment_policies = DEFAULT_TREATMENT_POLICIES.copy()
@@ -117,59 +111,7 @@ def load_settings() -> dict:
     }
 
 
-# ========================
-# 2. Funções auxiliares para ambiente e overrides
-# ========================
-
-
-# Auxilia load_settings; criado para centralizar leitura do .env
-def _read_env_file(path: Path | str) -> dict:
-    """Lê um arquivo `.env` e devolve um dicionário chave->valor.
-
-    Linhas vazias e comentários (começando com '#') são ignorados.
-    """
-    import logging
-
-    logger = logging.getLogger(__name__)
-    result: dict[str, str] = {}
-    p = Path(path)
-    if not p.exists():
-        return result
-    try:
-        with p.open("r", encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                if "=" not in line:
-                    continue
-                key, val = line.split("=", 1)
-                key = key.strip()
-                val = val.strip().strip('"').strip("'")
-                result[key] = val
-    except OSError as exc:
-        logger.debug("Falha ao ler .env em %s: %s", p, exc)
-        return {}
-    return result
-
-
-# Auxilia load_settings; criado para unir variáveis do ambiente e .env
-def _merge_env_items(env_path: Path, logger) -> dict:
-    """Retorna um mapeamento combinado de `.env` e env vars do processo.
-
-    As variáveis do processo sobrescrevem o arquivo `.env`.
-    """
-    env_items = _read_env_file(env_path)
-    if env_items == {} and env_path.exists():
-        logger.warning("Erro ou ficheiro .env vazio em %s", env_path)
-    # Atualizar com as variáveis do processo, permitindo que o ambiente
-    # sobrescreva valores definidos no arquivo .env (comportamento útil para
-    # testes e deploys onde variáveis de ambiente são preferidas).
-    env_items.update(os.environ)
-    return env_items
-
-
-# Auxilia load_settings; criado para aplicar overrides de thresholds
+# Funções auxiliares para aplicar overrides a partir do ambiente
 def _apply_threshold_overrides(env_items: dict, thresholds: dict, logger) -> None:
     """Aplica overrides de thresholds a partir de ``env_items``.
 
@@ -201,7 +143,7 @@ def _apply_threshold_overrides(env_items: dict, thresholds: dict, logger) -> Non
             logger.warning("Valor inválido para %s: %s", key, raw_val)
 
 
-# Auxilia load_settings; criado para aplicar overrides nas políticas de tratamento
+# Auxilia load_settings; aplica overrides nas políticas de tratamento
 def _apply_treatment_policies(env_items: dict, treatment_policies: dict, logger) -> None:
     """Aplica overrides para políticas de tratamento a partir de env vars.
 
@@ -242,12 +184,9 @@ def _apply_treatment_policies(env_items: dict, treatment_policies: dict, logger)
             logger.warning("MONITORING_TREATMENT_COOLDOWN_%s inválido: %s", name, v)
 
 
-# ========================
-# 3. Validação e normalização dos thresholds
-# ========================
+# Validação e normalização dos thresholds
 
 
-# Auxilia validate_settings; criado para garantir tipos e limites corretos
 def _coerce_threshold(metric_name: str, raw_value: dict) -> dict:
     """Valida e converte thresholds para tipos corretos.
 
@@ -285,11 +224,11 @@ def _coerce_threshold(metric_name: str, raw_value: dict) -> dict:
     return {"warning": warning_v, "critical": critical_v}
 
 
-# Função principal de validação; normaliza e valida configurações
 def validate_settings(settings: dict) -> dict:
-    """Normaliza e valida o dicionário de configurações.
+    """Normalizar e validar o dicionário de configurações.
 
-    Garante que todos os thresholds estejam presentes e corretos.
+    Retorna o `settings` com a chave `thresholds` preenchida com valores
+    coerentes e em tipos corretos.
     """
     import logging
 

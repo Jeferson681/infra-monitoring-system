@@ -1,26 +1,138 @@
-# vulture: ignore
-"""Integração com Prometheus/Grafana.
+import logging
+import os
+import time
+import psutil
+from typing import Dict, cast
 
-Docstrings em português.
+"""
+Utilitários para exportação de métricas no padrão Prometheus.
+
+Exponha métricas para Prometheus como Gauges quando a biblioteca
+`prometheus_client` estiver disponível. Se a biblioteca não estiver
+instalada, as funções tornam-se no-ops e apenas logam advertências.
 """
 
+logger = logging.getLogger(__name__)
 
-def start_exporter() -> None:  # vulture: ignore
-    """Inicie o servidor HTTP do exporter para Prometheus.
+# Try to import prometheus_client; fall back to no-op if unavailable
+_HAVE_PROM = False
+_gauges: Dict[str, object] = {}
+_server_started = False
 
-    Implementação de placeholder: a função existe para ser chamada pelo
-    orquestrador quando o exporter estiver habilitado. Não realiza I/O por
-    si mesma nesta implementação inicial.
+try:
+    from prometheus_client import Gauge, start_http_server  # type: ignore
+
+    _HAVE_PROM = True
+except Exception:  # pragma: no cover - optional dependency
+    # Falha ao importar prometheus_client: exportação Prometheus será desativada (opcional)
+    _HAVE_PROM = False
+
+
+def _sanitize_metric_name(name: str) -> str:
+    """Sanitiza o nome da métrica para o padrão Prometheus, substituindo caracteres inválidos por underline."""
+    # Prometheus metric names: [a-zA-Z_:][a-zA-Z0-9_:]*
+    out = []
+    for i, ch in enumerate(name):
+        if i == 0:
+            if ch.isalpha() or ch in ("_", ":"):
+                out.append(ch)
+            else:
+                out.append("_")
+        else:
+            if ch.isalnum() or ch in ("_", ":"):
+                out.append(ch)
+            else:
+                out.append("_")
+    return "".join(out)
+
+
+def start_exporter(port: int | None = None, addr: str = "127.0.0.1") -> None:
+    """Inicia o servidor HTTP do Prometheus Exporter no endereço e porta informados.
+
+    Se `prometheus_client` não estiver disponível, apenas loga e não faz nada.
+    A porta pode ser definida pela variável de ambiente `MONITORING_EXPORTER_PORT` se `port` for None.
     """
-    pass
+    global _server_started
+    if not _HAVE_PROM:
+        logger.warning("prometheus_client not installed; exporter disabled")
+        return
+
+    if _server_started:
+        logger.debug("prometheus exporter already started")
+        return
+
+    if port is None:
+        try:
+            port = int(os.getenv("MONITORING_EXPORTER_PORT", "8000"))
+        except Exception:
+            # Se a conversão da porta falhar, usa valor padrão
+            port = 8000
+
+    try:
+        start_http_server(port, addr)
+        _server_started = True
+        logger.info("Prometheus exporter started on %s:%d", addr, port)
+    except Exception as exc:
+        logger.exception("Failed to start prometheus exporter: %s", exc)
 
 
-# vulture: ignore
-def expose_metric(name: str, value: float) -> None:  # vulture: ignore
-    """Exponha uma métrica ao registro do exporter.
+def expose_metric(name: str, value: float, description: str = "") -> None:
+    """Expõe uma métrica numérica como Gauge do Prometheus.
 
-    Parâmetros:
-        name: nome da métrica a expor.
-        value: valor numérico da métrica.
+    Cria o Gauge na primeira chamada e atualiza o valor nas próximas.
+    Se `prometheus_client` não estiver disponível, apenas loga e retorna.
     """
-    pass
+    if not _HAVE_PROM:
+        logger.debug("prometheus_client not available; expose_metric %s=%s ignored", name, value)
+        return
+
+    san = _sanitize_metric_name(name)
+    try:
+        if san not in _gauges:
+            g = Gauge(san, description or f"Gauge for {name}")
+            _gauges[san] = g
+        else:
+            g = _gauges[san]
+        # Cast to Gauge for type checkers and call set
+        g_cast = cast(Gauge, g)
+        g_cast.set(float(value))
+    except Exception as exc:
+        logger.debug("Failed to expose metric %s: %s", name, exc, exc_info=True)
+
+
+def expose_process_metrics() -> None:
+    """Expõe métricas do processo Python atual (CPU, RAM, uptime, threads) como Gauges do Prometheus."""
+    if not _HAVE_PROM:
+        return
+    try:
+        proc = psutil.Process()
+        # Coleta e exporta métricas do processo:
+        # - Porcentagem de CPU
+        cpu = proc.cpu_percent(interval=0.0)
+        expose_metric("process_cpu_percent", cpu, "CPU percent used by this process")
+        # - Porcentagem de memória
+        mem = proc.memory_percent()
+        expose_metric("process_memory_percent", mem, "Memory percent used by this process")
+        # - Memória RSS (resident set size)
+        rss = getattr(proc.memory_info(), "rss", 0)
+        expose_metric("process_memory_rss_bytes", rss, "Resident memory used by this process (bytes)")
+        # - Uptime do processo
+        uptime = time.time() - proc.create_time()
+        expose_metric("process_uptime_seconds", uptime, "Uptime of this process in seconds")
+        # - Número de threads
+        threads = proc.num_threads()
+        expose_metric("process_num_threads", threads, "Number of threads in this process")
+        # - Número de descritores de arquivos abertos (se disponível na plataforma)
+        # Usa getattr para evitar erro de análise estática do linter
+        num_fds_fn = getattr(proc, "num_fds", None)
+        if callable(num_fds_fn):
+            try:
+                fds = num_fds_fn()
+                # Só expõe a métrica se fds for int
+                if isinstance(fds, int):
+                    expose_metric("process_num_fds", float(fds), "Number of open file descriptors")
+            except Exception as exc:
+                # Pode ocorrer em plataformas sem suporte a num_fds; ignora silenciosamente
+                logger.debug("Falha ao obter número de descritores de arquivos: %s", exc, exc_info=True)
+    except Exception as exc:
+        logger.debug("Failed to expose process metrics: %s", exc, exc_info=True)

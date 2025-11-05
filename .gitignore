@@ -1,71 +1,46 @@
-# Ignore runtime logs and generated artifacts
-/logs/
-# Specifically ignore JSONL log dumps (may be large)
-/logs/**/*.jsonl
-
-# Keep various log directories ignored explicitly
-/logs/**
-
-# Cache and temp
-.cache/
-*.pyc
-__pycache__/
-
-# Virtual env
+###########################
+# IGNORE TUDO DE DEV E SENSÍVEL
+###########################
+# Ambientes virtuais
 .venv/
-env/
+venv/
 
-# Build artifacts
-dist/
-build/
-*.egg-info/
+# Logs e dados coletados
+logs/
+.cache/
 
-# Wheels
-*.whl
-
-# Local env files
+# Arquivos de ambiente e segredos
 .env
-.env.local
+!.env.example
+.env.*
 
-# Editor settings
+# Cache e artefatos de ferramentas
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.ropeproject/
+__pycache__/
+*.pyc
+
+# Configurações de editor/IDE
 .vscode/
+.idea/
 
-# Coverage
+# Cobertura, build, wheel, node
 .coverage
 coverage.xml
 htmlcov/
-
-# Node modules (if any helper scripts)
+dist/
+build/
+*.egg-info/
+*.whl
 node_modules/
 
-# Ignore test artifacts and generated test caches
-tests/__pycache__/
-pytest_cache/
+# Relatórios, progresso
+reports/
+progress_log.md
 
-# Misc
+# Arquivos temporários e do sistema
 *.log
 .DS_Store
-# Ignore runtime logs and generated artifacts
-/logs/
-/logs/**/json
-# Specifically ignore JSONL log dumps (may be large)
-/logs/**/*.jsonl
-
-# Cache and temp
-.cache/
-*.pyc
-__pycache__/
-
-# Virtual env
-.venv/
-env/
-
-# Local env files
-.env
-.env.local
-
-# Editor settings
-.vscode/
-
-# Coverage
-.coverage
+Thumbs.db

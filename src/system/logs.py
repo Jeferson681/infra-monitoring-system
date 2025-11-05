@@ -84,7 +84,12 @@ def get_log_paths(root: str | Path | None = None) -> LogPaths:
     try:
         # Prefer caller-provided root, then environment variable, then module-level LOG_ROOT
         env_root = os.getenv("MONITORING_LOG_ROOT")
-        candidate = root if root else (env_root if env_root is not None else LOG_ROOT)
+        if root:
+            candidate = root
+        elif env_root is not None:
+            candidate = env_root
+        else:
+            candidate = LOG_ROOT
         log_root = Path(candidate)
     except Exception as exc:
         logger.debug("get_log_paths: falha ao resolver root: %s", exc, exc_info=True)

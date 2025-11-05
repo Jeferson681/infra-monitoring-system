@@ -1,0 +1,26 @@
+groups:
+- name: system-alerts
+  rules:
+  - alert: HighCPUUsage
+    expr: avg(rate(process_cpu_seconds_total[5m])) > 0.9
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "CPU usage above 90% for 5 minutes"
+
+  - alert: HighMemoryUsage
+    expr: process_resident_memory_bytes > 0.8 * total_memory_bytes
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Memory usage above 80%"
+
+  - alert: LowDiskSpace
+    expr: node_filesystem_free_bytes{mountpoint="/"} < 0.1 * node_filesystem_size_bytes{mountpoint="/"}
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Disk space below 10%"

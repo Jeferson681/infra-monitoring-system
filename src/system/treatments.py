@@ -1,19 +1,20 @@
 # vulture: ignore
 """Tratamentos automáticos simples (memória, rede, disco, logs)."""
 
+
 import logging
 import os
 import shutil
 import socket
+import string
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import List
-import string
-import sys
 
-from .log_helpers import process_temp_item
 from .helpers import reap_children_nonblocking
+from .log_helpers import process_temp_item
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,7 @@ def check_disk_usage(threshold_pct: int = 90) -> List[str]:
         except Exception as exc:
             issues.append(f"{r}: erro {exc}")
     for i in issues:
-        logger.warning("Disco: %s", i)
+        logger.warning("Disk usage issue: %s", i)
     return issues
 
 
@@ -119,7 +120,7 @@ def trim_process_working_set_windows(pid: int) -> bool:
         finally:
             kernel32.CloseHandle(h)
     except Exception as exc:
-        logger.debug("trim_process_working_set_windows falhou: %s", exc, exc_info=True)
+        logger.debug("trim_process_working_set_windows failed: %s", exc, exc_info=True)
         return False
 
 
@@ -133,11 +134,11 @@ def reap_zombie_processes() -> int:
     try:
         reaped = reap_children_nonblocking()
     except Exception as exc:
-        logger.debug("cleanup_processes: reap falhou: %s", exc, exc_info=True)
+        logger.debug("cleanup_processes: reap failed: %s", exc, exc_info=True)
         return 0
     count = len(reaped)
     if count:
-        logger.info("Recolhidos %d processos", count)
+        logger.info("Collected %d zombie processes", count)
     return count
 
 
@@ -154,7 +155,7 @@ def reapply_network_config() -> None:
     candidates = _platform_candidates(sys.platform)
     if not candidates:
         logger.debug("reapply_network_config: no candidate commands for platform %s", sys.platform)
-        logger.warning("Não foi possível restaurar rede")
+        logger.warning("Could not restore network connectivity")
         return
 
     for cmd in candidates:
@@ -165,15 +166,15 @@ def reapply_network_config() -> None:
         try:
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         except (subprocess.SubprocessError, OSError) as exc:
-            logger.error("reapply_network_config: %s falhou: %s", cmd, exc, exc_info=True)
+            logger.error("reapply_network_config: %s failed: %s", cmd, exc, exc_info=True)
             continue
 
         logger.debug("reapply_network_config: %s => %s", cmd, getattr(proc, "returncode", None))
         if _online_check():
-            logger.info("Rede restaurada após %s", cmd)
+            logger.info("Network connectivity restored after %s", cmd)
             return
 
-    logger.warning("Não foi possível restaurar rede")
+    logger.warning("Could not restore network connectivity")
 
 
 def _platform_candidates(p: str) -> list:

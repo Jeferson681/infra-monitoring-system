@@ -9,6 +9,7 @@ import logging
 import os
 import socket
 from typing import List, Tuple
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -71,3 +72,51 @@ def _disk_candidate_paths() -> list[object]:
     candidates.append(Path("/"))
     candidates.append("/")
     return candidates
+
+
+def read_env_file(path: Path | str) -> dict:
+    """Read a `.env`-style file and return a dict of key->value.
+
+    This helper is intentionally minimal and has no side-effects (no logging).
+    Lines starting with '#' and empty lines are ignored. If the path does not
+    exist, an empty dict is returned.
+    """
+    from pathlib import Path
+
+    result: dict[str, str] = {}
+    p = Path(path)
+    if not p.exists():
+        return result
+    try:
+        with p.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" not in line:
+                    continue
+                key, val = line.split("=", 1)
+                key = key.strip()
+                val = val.strip().strip('"').strip("'")
+                result[key] = val
+    except OSError:
+        # Best-effort: return empty mapping on read errors
+        return {}
+    return result
+
+
+def merge_env_items(env_path: Path, process_env: dict) -> dict:
+    """Return a mapping that merges `.env` file items with provided process env.
+
+    The provided `process_env` (typically `os.environ`) will overwrite keys from
+    the `.env` file. This function has no side-effects (no logging).
+    """
+    file_items = read_env_file(env_path)
+    # Make a copy to avoid mutating inputs
+    out = dict(file_items)
+    try:
+        out.update(dict(process_env))
+    except Exception:
+        # If process_env is not a mapping, ignore and return file items
+        return out
+    return out
