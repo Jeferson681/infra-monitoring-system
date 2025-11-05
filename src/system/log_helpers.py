@@ -149,22 +149,10 @@ def build_human_line(ts: str, level: str, msg_str: str, extras: dict | None = No
       <ts> [LEVEL] [extras...]\n
       <msg_str>\n\n
     """
-    # decide se usamos o comportamento multilinha baseado em env var
-    use_multiline = os.environ.get("MONITORING_HUMAN_MULTILINE", "0") in ("1", "true", "yes")
-    # Additionally, if the message contains internal newlines, prefer multiline
-    # to preserve human formatting even when the env var isn't set.
-    if not use_multiline and isinstance(msg_str, str) and ("\n" in msg_str or "\r" in msg_str):
-        use_multiline = True
+    # decide whether to use multiline format
+    use_multiline = _should_use_multiline(msg_str)
 
-    extras_part = ""
-    if extras and isinstance(extras, dict):
-        kvs = []
-        for k, v in extras.items():
-            sval = str(v) if not isinstance(v, (list, dict)) else repr(v)
-            sval = sval.replace("\n", " ").replace("\r", " ")
-            kvs.append(f"{k}={sval}")
-        if kvs:
-            extras_part = " " + " ".join(kvs)
+    extras_part = _format_extras_for_human(extras)
 
     # Ensure msg_str is a string
     try:
@@ -183,14 +171,56 @@ def build_human_line(ts: str, level: str, msg_str: str, extras: dict | None = No
         return f"{ts} [{level}]{extras_part} {single}\n"
 
 
+def _format_extras_for_human(extras: dict | None) -> str:
+    """Format extras dict into a single string for human logs.
+
+    Extracted from build_human_line to reduce its complexity.
+    """
+    extras_part = ""
+    if extras and isinstance(extras, dict):
+        kvs = []
+        for k, v in extras.items():
+            sval = str(v) if not isinstance(v, (list, dict)) else repr(v)
+            sval = sval.replace("\n", " ").replace("\r", " ")
+            kvs.append(f"{k}={sval}")
+        if kvs:
+            extras_part = " " + " ".join(kvs)
+    return extras_part
+
+
+def _should_use_multiline(msg_str: object) -> bool:
+    """Decide se devemos usar o formato multilinha para mensagens humanas.
+
+    Prefer multiline quando a variável de ambiente indicar ou quando a
+    mensagem contém quebras de linha internas.
+    """
+    try:
+        use_multiline_env = os.environ.get("MONITORING_HUMAN_MULTILINE", "0") in ("1", "true", "yes")
+    except Exception:
+        use_multiline_env = False
+
+    if use_multiline_env:
+        return True
+    try:
+        if isinstance(msg_str, str) and ("\n" in msg_str or "\r" in msg_str):
+            return True
+    except Exception:
+        return False
+    return False
+
+
 def format_date_for_log(dt=None) -> str:
     """Retorna data no formato YYYY-MM-DD (segura para nomes)."""
     try:
         if dt is None:
             return date.today().isoformat()
+        # datetime is a subclass of date; prefer to return only the date
+        # portion when a full datetime is provided.
+        if isinstance(dt, datetime):
+            return dt.date().isoformat()
         if isinstance(dt, date):
             return dt.isoformat()
-        return dt.date().isoformat()
+        return datetime.now(timezone.utc).date().isoformat()
     except (AttributeError, TypeError):
         return datetime.now(timezone.utc).date().isoformat()
 

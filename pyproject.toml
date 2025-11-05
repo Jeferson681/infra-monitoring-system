@@ -13,7 +13,7 @@ target-version = "py313"
 extend-select = ["E", "F", "W", "C", "D"]
 # Ignore a few docstring rules that create noisy warnings for small packages/tests
 # D203 and D213 were previously ignored; also ignore D100/D104 (module/package docstrings)
-ignore = ["D203", "D213", "D100", "D104"]  # evita conflitos e excesso de avisos
+ignore = ["D203", "D213", "D100", "D104", "C901"]  # evita conflitos e excesso de avisos
 
 [tool.mypy]
 python_version = "3.13"

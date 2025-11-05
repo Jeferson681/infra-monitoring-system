@@ -146,6 +146,27 @@ def collect_metrics() -> dict[str, float | int | str | None]:
     return metrics
 
 
+def _export_some_metrics(metrics: dict[str, float | int | str | None]) -> None:
+    """Expose a small set of metrics to Prometheus exporter if available.
+
+    This is a best-effort integration: failures are logged and ignored.
+    """
+    try:
+        from ..exporter.exporter import expose_metric
+
+        for key in ("cpu_percent", "memory_percent", "disk_percent"):
+            try:
+                val = metrics.get(key)
+                if val is not None:
+                    expose_metric(f"monitoring_{key}", float(val), description=f"{key} from monitoring")
+            except Exception:
+                # Do not break metric collection if exporter fails for a value
+                logger.debug("_export_some_metrics: failed to expose %s", key, exc_info=True)
+    except Exception as exc:
+        # exporter may be unavailable; log at debug level and continue
+        logger.debug("_export_some_metrics: exporter unavailable: %s", exc, exc_info=True)
+
+
 def _reset_cache_timestamps() -> None:
     """Force a cache timestamp reset to ensure collectors run in tests."""
     try:

@@ -8,7 +8,7 @@ import time
 import logging
 from typing import Any
 
-from ..system import treatments
+from . import treatments
 
 
 logger = logging.getLogger(__name__)

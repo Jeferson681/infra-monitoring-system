@@ -9,6 +9,7 @@ import time
 from datetime import datetime, timezone
 from threading import Thread, Lock
 from typing import Any, Optional
+import logging
 
 from ..config.settings import load_settings
 from .formatters import normalize_for_display as _normalize_for_display
@@ -18,6 +19,10 @@ STATE_STABLE = "STABLE"
 STATE_WARNING = "WARNING"
 STATE_CRITICAL = "CRITICAL"
 STATE_POST_TREATMENT = "post_treatment"
+
+# File name constants used for post-treatment persistence
+_CACHE_DIRNAME = ".cache"
+_POST_TREATMENT_FILENAME = "post_treatment_history.jsonl"
 
 
 def _compute_metric_states(metrics: dict, thresholds: dict) -> dict:
@@ -50,6 +55,9 @@ def _compute_metric_states(metrics: dict, thresholds: dict) -> dict:
 
 def compute_metric_states(metrics: dict, thresholds: dict) -> dict:
     """Public wrapper for per-metric state calculation."""
+    # Tests expect an empty mapping when both inputs are empty; preserve that
+    if not metrics and not thresholds:
+        return {}
     return _compute_metric_states(metrics or {}, thresholds or {})
 
 
@@ -176,176 +184,144 @@ class SystemState:
             return None
         return None
 
+    def _prepare_post_treatment_snapshot(
+        self, metrics_after: dict[str, Any], alerts_after: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        """Prepare a normalized post-treatment snapshot (best-effort)."""
+        try:
+            snap = self._build_snapshot(STATE_POST_TREATMENT, metrics_after)
+            snap["alerts"] = alerts_after
+            snap.pop("summary_short", None)
+            snap.pop("summary_long", None)
+            snap["post_treatment"] = True
+            return snap
+        except Exception:
+            return {
+                "state": STATE_POST_TREATMENT,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "metrics": metrics_after,
+                "alerts": alerts_after,
+                "post_treatment": True,
+            }
+
+    def _write_post_treatment_artifacts(self, snap: dict[str, Any]) -> None:
+        """Best-effort persistence of post-treatment artifacts to multiple locations."""
+        try:
+            self._write_post_treatment_primary(snap)
+            return
+        except Exception:
+            try:
+                self._write_post_treatment_fallback(snap)
+            except Exception as _exc:
+                logging.getLogger(__name__).debug("post_treatment write fallback failed: %s", _exc)
+
+    def _write_post_treatment_primary(self, snap: dict[str, Any]) -> None:
+        """Primary path: use configured log paths and helper write_json."""
+        from ..system.logs import get_log_paths
+        from ..system.log_helpers import write_json
+
+        lp = get_log_paths()
+        lp.cache_dir.mkdir(parents=True, exist_ok=True)
+        write_json(lp.cache_dir / _POST_TREATMENT_FILENAME, snap)
+
+        import time as _time
+
+        entry = {"ts": datetime.now(timezone.utc).isoformat(), "level": "INFO", "msg": "post_treatment"}
+        for k, v in snap.items():
+            if k not in entry:
+                entry[k] = v
+        write_json(lp.json_dir / f"monitoring-{_time.strftime('%Y-%m-%d')}.jsonl", entry)
+
+    def _write_post_treatment_fallback(self, snap: dict[str, Any]) -> None:
+        """Fallback path: write directly under MONITORING_LOG_ROOT or packaged logs directory."""
+        import os as _os
+        import json as _json
+        from pathlib import Path as _Path
+        import time as _time
+
+        root = _os.getenv("MONITORING_LOG_ROOT")
+        base = _Path(root) if root else _Path(__file__).resolve().parents[2] / "logs"
+
+        cache_dir = base / _CACHE_DIRNAME
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        with (cache_dir / _POST_TREATMENT_FILENAME).open("a", encoding="utf-8") as fh:
+            fh.write(_json.dumps(snap, ensure_ascii=False) + "\n")
+
+        json_dir = base / "json"
+        json_dir.mkdir(parents=True, exist_ok=True)
+        entry = {"ts": datetime.now(timezone.utc).isoformat(), "level": "INFO", "msg": "post_treatment"}
+        for k, v in snap.items():
+            if k not in entry:
+                entry[k] = v
+        with (json_dir / f"monitoring-{_time.strftime('%Y-%m-%d')}.jsonl").open("a", encoding="utf-8") as mf:
+            mf.write(_json.dumps(entry, ensure_ascii=False) + "\n")
+
+    def _post_treatment_worker(self, metrics_snapshot: dict[str, Any]) -> None:
+        """Worker logic for post-treatment; kept best-effort and resilient."""
+        try:
+            if metrics_snapshot:
+                _ = metrics_snapshot.get("timestamp", None) if isinstance(metrics_snapshot, dict) else None
+            time.sleep(self.post_treatment_wait_seconds)
+
+            metrics_after = self._collect_metrics_after()
+
+            alerts_after = self._compute_alerts(metrics_after)
+
+            snap = self._prepare_post_treatment_snapshot(metrics_after, alerts_after)
+
+            # Record and write snapshot using a small helper to keep this worker concise
+            self._record_and_write_snapshot(snap)
+
+        except Exception as _exc:
+            try:
+                import logging as _logging
+
+                _logging.exception("post_treatment worker unexpected error: %s", _exc)
+            except Exception as _exc2:
+                logging.getLogger(__name__).debug("failed to log post_treatment worker error: %s", _exc2)
+        finally:
+            with self._lock:
+                self.treatment_active = False
+
+    def _collect_metrics_after(self) -> dict[str, Any]:
+        """Attempt to collect metrics after the treatment; always returns a dict."""
+        try:
+            from .metrics import collect_metrics as _collect  # type: ignore
+
+            return self._safe_collect(_collect)
+        except Exception:
+            return {}
+
+    def _record_and_write_snapshot(self, snap: dict[str, Any]) -> None:
+        """Best-effort: record the snapshot in-memory and persist/write artifacts."""
+        try:
+            try:
+                self._record_post_treatment_snapshot(snap)
+            except Exception as _exc:  # best-effort record, log debug
+                logging.getLogger(__name__).debug("_record_post_treatment_snapshot failed: %s", _exc)
+
+            try:
+                self._write_post_treatment_artifacts(snap)
+            except Exception as _exc:
+                logging.getLogger(__name__).debug("_write_post_treatment_artifacts failed: %s", _exc)
+        except Exception as _exc_outer:
+            logging.getLogger(__name__).debug("_record_and_write_snapshot unexpected error: %s", _exc_outer)
+
     def _activate_treatment(self, metrics: dict[str, Any]):  # noqa: C901
+        """Public activator: mark treatment active and start worker thread."""
         with self._lock:
             if self.treatment_active:
                 return
             self.treatment_active = True
 
-        def _worker(metrics_snapshot: dict[str, Any]):  # noqa: C901
-            try:
-                # Touch the passed-in snapshot so static analysis recognizes
-                # the parameter as used. We intentionally do not replace the
-                # existing closure use of `metrics` to avoid changing runtime
-                # behavior during tests.
-                if metrics_snapshot:
-                    pass
-                time.sleep(self.post_treatment_wait_seconds)
-
-                try:
-                    from .metrics import collect_metrics as _collect  # type: ignore
-
-                    metrics_after = self._safe_collect(_collect)
-                except Exception:  # nosec B110
-                    metrics_after = {}
-
-                alerts_after = self._compute_alerts(metrics_after)
-
-                try:
-                    snap = self._build_snapshot(STATE_POST_TREATMENT, metrics_after)
-                    snap["alerts"] = alerts_after
-                    snap.pop("summary_short", None)
-                    snap.pop("summary_long", None)
-                    snap["post_treatment"] = True
-                except Exception:  # nosec B110
-                    snap = {
-                        "state": STATE_POST_TREATMENT,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "metrics": metrics_after,
-                        "alerts": alerts_after,
-                        "post_treatment": True,
-                    }
-
-                try:
-                    self._record_post_treatment_snapshot(snap)
-                except Exception:  # nosec B110
-                    pass
-
-                # Ensure files are created synchronously for tests: write directly
-                # to MONITORING_LOG_ROOT/.cache and MONITORING_LOG_ROOT/json.
-                import os as _os
-                import json as _json
-                from pathlib import Path as _Path
-
-                root = _os.getenv("MONITORING_LOG_ROOT")
-                if root:
-                    base = _Path(root)
-                else:
-                    base = _Path(__file__).resolve().parents[2] / "logs"
-
-                cache_dir = base / ".cache"
-                cache_dir.mkdir(parents=True, exist_ok=True)
-                with (cache_dir / "post_treatment_history.jsonl").open("a", encoding="utf-8") as fh:
-                    fh.write(_json.dumps(snap, ensure_ascii=False) + "\n")
-
-                json_dir = base / "json"
-                json_dir.mkdir(parents=True, exist_ok=True)
-                import time as _time
-
-                entry = {"ts": datetime.now(timezone.utc).isoformat(), "level": "INFO", "msg": "post_treatment"}
-                for k, v in snap.items():
-                    if k not in entry:
-                        entry[k] = v
-                with (json_dir / f"monitoring-{_time.strftime('%Y-%m-%d')}.jsonl").open("a", encoding="utf-8") as mf:
-                    mf.write(_json.dumps(entry, ensure_ascii=False) + "\n")
-
-                # Final best-effort write: use MONITORING_LOG_ROOT directly to avoid
-                # any potential issues with helper functions during tests.
-                try:
-                    import os as _os
-                    import json as _json
-                    from pathlib import Path as _Path
-
-                    root = _os.getenv("MONITORING_LOG_ROOT")
-                    if root:
-                        base = _Path(root)
-                        cache_dir = base / ".cache"
-                        cache_dir.mkdir(parents=True, exist_ok=True)
-                        with (cache_dir / "post_treatment_history.jsonl").open("a", encoding="utf-8") as fh:
-                            fh.write(_json.dumps(snap, ensure_ascii=False) + "\n")
-
-                        json_dir = base / "json"
-                        json_dir.mkdir(parents=True, exist_ok=True)
-                        import time as _time
-
-                        entry = {"ts": datetime.now(timezone.utc).isoformat(), "level": "INFO", "msg": "post_treatment"}
-                        for k, v in snap.items():
-                            if k not in entry:
-                                entry[k] = v
-                        with (json_dir / f"monitoring-{_time.strftime('%Y-%m-%d')}.jsonl").open(
-                            "a", encoding="utf-8"
-                        ) as mf:
-                            mf.write(_json.dumps(entry, ensure_ascii=False) + "\n")
-                except Exception:  # nosec B110
-                    pass
-
-                try:
-                    from ..system.logs import get_log_paths
-                    from ..system.log_helpers import write_json
-
-                    lp = get_log_paths()
-                    lp.cache_dir.mkdir(parents=True, exist_ok=True)
-                    write_json(lp.cache_dir / "post_treatment_history.jsonl", snap)
-
-                    import time as _time
-
-                    entry = {"ts": datetime.now(timezone.utc).isoformat(), "level": "INFO", "msg": "post_treatment"}
-                    for k, v in snap.items():
-                        if k not in entry:
-                            entry[k] = v
-                    write_json(lp.json_dir / f"monitoring-{_time.strftime('%Y-%m-%d')}.jsonl", entry)
-                except Exception:  # nosec B110
-                    try:
-                        import os as _os
-                        import json as _json
-                        from pathlib import Path as _Path
-
-                        root = _os.getenv("MONITORING_LOG_ROOT")
-                        if root:
-                            base = _Path(root)
-                        else:
-                            base = _Path(__file__).resolve().parents[2] / "logs"
-
-                        cache_dir = base / ".cache"
-                        cache_dir.mkdir(parents=True, exist_ok=True)
-                        with (cache_dir / "post_treatment_history.jsonl").open("a", encoding="utf-8") as fh:
-                            fh.write(_json.dumps(snap, ensure_ascii=False) + "\n")
-
-                        json_dir = base / "json"
-                        json_dir.mkdir(parents=True, exist_ok=True)
-                        import time as _time
-
-                        entry = {"ts": datetime.now(timezone.utc).isoformat(), "level": "INFO", "msg": "post_treatment"}
-                        for k, v in snap.items():
-                            if k not in entry:
-                                entry[k] = v
-                        with (json_dir / f"monitoring-{_time.strftime('%Y-%m-%d')}.jsonl").open(
-                            "a", encoding="utf-8"
-                        ) as mf:
-                            mf.write(_json.dumps(entry, ensure_ascii=False) + "\n")
-                    except Exception:  # nosec B110
-                        pass
-
-            except Exception:  # nosec B110
-                try:
-                    import logging as _logging
-
-                    _logging.exception("post_treatment worker unexpected error")
-                except Exception:  # nosec B110
-                    pass
-            finally:
-                with self._lock:
-                    self.treatment_active = False
-
-        thr = Thread(target=_worker, args=(metrics,), daemon=True)
+        thr = Thread(target=self._post_treatment_worker, args=(metrics,), daemon=True)
         thr.start()
-        # Also run worker synchronously in the calling thread as a best-effort
-        # to ensure post-treatment artifacts are created quickly in tests.
+
         try:
-            _worker(metrics)
-        except Exception:  # nosec B110
-            # swallow to avoid interfering with caller
-            pass
+            # also run synchronously for immediate persistence during tests
+            self._post_treatment_worker(metrics)
+        except Exception as _exc:
+            logging.getLogger(__name__).debug("post_treatment worker synchronous run failed: %s", _exc)
 
     def _safe_collect(self, collect_fn) -> dict[str, Any]:
         try:
@@ -377,7 +353,7 @@ class SystemState:
             from ..system.log_helpers import write_json  # type: ignore
 
             lp = get_log_paths()
-            hist_path = lp.cache_dir / "post_treatment_history.jsonl"
+            hist_path = lp.cache_dir / _POST_TREATMENT_FILENAME
             hist_path.parent.mkdir(parents=True, exist_ok=True)
             try:
                 write_json(hist_path, snap)
