@@ -18,7 +18,7 @@ pytest==8.4.2
 pytest-cov==7.0.0
 PyYAML==6.0.3
 virtualenv==20.34.0
-ruff
+ruff==0.13.2
 black
 flake8
 bandit

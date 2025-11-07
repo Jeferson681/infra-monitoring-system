@@ -77,7 +77,7 @@ def test_aggregate_last_seconds_creates_last_ts(tmp_path):
     assert agg is not None
     assert "averages" in agg
     # persisted last_ts should exist
-    last = averages.read_last_time(logs_root=tmp_path)
+    last = averages.read_last_time()
     assert isinstance(last, float)
     assert last > 0
 
@@ -111,7 +111,7 @@ def test_format_long_metric_from_aggregate_includes_used_lines(tmp_path):
 def test_persist_and_read_last_time(tmp_path):
     """Testa persistência e leitura de last_ts para o diretório fornecido."""
     # ensure persist and read work and file is created under tmp_path
-    p = averages.persist_last_time(logs_root=tmp_path)
+    p = averages.persist_last_time()
     assert p.exists()
-    v = averages.read_last_time(logs_root=tmp_path)
+    v = averages.read_last_time()
     assert isinstance(v, float)
