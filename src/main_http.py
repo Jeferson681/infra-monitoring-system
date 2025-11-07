@@ -82,7 +82,7 @@ class HealthHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
 
-def run_http_server(port=8000, addr="0.0.0.0"):
+def run_http_server(port=8000, addr="0.0.0.0"):  # nosec B104
     """Inicia o servidor HTTP para expor os endpoints /health e /metrics.
 
     Observação: O endereço padrão '0.0.0.0' expõe o serviço em todas as interfaces de rede, permitindo acesso externo.
