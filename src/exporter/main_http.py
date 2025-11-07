@@ -1,15 +1,19 @@
-"""Entrypoint HTTP: expõe endpoints /health e /metrics para integração com Prometheus e orquestradores."""
-
 import json
 import os
 import psutil
 import time  # Necessário para uptime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from src.monitoring.metrics import collect_metrics
-
-# Promtail/Loki integration
 import threading
 from exporter.promtail import send_log_to_loki
+
+"""
+Entrypoint HTTP: expõe endpoints /health e /metrics para integração com Prometheus e orquestradores.
+
+O uso de argparse permite que o usuário defina o endereço IP (addr) e a porta (port) do servidor HTTP
+via linha de comando, sem precisar alterar o código fonte. Isso garante maior flexibilidade e segurança:
+o padrão é seguro (localhost), mas o usuário pode expor externamente se já configurou firewall ou rede segura.
+"""
 
 try:
 
@@ -86,15 +90,16 @@ class HealthHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
 
-def run_http_server(port=8000, addr="0.0.0.0"):
+def run_http_server(port=8000, addr="127.0.0.1"):
     """Inicia o servidor HTTP para expor os endpoints /health e /metrics.
 
-    Observação: O endereço padrão '0.0.0.0' expõe o serviço em todas as interfaces de rede, permitindo acesso externo.
-    Para maior segurança em ambiente local, utilize '127.0.0.1' para restringir o acesso ao localhost.
-    Sempre avalie a necessidade de exposição e proteja o serviço com firewall, autenticação
-    ou rede segura conforme o caso.
+    Observação: O endereço padrão agora é '127.0.0.1', restringindo o acesso ao localhost para maior segurança.
+    Para expor o serviço em todas as interfaces de rede (acesso externo), chame explicitamente:
+        run_http_server(port=8000, addr="0.0.0.0")
+    Avalie sempre a necessidade de exposição e proteja o serviço com firewall,
+    autenticação ou rede segura conforme o caso.
     """
-    server = HTTPServer((addr, port), HealthHandler)  # nosec
+    server = HTTPServer((addr, port), HealthHandler)
     print(f"[HTTP] Servindo em http://{addr}:{port} (/health, /metrics)")
     server.serve_forever()
 
