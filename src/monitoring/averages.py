@@ -345,7 +345,7 @@ def aggregate_last_seconds(logs_root: Path, seconds: int = 10) -> Optional[Dict[
     # human readable for bytes averages
     _add_human_bytes(result["averages"])
 
-    _safe_persist_last_time(last_ts=last_ts, logs_root=logs_root)
+    _safe_persist_last_time(last_ts=last_ts)
 
     return result
 
@@ -361,13 +361,13 @@ def _add_human_bytes(averages: Dict[str, Any]) -> None:
         logging.getLogger(__name__).debug("_add_human_bytes failed", exc_info=True)
 
 
-def _safe_persist_last_time(last_ts: float, logs_root: Path | None) -> None:
+def _safe_persist_last_time(last_ts: float) -> None:
     """Persista last_ts em arquivo sem propagar exceções para o chamador.
 
     Registra em debug se ocorrer falha e segue em modo best-effort.
     """
     try:
-        persist_last_time(last_ts=last_ts, logs_root=logs_root)
+        persist_last_time(last_ts=last_ts)
     except Exception as exc:
         logging.getLogger(__name__).debug("persist_last_time failed: %s", exc, exc_info=True)
 
@@ -545,7 +545,7 @@ def _compute_suffix_for_metric_key(counts_by_state: Dict[str, Any], mkey: str) -
 LAST_TS_DIR = Path(".cache")  # sempre relativo ao logs_root
 
 
-def get_last_ts_file(name: str = "last_ts", logs_root: Path | None = None) -> Path:
+def get_last_ts_file(name: str = "last_ts") -> Path:
     """Retorne o Path para o ficheiro last_ts JSON e garanta que o pai exista.
 
     Se `logs_root` for None, resolve a partir do subsistema de logging para
@@ -558,7 +558,7 @@ def get_last_ts_file(name: str = "last_ts", logs_root: Path | None = None) -> Pa
     return cache_dir / f"{name}.json"
 
 
-def persist_last_time(last_ts: Optional[float] = None, name: str = "last_ts", logs_root: Path | None = None) -> Path:
+def persist_last_time(last_ts: Optional[float] = None, name: str = "last_ts") -> Path:
     """Persista um JSON único com o último timestamp (epoch) e ISO.
 
     Substitui o ficheiro com um pequeno objeto JSON. Se `last_ts` for None,
@@ -572,15 +572,15 @@ def persist_last_time(last_ts: Optional[float] = None, name: str = "last_ts", lo
         "last_time_iso": datetime.datetime.fromtimestamp(last_ts, tz=datetime.timezone.utc).isoformat(),
     }
 
-    fpath = get_last_ts_file(name=name, logs_root=logs_root)
+    fpath = get_last_ts_file(name=name)
     with fpath.open("w", encoding="utf-8") as fh:
         json.dump(entry, fh, ensure_ascii=False)
     return fpath
 
 
-def read_last_time(name: str = "last_ts", logs_root: Path | None = None) -> Optional[float]:
+def read_last_time(name: str = "last_ts") -> Optional[float]:
     """Leia o ficheiro JSON e retorne o valor numérico `last_time` (epoch) ou None."""
-    fpath = get_last_ts_file(name=name, logs_root=logs_root)
+    fpath = get_last_ts_file(name=name)
     if not fpath.exists():
         return None
     try:
@@ -596,7 +596,7 @@ def read_last_time(name: str = "last_ts", logs_root: Path | None = None) -> Opti
 
 
 # Auxiliar leve: garante que o arquivo last_ts exista em tempo de execução
-def ensure_last_ts_exists(name: str = "last_ts", logs_root: Path | None = None) -> None:
+def ensure_last_ts_exists(name: str = "last_ts") -> None:
     """Garante existência do arquivo de controle `last_ts` durante execução.
 
     Faz uma verificação rápida; se o ficheiro não existir, chama
@@ -606,7 +606,7 @@ def ensure_last_ts_exists(name: str = "last_ts", logs_root: Path | None = None) 
     """
     logger = logging.getLogger(__name__)
     try:
-        fpath = get_last_ts_file(name=name, logs_root=logs_root)
+        fpath = get_last_ts_file(name=name)
     except Exception as exc:
         logger.error("ensure_last_ts_exists: falha ao resolver caminho: %s", exc, exc_info=True)
         return
@@ -614,7 +614,7 @@ def ensure_last_ts_exists(name: str = "last_ts", logs_root: Path | None = None) 
     if not fpath.exists():
         try:
             # persist_last_time cuida de criar o diretório pai quando necessário
-            persist_last_time(last_ts=None, name=name, logs_root=logs_root)
+            persist_last_time(last_ts=None, name=name)
             logger.debug("ensure_last_ts_exists: criado %s", fpath)
         except Exception as exc:
             logger.error("ensure_last_ts_exists: não foi possível criar %s: %s", fpath, exc, exc_info=True)
@@ -623,23 +623,22 @@ def ensure_last_ts_exists(name: str = "last_ts", logs_root: Path | None = None) 
 def ensure_default_last_ts() -> None:
     """Ensure the default last_ts file exists and contains a non-zero timestamp.
 
-    This function centralizes what used to run at import time. It should be
-    called by the runtime entrypoint (e.g. `main`) during startup so importing
-    this module does not perform file I/O.
+    This function centralizes o que rodava no import. Deve ser chamada pelo entrypoint
+    durante o startup para evitar I/O no import.
     """
     try:
-        _default_file = get_last_ts_file()
-        try:
-            existing = read_last_time()
-        except Exception:
-            existing = None
+        existing = read_last_time()
+    except Exception:
+        existing = None
 
-        if existing is None or abs(float(existing) - 0.0) <= 1e-9:
+    if existing is None or abs(float(existing) - 0.0) <= 1e-9:
+        try:
+            persist_last_time()
+        except Exception as exc:
+            logging.getLogger(__name__).debug("persist_last_time on startup init failed: %s", exc, exc_info=True)
             # Persistir timestamp atual (persist_last_time cuida do diretório)
             try:
                 persist_last_time()
             except Exception as exc:
                 # fallback: log debug but do not raise
                 logging.getLogger(__name__).debug("persist_last_time on startup init failed: %s", exc, exc_info=True)
-    except Exception as exc:
-        logging.getLogger(__name__).debug("startup last_ts init failed: %s", exc, exc_info=True)

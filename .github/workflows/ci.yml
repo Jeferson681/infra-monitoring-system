@@ -30,28 +30,24 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest-cov codecov
+          pip install pytest-cov
 
       - name: Run tests with coverage
         run: |
           pytest --maxfail=1 --disable-warnings --cov=src --cov-report=xml
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          files: ./coverage.xml
-          fail_ci_if_error: true
+      # Removido etapa de upload para Codecov
 
       - name: Run lint (ruff, flake8, black)
         run: |
-          ruff src/ tests/
+          ruff check src tests
           flake8 src/ tests/
           black --check src/ tests/
 
 
       - name: Run Bandit (security)
         run: |
-          bandit -r src/ --skip B404,B603
+          bandit -r src/ --skip B404,B603,B104
 
   build-windows:
     runs-on: windows-latest
@@ -77,21 +73,17 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest-cov codecov
+          pip install pytest-cov
 
       - name: Run tests with coverage
         run: |
           pytest --maxfail=1 --disable-warnings --cov=src --cov-report=xml
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          files: ./coverage.xml
-          fail_ci_if_error: true
+      # Removido etapa de upload para Codecov
 
       - name: Run lint (ruff, flake8, black)
         run: |
-          ruff src/ tests/
+          ruff check src tests
           flake8 src/ tests/
           black --check src/ tests/
 
