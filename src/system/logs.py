@@ -12,7 +12,9 @@ import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
+
 from pathlib import Path
+from typing import Optional
 
 from .log_helpers import (
     ROTATING_SUFFIX,
@@ -68,7 +70,6 @@ class LogPaths:
     json_dir: Path
     archive_dir: Path
     debug_dir: Path
-    cache_dir: Path
 
     def __iter__(self):
         """Iterador simples que retorna tupla com os principais paths."""
@@ -106,10 +107,7 @@ def get_log_paths(root: str | Path | None = None) -> LogPaths:
     ensure_dir_writable(archive_dir)
     debug_dir = log_root / "debug"
     ensure_dir_writable(debug_dir)
-    cache_dir = log_root / ".cache"
-    ensure_dir_writable(cache_dir)
-
-    return LogPaths(log_root, log_dir, json_dir, archive_dir, debug_dir, cache_dir)
+    return LogPaths(log_root, log_dir, json_dir, archive_dir, debug_dir)
 
 
 # Gera o nome base para arquivos de log; consumido por write_log
@@ -201,7 +199,6 @@ def write_log(
 
         if human_enable:
             _perform_human_write(
-                lp,
                 plain_path,
                 name,
                 level,
@@ -218,17 +215,23 @@ def write_log(
 
 
 # Auxiliar de write_log: decide se a escrita humana é permitida pela janela hourly
-def _hourly_allows_write(lp: LogPaths, name: str, hourly: bool, hourly_window_seconds: int) -> bool:
+def _hourly_allows_write(
+    name: str, hourly: bool, hourly_window_seconds: int, project_root: Optional[Path] = None
+) -> bool:
     """Verifica se a janela 'hourly' permite escrita.
 
     Retorna True quando não em modo hourly ou quando a janela de tempo
     desde a última escrita excede `hourly_window_seconds`.
+    O parâmetro opcional project_root permite especificar o diretório base para testes.
     """
     if not hourly:
         return True
     try:
         key = sanitize_log_name(name, name)
-        cache_dir = lp.cache_dir
+        if project_root is None:
+            project_root = Path(__file__).resolve().parents[2]
+        cache_dir = project_root / ".cache"
+        cache_dir.mkdir(parents=True, exist_ok=True)
         ts_path = cache_dir / f".last_human_{key}.ts"
         now_int = int(time.time())
         if ts_path.exists():
@@ -246,7 +249,6 @@ def _hourly_allows_write(lp: LogPaths, name: str, hourly: bool, hourly_window_se
 
 # Auxiliar de write_log: escreve linha humana em .log e atualiza timestamp hourly
 def _perform_human_write(
-    lp: LogPaths,
     plain_path: Path,
     name: str,
     level: str,
@@ -264,12 +266,15 @@ def _perform_human_write(
         logger.debug("human write suprimido (log=False e hourly=False)")
         return
 
-    if _hourly_allows_write(lp, name, hourly, hourly_window_seconds):
+    if _hourly_allows_write(name, hourly, hourly_window_seconds):
         human_line = build_human_line(format_date_for_log(None), level, human_msg, extra)
         write_text(plain_path, human_line)
         if hourly:
             try:
-                ts_file = lp.cache_dir / (f".last_human_{sanitize_log_name(name, name)}.ts")
+                project_root = Path(__file__).resolve().parents[2]
+                cache_dir = project_root / ".cache"
+                cache_dir.mkdir(parents=True, exist_ok=True)
+                ts_file = cache_dir / (f".last_human_{sanitize_log_name(name, name)}.ts")
                 with open(ts_file, "w", encoding="utf-8") as f:
                     f.write(str(int(time.time())))
             except Exception as exc:

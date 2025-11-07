@@ -52,7 +52,13 @@ def configure_argparser() -> argparse.ArgumentParser:
         "--cycles",
         type=int,
         default=1,
-        help="Número de ciclos a executar; 0 = executar indefinidamente",
+        help="Número de ciclos a executar (0 = infinito) ou tempo total em minutos se --cycle-mode=time.",
+    )
+    parser.add_argument(
+        "--cycle-mode",
+        choices=["cycles", "time"],
+        default="cycles",
+        help="Modo de execução: 'cycles' para número de ciclos, 'time' para tempo total em minutos.",
     )
     parser.add_argument(
         "-v",
@@ -87,8 +93,22 @@ def configure_argparser() -> argparse.ArgumentParser:
 # Auxilia src.main; criado para analisar argv e validar argumentos
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Analisa argv e retorna Namespace validado para uso no programa."""
+    import os
+
     parser = configure_argparser()
     ns = parser.parse_args(argv)
+    # Se modo time, permite override via env
+    if getattr(ns, "cycle_mode", "cycles") == "time":
+        env_time = os.getenv("MONITORING_CYCLE_TIME_MIN")
+        if env_time is not None:
+            try:
+                ns.cycles = int(env_time)
+            except Exception as exc:
+                import logging
+
+                logging.getLogger(__name__).warning(
+                    f"MONITORING_CYCLE_TIME_MIN inválido ('{env_time}'): {exc}. Usando valor do argumento."
+                )
     validate_args(ns)
     return ns
 
@@ -109,10 +129,9 @@ def validate_args(args: argparse.Namespace) -> None:
     try:
         args.cycles = int(args.cycles)
     except (TypeError, ValueError) as exc:
-        # Mensagem em PT; 'cycles' é o nome do argumento técnico
-        raise ValueError("cycles deve ser um inteiro >= 0") from exc
+        raise ValueError("cycles/time deve ser um inteiro >= 0") from exc
     if args.cycles < 0:
-        raise ValueError("cycles deve ser >= 0")
+        raise ValueError("cycles/time deve ser >= 0")
 
 
 # ========================

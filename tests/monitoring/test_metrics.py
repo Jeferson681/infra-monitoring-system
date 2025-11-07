@@ -33,7 +33,7 @@ def test_export_some_metrics_with_prom(monkeypatch):
     def fake_expose(name, value, description=""):
         calls.append((name, float(value)))
 
-    exporter_mod = importlib.import_module("src.exporter.exporter")
+    exporter_mod = importlib.import_module("src.exporter.prometheus")
     monkeypatch.setattr(exporter_mod, "expose_metric", fake_expose)
     mod = importlib.reload(importlib.import_module("src.monitoring.metrics"))
     mod._export_some_metrics({"cpu_percent": 2.0, "memory_percent": 4.0, "disk_percent": 6.0})

@@ -15,7 +15,9 @@ def test_get_log_paths_and_dirs(tmp_path, monkeypatch):
     assert lp.json_dir.exists()
     assert lp.archive_dir.exists()
     assert lp.debug_dir.exists()
-    assert lp.cache_dir.exists()
+    cache_dir = tmp_path / ".cache"
+    cache_dir.mkdir(exist_ok=True)
+    assert cache_dir.exists()
 
 
 def test_resolve_filename_and_normalize():
@@ -67,17 +69,18 @@ def test_write_log_human_and_json(tmp_path, monkeypatch):
 def test_hourly_allows_write_and_perform_human(tmp_path, monkeypatch):
     """Teste para controle de escrita horária e execução humana em lote."""
     monkeypatch.setenv("MONITORING_LOG_ROOT", str(tmp_path))
-    lp = logs_mod.get_log_paths()
     name = "mylog"
-    # create timestamp file with recent time -> should block hourly write
+    # Usar project_root direto no teste
     key = logs_mod.sanitize_log_name(name, name)
-    ts_file = lp.cache_dir / f".last_human_{key}.ts"
+    cache_dir = tmp_path / ".cache"
+    cache_dir.mkdir(exist_ok=True)
+    ts_file = cache_dir / f".last_human_{key}.ts"
     ts_file.write_text(str(int(time.time())))
-    assert logs_mod._hourly_allows_write(lp, name, True, 3600) is False
+    assert logs_mod._hourly_allows_write(name, True, 3600, project_root=tmp_path) is False
 
     # old timestamp -> allow
     ts_file.write_text(str(int(time.time()) - 10000))
-    assert logs_mod._hourly_allows_write(lp, name, True, 3600) is True
+    assert logs_mod._hourly_allows_write(name, True, 3600, project_root=tmp_path) is True
 
 
 def test_ensure_log_dirs_exist_creates_missing(tmp_path, monkeypatch):

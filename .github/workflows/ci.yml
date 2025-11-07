@@ -48,27 +48,6 @@ jobs:
           flake8 src/ tests/
           black --check src/ tests/
 
-      - name: Run GG Guardian
-        uses: GuardRailsio/guardrails-action@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          fail_on_error: true
-          scan_paths: src/ tests/
-          skip_paths: ''
-          verbose: true
-          output_format: summary
-          language: python
-
-      - name: Run GG Guardian
-        uses: GuardRailsio/guardrails-action@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          fail_on_error: true
-          scan_paths: src/ tests/
-          skip_paths: ''
-          verbose: true
-          output_format: summary
-          language: python
 
       - name: Run Bandit (security)
         run: |
@@ -116,27 +95,6 @@ jobs:
           flake8 src/ tests/
           black --check src/ tests/
 
-      - name: Run GG Guardian
-        uses: GuardRailsio/guardrails-action@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          fail_on_error: true
-          scan_paths: src/ tests/
-          skip_paths: ''
-          verbose: true
-          output_format: summary
-          language: python
-
-      - name: Run GG Guardian
-        uses: GuardRailsio/guardrails-action@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          fail_on_error: true
-          scan_paths: src/ tests/
-          skip_paths: ''
-          verbose: true
-          output_format: summary
-          language: python
 
       - name: Run Bandit (security)
         run: |

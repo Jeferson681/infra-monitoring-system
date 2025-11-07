@@ -26,6 +26,25 @@ resource "docker_container" "monitoring" {
   ]
 }
 
+resource "docker_image" "monitoring_metrics" {
+  name         = "${var.dockerhub_username}/monitoring_metrics:latest"
+  keep_locally = false
+}
+
+resource "docker_container" "monitoring_metrics" {
+  name  = "monitoring-metrics"
+  image = docker_image.monitoring_metrics.name
+  ports {
+    internal = 8000
+    external = 8000
+  }
+  env = [
+    "MONITORING_HTTP_PORT=8000",
+    "LOKI_URL=http://loki:3100/api/prom/push",
+    "LOKI_LABELS=job=monitoring"
+  ]
+}
+
 variable "dockerhub_username" {
   description = "Docker Hub username"
   type        = string

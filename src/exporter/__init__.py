@@ -6,6 +6,6 @@ Oferece re-exports para manter compatibilidade com importações antigas
 como ``from src.exporter import start_exporter``.
 """
 
-from .exporter import start_exporter, expose_metric  # re-export
+from .prometheus import start_exporter, expose_metric  # re-export
 
 __all__ = ["start_exporter", "expose_metric"]

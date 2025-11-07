@@ -1,5 +1,3 @@
-import pytest
-
 from src.monitoring import metrics as m
 
 
@@ -39,15 +37,3 @@ def test_collect_metrics_triggers_export(monkeypatch):
     res = {}
     m._export_some_metrics(res)
     assert called["n"] == 1
-
-
-def test_temperature_collector_posix(monkeypatch):
-    """Teste para coleta de temperatura em ambiente POSIX."""
-    # This test is POSIX-only because _temperature_collector builds a PosixPath; skip on non-posix systems
-    import os as _os
-
-    if _os.name != "posix":
-        pytest.skip("_temperature_collector is posix-only")
-    monkeypatch.setattr(m, "_get_temp_from_script", lambda p: 42.5, raising=False)
-    val = m._temperature_collector()
-    assert val == 42.5

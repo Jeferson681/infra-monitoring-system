@@ -221,8 +221,8 @@ class SystemState:
         from ..system.log_helpers import write_json
 
         lp = get_log_paths()
-        lp.cache_dir.mkdir(parents=True, exist_ok=True)
-        write_json(lp.cache_dir / _POST_TREATMENT_FILENAME, snap)
+        (lp.root / _CACHE_DIRNAME).mkdir(parents=True, exist_ok=True)
+        write_json(lp.root / _CACHE_DIRNAME / _POST_TREATMENT_FILENAME, snap)
 
         import time as _time
 
@@ -353,7 +353,7 @@ class SystemState:
             from ..system.log_helpers import write_json  # type: ignore
 
             lp = get_log_paths()
-            hist_path = lp.cache_dir / _POST_TREATMENT_FILENAME
+            hist_path = lp.root / _CACHE_DIRNAME / _POST_TREATMENT_FILENAME
             hist_path.parent.mkdir(parents=True, exist_ok=True)
             try:
                 write_json(hist_path, snap)

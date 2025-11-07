@@ -51,7 +51,7 @@ def test_export_some_metrics_with_prom(monkeypatch):
 
     fake = FakeExp()
     # Insert fake module into sys.modules so import works inside function
-    sys.modules["src.exporter.exporter"] = fake
+    sys.modules["src.exporter.prometheus"] = fake
 
     try:
         m._export_some_metrics(metrics)

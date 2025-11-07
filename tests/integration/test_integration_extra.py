@@ -42,8 +42,7 @@ def test_post_treatment_history_written(tmp_path, monkeypatch):
     # wait for background worker to run
     time.sleep(0.5)
 
-    lp = get_log_paths()
-    hist = lp.cache_dir / "post_treatment_history.jsonl"
+    hist = tmp_path / ".cache" / "post_treatment_history.jsonl"
     assert hist.exists(), f"history file not found: {hist}"
     # ensure at least one line is JSON
     with hist.open("r", encoding="utf-8") as fh:

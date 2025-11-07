@@ -7,14 +7,14 @@ import pytest
 
 def test_import_exporter():
     """Importa o exporter sem erros."""
-    import src.exporter.exporter as exporter
+    import src.exporter.prometheus as prometheus
 
-    assert exporter is not None
+    assert prometheus is not None
 
 
 def test_sanitize_metric_name_basic():
     """Sanitize: mantém nomes válidos e substitui caracteres inválidos."""
-    from src.exporter.exporter import _sanitize_metric_name
+    from src.exporter.prometheus import _sanitize_metric_name
 
     assert _sanitize_metric_name("monitoring_cpu_percent") == "monitoring_cpu_percent"
     assert _sanitize_metric_name("1bad-start") == "_bad_start"
