@@ -1,9 +1,0 @@
-[
-  "tests/system/test_log_helpers.py",
-  "tests/system/test_log_helpers_all.py",
-  "tests/system/test_log_helpers_batch.py",
-  "tests/system/test_log_helpers_more.py",
-  "tests/system/test_log_helpers_edge_cases.py",
-  "tests/system/test_log_helpers_cleanup_more.py",
-  "tests/system/test_log_helpers_massive.py"
-]

@@ -10,7 +10,11 @@ def test_write_post_treatment_primary(monkeypatch, tmp_path):
     ss = st.SystemState({}, critical_duration=1, post_treatment_wait_seconds=0)
 
     # fake log paths object
-    lp = SimpleNamespace(cache_dir=tmp_path / ".cache", json_dir=tmp_path / "json")
+    lp = SimpleNamespace(
+        root=tmp_path,  # Adiciona root para compatibilidade com o método
+        cache_dir=tmp_path / ".cache",
+        json_dir=tmp_path / "json",
+    )  # Mantido para compatibilidade
     # monkeypatch the functions in the system modules they are imported from
     monkeypatch.setattr("src.system.logs.get_log_paths", lambda: lp)
     # monkeypatch write_json to record writes
@@ -50,7 +54,7 @@ def test_persist_post_treatment_snapshot_fallback(monkeypatch, tmp_path):
     ss = st.SystemState({}, critical_duration=1, post_treatment_wait_seconds=0)
 
     # monkeypatch get_log_paths to return a path under tmp_path
-    lp = SimpleNamespace(cache_dir=tmp_path / ".cache")
+    lp = SimpleNamespace(cache_dir=tmp_path / ".cache")  # Mantido para compatibilidade
     monkeypatch.setattr("src.system.logs.get_log_paths", lambda: lp)
 
     # make write_json raise to force fallback to write_text

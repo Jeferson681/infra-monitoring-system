@@ -39,7 +39,7 @@ def main(argv: list[str] | None = None) -> None:
         _logging.getLogger(__name__).debug("falha ao garantir arquivo de controle no startup", exc_info=True)
     # Optionally start Prometheus exporter if enabled via env
     try:
-        from .exporter.exporter import start_exporter
+        from .exporter.prometheus import start_exporter
 
         if os.getenv("MONITORING_EXPORTER_ENABLE", "0") in ("1", "true", "yes"):
             try:

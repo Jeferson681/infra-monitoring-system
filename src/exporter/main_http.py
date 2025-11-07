@@ -7,6 +7,10 @@ import time  # Necessário para uptime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from src.monitoring.metrics import collect_metrics
 
+# Promtail/Loki integration
+import threading
+from exporter.promtail import send_log_to_loki
+
 try:
 
     from exporter.prometheus import expose_process_metrics
@@ -95,6 +99,22 @@ def run_http_server(port=8000, addr="0.0.0.0"):
     server.serve_forever()
 
 
+def run_promtail_worker():
+    """Worker simples que envia logs de heartbeat para Loki a cada 10 segundos."""
+    import logging
+
+    while True:
+        msg = f"promtail heartbeat: {time.strftime('%Y-%m-%d %H:%M:%S')}"
+        ok = send_log_to_loki(msg)
+        if not ok:
+            logging.getLogger(__name__).warning("Falha ao enviar heartbeat para Loki")
+        time.sleep(10)
+
+
 if __name__ == "__main__":
     port = int(os.getenv("MONITORING_HTTP_PORT", "8000"))
+    # Inicia Promtail/Loki em thread separada
+    promtail_thread = threading.Thread(target=run_promtail_worker, daemon=True)
+    promtail_thread.start()
+    # Inicia servidor HTTP (Prometheus)
     run_http_server(port=port)

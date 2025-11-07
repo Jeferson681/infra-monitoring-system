@@ -50,17 +50,19 @@ def test_hourly_allows_and_blocks(tmp_path, monkeypatch):
     monkeypatch.setenv("MONITORING_LOG_ROOT", str(tmp_path))
     name = "monitoring-hourly"
     # ensure get_log_paths creates cache dir
-    lp = logs_mod.get_log_paths()
 
-    # First call should allow write
-    assert logs_mod._hourly_allows_write(lp, name, hourly=True, hourly_window_seconds=1)
+    # Usar project_root direto no teste
+    assert logs_mod._hourly_allows_write(name, True, 1, project_root=tmp_path)
     # write a timestamp
-    ts_file = lp.cache_dir / (f".last_human_{lh.sanitize_log_name(name, name)}.ts")
+    cache_dir = tmp_path / ".cache"
+    cache_dir.mkdir(exist_ok=True)
+    ts_file = cache_dir / (f".last_human_{lh.sanitize_log_name(name, name)}.ts")
     with open(ts_file, "w", encoding="utf-8") as f:
         f.write(str(int(time.time())))
 
-    # Immediately after, should block (window not passed)
-    assert logs_mod._hourly_allows_write(lp, name, hourly=True, hourly_window_seconds=3600) is False
+    time.sleep(2)
+    # Após 2 segundos, deve bloquear (window não passou)
+    assert logs_mod._hourly_allows_write(name, True, 3600, project_root=tmp_path) is False
 
 
 def test_ensure_log_dirs_exist_recreates(tmp_path, monkeypatch):

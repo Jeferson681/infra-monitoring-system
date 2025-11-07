@@ -1,20 +1,113 @@
 ---
 
+## 🧪 Testes
 
-# 📈 Monitoring System — Portfólio Técnico
+O projeto utiliza testes automatizados com `pytest` e validação de código com `pre-commit`.
+
+### Rodando os testes
+
+```sh
+pytest
+```
+
+### Validando o código
+
+```sh
+pre-commit run --all-files
+```
+
+Consulte o arquivo `DOCS.md` para exemplos de cobertura, artefatos e recomendações de boas práticas.
+---
+
+## 🚢 Deploy
+
+### Docker
+
+O projeto pode ser executado via Docker usando o arquivo `docker-compose.yml`:
+
+```sh
+docker-compose up --build
+```
+
+Isso inicializa dois containers principais:
+- `monitoring-app`: roda o monitoramento principal.
+- `monitoring-metrics`: expõe endpoints de métricas e integra com Promtail/Loki.
+
+### Terraform
+
+O arquivo `infra/terraform/main.tf` demonstra como provisionar os containers usando Terraform. **Atenção:**
+- O uso do Terraform neste projeto é apenas didático e não recomendado para produção, pois pode expor métricas do host de forma inadequada.
+- Consulte o `DOCS.md` para recomendações e exemplos de arquitetura segura.
+---
+
+## ⚙️ Configuração de Ambiente
+
+### Variáveis de Ambiente
+
+- `MONITORING_EXPORTER_ENABLE`: Ativa o exporter Prometheus no programa principal (`main.py`). Use `0` para desativar e `1` para ativar.
+- `MONITORING_HTTP_PORT`: Porta do serviço HTTP/Promtail (default: 8000).
+- `LOKI_URL`: Endpoint do Loki para envio de logs (default: `http://loki:3100/api/prom/push`).
+- `LOKI_LABELS`: Labels para logs enviados ao Loki (exemplo: `job=monitoring`).
+
+### Volumes Compartilhados
+
+- `/logs`: Diretório compartilhado entre containers para armazenamento e leitura de logs e arquivos JSON.
+- `/.cache`: Diretório para controle de estado e arquivos temporários.
+
+### Exemplo de Setup
+
+No `docker-compose.yml`, os volumes e variáveis já estão configurados para garantir integração entre os serviços.
+
+Consulte o arquivo `DOCS.md` para exemplos detalhados de configuração, recomendações e artefatos visuais.
+---
+
+
+
+
+# 📈 Monitoring System — Projeto Didático
 
 <p align="right"><sub>Última atualização: 04/11/2025</sub></p>
 
-<details>
-<summary><strong>Sumário Técnico</strong></summary>
 
-- <strong>Stack:</strong> Python 3.13, pytest, ruff, flake8, black, bandit, Docker, Prometheus, Grafana, Terraform, Trivy, GitHub Actions, Dependabot
-- <strong>Arquitetura:</strong> Modular, orientada a testes, observabilidade nativa, self-healing, logs estruturados, exportação Prometheus
-- <strong>DevOps:</strong> CI/CD completo, análise de segurança, cobertura, pipelines automatizados, infraestrutura como código
-- <strong>Diferenciais:</strong> Docstrings e comentários em português, código e logs em inglês, cobertura de testes ampla, exemplos de integração e automação
-- <strong>Pronto para portfólio:</strong> Estrutura, documentação e exemplos pensados para demonstrar domínio técnico e boas práticas
+## Sumário
 
-</details>
+- Stack: Python 3.13, pytest, ruff, flake8, black, bandit, Docker, Prometheus, Grafana, Terraform, Trivy
+- Arquitetura: Modular, orientada a testes, observabilidade nativa, self-healing, logs estruturados, exportação Prometheus
+- Pipelines automatizados e infraestrutura como código
+- Documentação: Docstrings e comentários em português, código e logs em inglês, exemplos de integração e automação
+- Projeto didático para aprendizado de Python, automação, testes e ferramentas de observabilidade
+
+---
+
+## 🚀 Instrução de Uso
+
+### Instalação
+
+1. Clone o repositório:
+  ```sh
+  git clone <url-do-repo>
+  cd monitoring
+  ```
+2. Instale as dependências:
+  ```sh
+  pip install -r requirements.txt
+  ```
+
+### Execução
+
+**Programa principal:**
+```sh
+python -m src.main
+```
+
+**Exporter HTTP/Promtail:**
+```sh
+python -m src.exporter.main_http
+```
+
+Consulte o arquivo `DOCS.md` para recomendações detalhadas, exemplos de configuração, artefatos, imagens e explicações sobre o funcionamento do sistema.
+
+---
 
 ---
 

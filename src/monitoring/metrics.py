@@ -152,7 +152,7 @@ def _export_some_metrics(metrics: dict[str, float | int | str | None]) -> None:
     This is a best-effort integration: failures are logged and ignored.
     """
     try:
-        from ..exporter.exporter import expose_metric
+        from ..exporter.prometheus import expose_metric
 
         for key in ("cpu_percent", "memory_percent", "disk_percent"):
             try:

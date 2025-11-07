@@ -5,7 +5,7 @@ import datetime
 import logging
 from .formatters import _build_long_from_metrics, _fmt_bytes_human, format_used_files_lines, format_duration
 from .state import compute_metric_states
-from ..system.logs import write_log, get_log_paths
+from ..system.logs import write_log
 from ..system.time_helpers import extract_epoch
 
 # imports kept minimal; avoid unused imports that ruff flags
@@ -551,12 +551,11 @@ def get_last_ts_file(name: str = "last_ts", logs_root: Path | None = None) -> Pa
     Se `logs_root` for None, resolve a partir do subsistema de logging para
     que o cache fique sob o mesmo `logs_root` usado por `get_log_paths()`.
     """
-    if logs_root is None:
-        lp = get_log_paths()
-        logs_root = lp.root
-    cache_parent = Path(logs_root) / LAST_TS_DIR
-    cache_parent.mkdir(parents=True, exist_ok=True)
-    return cache_parent / f"{name}.json"
+    # Cria o arquivo dentro de .cache na raiz do projeto
+    project_root = Path(__file__).resolve().parent.parent.parent
+    cache_dir = project_root / ".cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir / f"{name}.json"
 
 
 def persist_last_time(last_ts: Optional[float] = None, name: str = "last_ts", logs_root: Path | None = None) -> Path:

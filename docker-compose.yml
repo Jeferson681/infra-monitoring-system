@@ -1,15 +1,31 @@
+
 version: '3.8'
 services:
   monitoring:
     build: .
     container_name: monitoring_app
+    command: python -m src.main
     environment:
-      - MONITORING_EXPORTER_ENABLE=1
-    ports:
-      - "8000:8000"  # ajuste conforme o exporter
+      - MONITORING_EXPORTER_ENABLE=0
     volumes:
       - ./logs:/app/logs
       - ./reports:/app/reports
+      - ./.cache:/app/.cache
+    restart: unless-stopped
+
+  monitoring-metrics:
+    build: .
+    container_name: monitoring_metrics
+    command: python -m src.exporter.main_http
+    environment:
+      - MONITORING_HTTP_PORT=8000
+      - LOKI_URL=http://loki:3100/api/prom/push
+      - LOKI_LABELS=job=monitoring
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./logs:/app/logs
+      - ./.cache:/app/.cache
     restart: unless-stopped
 
   prometheus:
@@ -20,7 +36,7 @@ services:
     ports:
       - "9090:9090"
     depends_on:
-      - monitoring
+      - monitoring-metrics
 
   grafana:
     image: grafana/grafana:latest
