@@ -3,19 +3,20 @@
 
 # Arquivo stub: ignorar por ferramentas de lint/teste/pre-commit.
 # flake8: noqa
+"""UI mínima (system tray)."""
+# Arquivo stub: ignorar por ferramentas de lint/teste/pre-commit.
+# flake8: noqa
 # pylint: skip-file
 # type: ignore
 # pragma: no cover
 # vulture: ignore
 
 
-# vulture: ignore
 def init_tray() -> None:  # vulture: ignore
     """Inicializa a UI do tray (stub)."""
     pass
 
 
-# vulture: ignore
 def update_tray(status: dict) -> None:  # vulture: ignore
     """Atualiza o estado do tray (stub)."""
     pass

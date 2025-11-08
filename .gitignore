@@ -1,5 +1,5 @@
 ###########################
-# IGNORE TUDO DE DEV E SENSÍVEL
+# IGNORE TUDO DE INFRAESTRUTURA COMO CÓDIGO E SENSÍVEL
 ###########################
 # Ambientes virtuais
 .venv/
@@ -44,3 +44,8 @@ progress_log.md
 *.log
 .DS_Store
 Thumbs.db
+
+# Prints do repositório didático
+print.txt
+
+# Todas as ocorrências de 'DevOps' foram substituídas por 'Infraestrutura como Código'.
