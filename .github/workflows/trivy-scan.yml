@@ -3,7 +3,9 @@ name: Trivy Image Scan
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
 
 jobs:
   trivy-scan:
@@ -20,12 +22,12 @@ jobs:
         with:
           context: .
           load: true
-          tags: monitoring:trivy-scan
+          tags: infra-monitoring-system:trivy-scan
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@v0.16.0
+        uses: aquasecurity/trivy-action@v0
         with:
-          image-ref: monitoring:trivy-scan
+          image-ref: infra-monitoring-system:trivy-scan
           format: table
           exit-code: 1
           ignore-unfixed: true

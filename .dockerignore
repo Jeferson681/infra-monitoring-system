@@ -42,3 +42,8 @@ node_modules/
 .git/
 .gitignore
 .dockerignore
+
+# Prints do repositório didático
+print.txt
+
+# Todas as ocorrências de 'DevOps' foram substituídas por 'Infraestrutura como Código'.
