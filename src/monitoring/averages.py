@@ -542,9 +542,6 @@ def _compute_suffix_for_metric_key(counts_by_state: Dict[str, Any], mkey: str) -
     return ""
 
 
-LAST_TS_DIR = Path(".cache")  # sempre relativo ao logs_root
-
-
 def get_last_ts_file(name: str = "last_ts") -> Path:
     """Retorne o Path para o ficheiro last_ts JSON e garanta que o pai exista.
 

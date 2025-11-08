@@ -1,26 +1,27 @@
 
+
 version: '3.8'
 services:
-  monitoring:
+  infra-monitoring-system:
     build: .
-    container_name: monitoring_app
+    container_name: infra-monitoring-system_app
     command: python -m src.main
     environment:
-      - MONITORING_EXPORTER_ENABLE=0
+      - INFRA_MONITORING_SYSTEM_EXPORTER_ENABLE=0
     volumes:
       - ./logs:/app/logs
       - ./reports:/app/reports
       - ./.cache:/app/.cache
     restart: unless-stopped
 
-  monitoring-metrics:
+  infra-monitoring-system-metrics:
     build: .
-    container_name: monitoring_metrics
+    container_name: infra-monitoring-system_metrics
     command: python -m src.exporter.main_http
     environment:
-      - MONITORING_HTTP_PORT=8000
+      - INFRA_MONITORING_SYSTEM_HTTP_PORT=8000
       - LOKI_URL=http://loki:3100/api/prom/push
-      - LOKI_LABELS=job=monitoring
+      - LOKI_LABELS=job=infra-monitoring-system
     ports:
       - "8000:8000"
     volumes:
@@ -36,7 +37,7 @@ services:
     ports:
       - "9090:9090"
     depends_on:
-      - monitoring-metrics
+      - infra-monitoring-system-metrics
 
   grafana:
     image: grafana/grafana:latest

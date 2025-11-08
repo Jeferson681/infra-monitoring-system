@@ -3,9 +3,8 @@ import os
 import psutil
 import time  # Necessário para uptime
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from src.monitoring.metrics import collect_metrics
 import threading
-from exporter.promtail import send_log_to_loki
+from src.exporter.promtail import send_log_to_loki
 
 """
 Entrypoint HTTP: expõe endpoints /health e /metrics para integração com Prometheus e orquestradores.
@@ -15,10 +14,11 @@ via linha de comando, sem precisar alterar o código fonte. Isso garante maior f
 o padrão é seguro (localhost), mas o usuário pode expor externamente se já configurou firewall ou rede segura.
 """
 
-try:
 
-    from exporter.prometheus import expose_process_metrics
-    from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+# Caminho padrão para o diretório de JSONL de métricas do sistema
+SYSTEM_METRICS_JSONL_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "logs", "json")
+
+try:
 
     PROMETHEUS_AVAILABLE = True
 except ImportError:
@@ -37,9 +37,33 @@ class HealthHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-type", "application/json")
             self.end_headers()
-            # Coleta métricas do host
-            metrics = collect_metrics()
-            # Coleta métricas do processo
+            # Lê a última linha do JSONL de métricas do sistema
+            jsonl_path = SYSTEM_METRICS_JSONL_PATH
+            system_metrics = {}
+            try:
+                files = [f for f in os.listdir(jsonl_path) if f.startswith("monitoring-") and f.endswith(".jsonl")]
+                if files:
+                    files.sort(reverse=True)
+                    latest_file = os.path.join(jsonl_path, files[0])
+                    with open(latest_file, "rb") as f:
+                        f.seek(0, os.SEEK_END)
+                        pos = f.tell()
+                        line = b""
+                        while pos > 0:
+                            pos -= 1
+                            f.seek(pos)
+                            char = f.read(1)
+                            if char == b"\n" and line:
+                                break
+                            line = char + line
+                        last_json = line.decode("utf-8").strip()
+                if last_json:
+                    system_metrics = json.loads(last_json)
+            except Exception as exc:
+                import logging
+
+                logging.getLogger(__name__).exception("Falha ao ler métricas do JSONL: %s", exc)
+            # Coleta métricas do processo em tempo real
             proc = psutil.Process()
             process_metrics = {
                 "process_cpu_percent": proc.cpu_percent(interval=0.0),
@@ -48,7 +72,6 @@ class HealthHandler(BaseHTTPRequestHandler):
                 "process_uptime_seconds": float(max(0, (time.time() - proc.create_time()))),
                 "process_num_threads": proc.num_threads(),
             }
-            # Só adiciona a métrica se o método existir
             num_fds_fn = getattr(proc, "num_fds", None)
             if callable(num_fds_fn):
                 try:
@@ -56,7 +79,6 @@ class HealthHandler(BaseHTTPRequestHandler):
                     if isinstance(fds, int):
                         process_metrics["process_num_fds"] = fds
                 except Exception as exc:
-                    # Pode ocorrer em plataformas sem suporte a num_fds; ignora silenciosamente
                     import logging
 
                     logging.getLogger(__name__).debug(
@@ -64,44 +86,96 @@ class HealthHandler(BaseHTTPRequestHandler):
                     )
             status = {
                 "status": "ok",
-                "host": {
-                    "cpu_percent": metrics.get("cpu_percent"),
-                    "memory_percent": metrics.get("memory_percent"),
-                    "disk_percent": metrics.get("disk_percent"),
-                    "timestamp": metrics.get("timestamp"),
-                },
+                "system": system_metrics,
                 "process": process_metrics,
             }
             self.wfile.write(json.dumps(status).encode("utf-8"))
-        elif self.path == "/metrics" and PROMETHEUS_AVAILABLE:
-            # Atualiza métricas do processo antes de expor
-            expose_process_metrics()
-            output = generate_latest()
-            self.send_response(200)
-            self.send_header("Content-type", CONTENT_TYPE_LATEST)
-            self.end_headers()
-            self.wfile.write(output)
         elif self.path == "/metrics":
-            self.send_response(501)
-            self.end_headers()
-            self.wfile.write(b"prometheus_client nao instalado")
+            if PROMETHEUS_AVAILABLE:
+                self.send_response(200)
+                self.send_header("Content-type", "text/plain; version=0.0.4; charset=utf-8")
+                self.end_headers()
+                # Lê a última linha do JSONL para métricas do sistema
+                jsonl_path = SYSTEM_METRICS_JSONL_PATH
+                system_metrics = {}
+                try:
+                    files = [f for f in os.listdir(jsonl_path) if f.startswith("monitoring-") and f.endswith(".jsonl")]
+                    if files:
+                        files.sort(reverse=True)
+                        latest_file = os.path.join(jsonl_path, files[0])
+                        with open(latest_file, "rb") as f:
+                            f.seek(0, os.SEEK_END)
+                            pos = f.tell()
+                            line = b""
+                            while pos > 0:
+                                pos -= 1
+                                f.seek(pos)
+                                char = f.read(1)
+                                if char == b"\n" and line:
+                                    break
+                                line = char + line
+                            last_json = line.decode("utf-8").strip()
+                        if last_json:
+                            system_metrics = json.loads(last_json)
+                except Exception as exc:
+                    import logging
+
+                    logging.getLogger(__name__).exception("Falha ao ler métricas do JSONL: %s", exc)
+                # Coleta métricas do processo em tempo real
+                proc = psutil.Process()
+                process_metrics = {
+                    "cpu_percent": proc.cpu_percent(interval=0.0),
+                    "memory_percent": proc.memory_percent(),
+                    "memory_rss_bytes": getattr(proc.memory_info(), "rss", 0),
+                    "uptime_seconds": float(max(0, (time.time() - proc.create_time()))),
+                    "num_threads": proc.num_threads(),
+                }
+                num_fds_fn = getattr(proc, "num_fds", None)
+                if callable(num_fds_fn):
+                    try:
+                        fds = num_fds_fn()
+                        if isinstance(fds, int):
+                            process_metrics["num_fds"] = fds
+                    except Exception as exc:
+                        import logging
+
+                        logging.getLogger(__name__).debug(
+                            "Falha ao obter número de descritores de arquivos: %s", exc, exc_info=True
+                        )
+                # Formata para Prometheus exposition format
+                lines = []
+                # Métricas do sistema
+                for k, v in system_metrics.items():
+                    if isinstance(v, (int, float)):
+                        lines.append(f"monitoring_{k} {v}")
+                # Métricas do processo
+                for k, v in process_metrics.items():
+                    if isinstance(v, (int, float)):
+                        lines.append(f"process_{k} {v}")
+                output = "\n".join(lines).encode("utf-8")
+                self.wfile.write(output)
+            else:
+                self.send_response(503)
+                self.end_headers()
         else:
             self.send_response(404)
             self.end_headers()
 
+    def log_message(self, format, *args):
+        """Silencia logs de requisições HTTP no console."""
+        pass
 
-def run_http_server(port=8000, addr="127.0.0.1"):
-    """Inicia o servidor HTTP para expor os endpoints /health e /metrics.
 
-    Observação: O endereço padrão agora é '127.0.0.1', restringindo o acesso ao localhost para maior segurança.
-    Para expor o serviço em todas as interfaces de rede (acesso externo), chame explicitamente:
-        run_http_server(port=8000, addr="0.0.0.0")
-    Avalie sempre a necessidade de exposição e proteja o serviço com firewall,
-    autenticação ou rede segura conforme o caso.
-    """
-    server = HTTPServer((addr, port), HealthHandler)
-    print(f"[HTTP] Servindo em http://{addr}:{port} (/health, /metrics)")
-    server.serve_forever()
+def run_http_server(addr="localhost", port=8000):
+    """Inicia o servidor HTTP para expor métricas."""
+    # Cria diretório de logs se não existir
+    os.makedirs(os.path.dirname(__file__), exist_ok=True)
+    try:
+        server = HTTPServer((addr, port), HealthHandler)
+        print(f"[HTTP] Servindo em http://{addr}:{port} (/health, /metrics)")
+        server.serve_forever()
+    except Exception as e:
+        print(f"[HTTP] Erro ao iniciar servidor: {e}")
 
 
 def run_promtail_worker():

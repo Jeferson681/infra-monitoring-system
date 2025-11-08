@@ -1,11 +1,46 @@
-# prometheus_exporter.py
-# Utilitários para exportação de métricas no padrão Prometheus.
-
-import logging
+import json
 import os
 import time
 import psutil
+import logging
 from typing import Dict, cast
+
+
+def expose_system_metrics_from_jsonl(jsonl_path: str) -> None:
+    """Lê a última linha do JSONL e expõe métricas do sistema como Gauges."""
+    if not _HAVE_PROM:
+        return
+    try:
+        files = [f for f in os.listdir(jsonl_path) if f.startswith("monitoring-") and f.endswith(".jsonl")]
+        if not files:
+            return
+        files.sort(reverse=True)
+        latest_file = os.path.join(jsonl_path, files[0])
+        with open(latest_file, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            pos = f.tell()
+            line = b""
+            while pos > 0:
+                pos -= 1
+                f.seek(pos)
+                char = f.read(1)
+                if char == b"\n" and line:
+                    break
+                line = char + line
+            last_json = line.decode("utf-8").strip()
+        if last_json:
+            metrics = json.loads(last_json)
+            for k, v in metrics.items():
+                if isinstance(v, (int, float)):
+                    expose_metric(f"monitoring_{k}", float(v), f"System metric {k} from JSONL")
+    except Exception as exc:
+        logger.debug("Falha ao expor métricas do sistema do JSONL: %s", exc, exc_info=True)
+
+
+# prometheus_exporter.py
+# Utilitários para exportação de métricas no padrão Prometheus.
+
+# ...existing code...
 
 """
 Utilitários para exportação de métricas no padrão Prometheus.
@@ -17,10 +52,12 @@ instalada, as funções tornam-se no-ops e apenas logam advertências.
 
 logger = logging.getLogger(__name__)
 
+
 # Try to import prometheus_client; fall back to no-op if unavailable
 _HAVE_PROM = False
 _gauges: Dict[str, object] = {}
 _server_started = False
+
 
 try:
     from prometheus_client import Gauge, start_http_server  # type: ignore
@@ -64,6 +101,10 @@ def start_exporter(port: int | None = None, addr: str = "127.0.0.1") -> None:
         logger.debug("prometheus exporter already started")
         return
 
+    # Atualiza os Gauges do sistema a partir do JSONL ao iniciar o exporter
+    jsonl_path = os.path.join(os.path.dirname(__file__), "..", "..", "logs", "json")
+    expose_system_metrics_from_jsonl(jsonl_path)
+
     if port is None:
         try:
             port = int(os.getenv("MONITORING_EXPORTER_PORT", "8000"))
@@ -87,18 +128,21 @@ def expose_metric(name: str, value: float, description: str = "") -> None:
     """
     if not _HAVE_PROM:
         logger.debug("prometheus_client not available; expose_metric %s=%s ignored", name, value)
+        # Garante que _gauges não é modificado
         return
 
     san = _sanitize_metric_name(name)
     try:
-        if san not in _gauges:
-            g = Gauge(san, description or f"Gauge for {name}")
-            _gauges[san] = g
-        else:
-            g = _gauges[san]
-        # Cast to Gauge for type checkers and call set
-        g_cast = cast(Gauge, g)
-        g_cast.set(float(value))
+        # Garante que só adiciona ao _gauges se _HAVE_PROM for True
+        if _HAVE_PROM:
+            if san not in _gauges:
+                g = Gauge(san, description or f"Gauge for {name}")
+                _gauges[san] = g
+            else:
+                g = _gauges[san]
+            # Cast to Gauge for type checkers and call set
+            g_cast = cast(Gauge, g)
+            g_cast.set(float(value))
     except Exception as exc:
         logger.debug("Failed to expose metric %s: %s", name, exc, exc_info=True)
 

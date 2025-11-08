@@ -1,0 +1,23 @@
+name: Terraform
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+      - name: Validate Terraform IaC
+        run: |
+          if [ -d "infra/terraform" ]; then \
+            cd infra/terraform && terraform init -backend=false && terraform validate; \
+          else \
+            echo "No Terraform directory found."; \
+          fi

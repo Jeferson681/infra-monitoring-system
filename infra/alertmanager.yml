@@ -3,5 +3,5 @@ route:
 receivers:
 - name: 'discord'
   webhook_configs:
-  - url: 'https://discord.com/api/webhooks/SEU_WEBHOOK_ID'
+  - url: '${DISCORD_WEBHOOK_URL}'
     send_resolved: true

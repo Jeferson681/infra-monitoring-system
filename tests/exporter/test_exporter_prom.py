@@ -49,15 +49,25 @@ def test_sanitize_metric_name_and_expose_with_prom(monkeypatch):
 
 def test_expose_metric_without_prom(monkeypatch):
     """When prometheus_client is absent, expose_metric is a no-op."""
-    # Ensure prometheus_client absent
-    import sys
+    # Simula ausência de prometheus_client forçando ImportError
+    import builtins
 
-    sys.modules.pop("prometheus_client", None)
+    original_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "prometheus_client":
+            raise ImportError("No module named 'prometheus_client'")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
     import importlib
 
     exp = importlib.reload(importlib.import_module("src.exporter.exporter"))
+    if hasattr(exp, "_gauges"):
+        exp._gauges.clear()
 
     # Should be no-op and not raise
     exp.expose_metric("abc", 1.0)
-    # _gauges should remain empty
+    # _gauges should permanecer vazio
     assert exp._gauges == {}

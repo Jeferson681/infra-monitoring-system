@@ -1,24 +1,17 @@
-types-requests
-cfgv==3.4.0
-colorama==0.4.6
-coverage==7.10.7
-distlib==0.4.0
-filelock==3.19.1
-icmplib==3.0.4
-identify==2.6.14
-iniconfig==2.1.0
-nodeenv==1.9.1
-packaging==25.0
-ping3==5.1.5
-pluggy==1.6.0
-pre_commit==4.3.0
-psutil==7.1.0
-Pygments==2.19.2
-pytest==8.4.2
-pytest-cov==7.0.0
-PyYAML==6.0.3
-virtualenv==20.34.0
-ruff==0.13.2
+psutil
+prometheus_client
+requests
+portalocker  # opcional, recomendado para durabilidade de logs
+
+# Testes
+pytest
+pytest-cov
+
+# Ferramentas de qualidade/código e automação
 black
+ruff
 flake8
 bandit
+pre-commit
+mypy
+vulture

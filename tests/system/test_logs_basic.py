@@ -48,7 +48,7 @@ def test_write_log_human_and_json(tmp_path, monkeypatch):
 def test_hourly_allows_and_blocks(tmp_path, monkeypatch):
     """Teste para controle de escrita horária e bloqueio."""
     monkeypatch.setenv("MONITORING_LOG_ROOT", str(tmp_path))
-    name = "monitoring-hourly"
+    name = "infra-monitoring-system-hourly"
     # ensure get_log_paths creates cache dir
 
     # Usar project_root direto no teste

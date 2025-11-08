@@ -42,3 +42,6 @@ node_modules/
 .git/
 .gitignore
 .dockerignore
+
+# Prints do repositório didático
+print.txt
