@@ -10,7 +10,7 @@ terraform {
 provider "docker" {}
 
 resource "docker_image" "monitoring" {
-  name         = "${var.dockerhub_username}/monitoring:latest"
+  name         = "${var.dockerhub_username}/infra-monitoring-system:latest"
   keep_locally = false
 }
 
@@ -27,7 +27,7 @@ resource "docker_container" "monitoring" {
 }
 
 resource "docker_image" "monitoring_metrics" {
-  name         = "${var.dockerhub_username}/monitoring_metrics:latest"
+  name         = "${var.dockerhub_username}/infra-monitoring-system_metrics:latest"
   keep_locally = false
 }
 
@@ -41,7 +41,7 @@ resource "docker_container" "monitoring_metrics" {
   env = [
     "MONITORING_HTTP_PORT=8000",
     "LOKI_URL=http://loki:3100/api/prom/push",
-    "LOKI_LABELS=job=monitoring"
+    "LOKI_LABELS=job=infra-monitoring-system"
   ]
 }
 
