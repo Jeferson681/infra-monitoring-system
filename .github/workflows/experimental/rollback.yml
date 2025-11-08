@@ -1,0 +1,24 @@
+name: Rollback Deploy
+
+on:
+  workflow_dispatch:
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Pull última imagem estável
+        run: |
+          docker pull ${{ secrets.DOCKERHUB_USERNAME }}/monitoring:stable
+      - name: Subir imagem estável
+        run: |
+          docker-compose down
+          docker-compose up -d --force-recreate
+      - name: Verificar status dos containers
+        run: |
+          docker-compose ps
+          docker-compose logs
+  # Moved to experimental for future use
+  # This file is now located at: c:\Users\jefer\Documents\Python_project\monitoring\.github\workflows\experimental\rollback.yml
