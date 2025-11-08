@@ -25,7 +25,7 @@ jobs:
           tags: monitoring:trivy-scan
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@v0.13.0
+        uses: aquasecurity/trivy-action@0.33.1
         with:
           image-ref: monitoring:trivy-scan
           format: table
