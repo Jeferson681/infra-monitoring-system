@@ -7,6 +7,8 @@ Funções principais:
 Uso:
 - Importe e utilize send_log_to_loki para enviar logs formatados
 - Configure via variáveis de ambiente ou argumentos.
+
+Nota: Não exporta métricas do sistema; apenas o encaminhamento de logs é realizado aqui.
 """
 
 import os
@@ -15,20 +17,6 @@ import requests  # type: ignore[import-untyped]
 
 LOKI_URL = os.getenv("LOKI_URL", "http://localhost:3100/api/prom/push")
 LOKI_LABELS = os.getenv("LOKI_LABELS", "job=monitoring")
-
-
-def configure_promtail(url=None, labels=None):
-    """Configura parâmetros globais de envio para Promtail/Loki.
-
-    Parâmetros:
-        url: endpoint HTTP do Loki (opcional)
-        labels: string de labels no formato 'key=value' (opcional)
-    """
-    global LOKI_URL, LOKI_LABELS
-    if url:
-        LOKI_URL = url
-    if labels:
-        LOKI_LABELS = labels
 
 
 def send_log_to_loki(message, labels=None, timestamp=None):

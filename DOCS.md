@@ -1,30 +1,137 @@
-# Documentação do Projeto de Monitoramento
+# Infra Monitoring System
 
-## Limitações e Observações Importantes
+## 1. Propósito e Contexto
 
-- **Separação de Containers:**
-  - O projeto está estruturado para rodar dois containers principais:
-    - `monitoring-app`: executa o monitoramento principal (main.py).
-    - `monitoring-metrics`: executa o exporter HTTP/Promtail (main_http.py), responsável por expor métricas e enviar logs para Loki.
-  - **Propósito Didático:** O container `monitoring-metrics` é destinado apenas para fins didáticos e demonstração de integração com Prometheus/Grafana/Loki. Ele não deve ser usado em produção para coleta de métricas físicas do host, pois pode afetar a precisão dos dados.
-  - Para coleta real de métricas do host, recomenda-se rodar o exporter no mesmo ambiente do monitoramento principal ou integrar via volumes/API.
+Este sistema foi desenvolvido para fins de estudo prático de
+monitoramento, automação e integração contínua. O código implementa
+coleta e exposição de métricas do sistema e logs enriquecidos, com
+integração a ferramentas padrão de observabilidade (Prometheus, Grafana,
+Loki). O foco é demonstrar um fluxo completo de coleta, persistência,
+exportação e análise de métricas em um ambiente automatizado e
+versionado.
 
-## Estrutura de Volumes e Logs
-- Os containers compartilham o volume `/logs` para garantir que o Promtail possa ler e enviar todos os arquivos `.log` e `.json` (inclusive em subdiretórios) para o Loki.
-- O arquivo de configuração Promtail (`infra/promtail/promtail-config.yml`) está preparado para ler todos os logs recursivamente.
+## 2. Arquitetura Geral
 
-## Integração com Observabilidade
-- O projeto integra com Prometheus, Grafana e Loki via containers dedicados, conforme exemplos em `docker-compose.yml` e `infra/terraform/main.tf`.
-- Recomenda-se revisar as variáveis de ambiente e volumes para garantir que os dados corretos estejam disponíveis para cada serviço.
+O sistema opera em dois containers principais: - **monitoring-app** ---
+executa o núcleo de monitoramento (`main.py`), responsável por coleta,
+tratamento e persistência das métricas em formato JSONL. -
+**monitoring-metrics** --- executa o exporter HTTP (`main_http.py`), que
+lê o JSONL e expõe métricas e logs via endpoints compatíveis com
+Prometheus e Loki.
 
-## Recomendações de Uso
-- Para ambientes produtivos, avalie cuidadosamente a arquitetura de containers e a integração entre monitoramento e exporter.
-- Documente e versiona as configurações de observabilidade para facilitar manutenção e auditoria.
+Ambos compartilham o volume `/logs`, garantindo que o Promtail acesse os
+arquivos `.log` e `.json` de forma recursiva. O arquivo
+`infra/promtail/promtail-config.yml` define o comportamento padrão de
+coleta para o Loki.
 
-## Outros Dados e Informações
-- Utilize este arquivo para registrar decisões de arquitetura, limitações conhecidas, recomendações de deploy, e quaisquer observações relevantes para o time ou usuários do projeto.
-- Atualize este documento conforme novas integrações, mudanças de infraestrutura ou requisitos de negócio.
+**Observação didática:** o container `monitoring-metrics` tem função de
+demonstração. Em ambientes reais, a coleta física do host deve ser feita
+localmente ou via agente dedicado, não por containers de monitoramento
+interno.
 
----
+## 3. Fluxo de Métricas e Logs
 
-*Última atualização: 07/11/2025*
+### 3.1 Coleta e Persistência
+
+O módulo principal coleta dados do sistema (CPU, memória, disco, rede,
+latência) e grava em JSONL rotativo. Os logs são formatados em JSON
+estruturado e armazenados no mesmo volume compartilhado.
+
+### 3.2 Exportação
+
+O exporter HTTP inicializa lendo a última linha do JSONL e atualiza os
+*Gauges* de Prometheus. Nenhuma métrica é recalculada --- apenas o
+último snapshot é exposto.
+
+**Exporters:** - `/health`: retorna um resumo JSON de métricas do
+sistema e processo. - `/metrics`: expõe os mesmos dados em formato
+Prometheus exposition (texto plano).
+
+### 3.3 Métricas de Processo
+
+Métricas do processo Python (CPU, memória, threads, uptime, descritores)
+são coletadas em tempo real. Essas métricas não são persistidas, apenas
+expostas para observabilidade do container em execução.
+
+**Recomendação:** alinhar o `scrape_interval` do Prometheus ao intervalo
+de coleta definido no monitoramento para evitar inconsistências entre
+snapshots.
+
+## 4. Observabilidade e Integração
+
+O ambiente integra Prometheus, Grafana e Loki por meio de containers
+declarados no `docker-compose.yml` e módulos de Terraform
+(`infra/terraform/main.tf`). As variáveis de ambiente e volumes devem
+ser revisadas para garantir alinhamento de caminhos e permissões.
+
+**Boas práticas aplicadas:** - Logs estruturados e padronizados. -
+Métricas expostas em formato nativo Prometheus. - Containers isolados
+com compartilhamento controlado de volumes. - Integração observável
+ponta a ponta (coleta → exportação → visualização).
+
+## 5. Infraestrutura como Código (Terraform)
+
+O Terraform está incluído somente com propósito educacional. Ele
+demonstra definição de infraestrutura como código (IaC) para
+provisionamento de containers e serviços de observabilidade. Como o
+sistema coleta métricas do host onde é executado, a execução em cloud
+(ex. AWS/ECS) resultará em métricas do container/VM, não do host físico.
+O deploy real recomendado é o build e push da imagem Docker para o
+DockerHub.
+
+## 6. Webhook e Segurança
+
+O webhook do Discord é gerenciado via GitHub Secrets, sem exposição no
+código. Tokens e chaves de acesso utilizados nos pipelines são definidos
+exclusivamente via ambiente seguro
+(`Settings > Secrets and variables > Actions`).
+
+## 7. Estrutura e Arquivos Relevantes
+
+    src/
+      core/            # Lógica de coleta e tratamento
+      exporter/        # Exportadores Prometheus e HTTP
+      monitoring/      # Controle e agendamento de coletas
+      system/          # Funções utilitárias
+    infra/
+      promtail/        # Configuração de logs
+      terraform/       # Definições IaC
+    tests/             # Testes automatizados
+    .github/workflows/ # CI/CD (build, lint, testes)
+
+## 8. Limitações Atuais
+
+-   O monitoramento do host físico não é garantido em execução
+    containerizada.
+-   O exporter depende de leitura local dos arquivos JSONL --- não há
+    API de cache ou streaming.
+-   O sistema não implementa autenticação nos endpoints.
+-   Terraform e observabilidade servem para demonstração, não produção.
+
+## 9. Evidências e Artefatos
+
+  Área       Evidência                              Caminho
+  ---------- -------------------------------------- ----------------------------
+  CI         ![CI](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/ci.yml/badge.svg)          `.github/workflows/ci.yml`
+  Coverage   ![Coverage](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/tests-coverage.yml/badge.svg) `.github/workflows/tests-coverage.yml`
+  CD         ![CD](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/cd.yml/badge.svg)   `.github/workflows/cd.yml`
+  Terraform  ![Terraform](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/terraform.yml/badge.svg) `.github/workflows/terraform.yml`
+  Release    ![Release](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/release.yml/badge.svg)  `.github/workflows/release.yml`
+  Dependabot ![Dependabot](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/dependabot.yml/badge.svg) `.github/workflows/dependabot.yml`
+  Gitleaks   ![Gitleaks](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/gitleaks-scan.yml/badge.svg) `.github/workflows/gitleaks-scan.yml`
+  Snyk       ![Snyk](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/snyk-scan.yml/badge.svg)   `.github/workflows/snyk-scan.yml`
+  Trivy      ![Trivy](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/trivy-scan.yml/badge.svg) `.github/workflows/trivy-scan.yml`
+
+**Screenshots recomendadas:** - Execução bem-sucedida do pipeline CI. -
+Dashboard Grafana exibindo métricas do sistema. - Exporter retornando
+dados nos endpoints `/health` e `/metrics`.
+
+## 10. Nota Técnica Final
+
+Este projeto foi desenvolvido para fins didáticos e demonstração prática
+de conceitos de automação, observabilidade e integração contínua. Não
+substitui soluções corporativas de monitoramento. O foco é aplicar boas
+práticas de estrutura, modularidade, versionamento e automação com
+código limpo e documentado.
+
+Última atualização: 14/10/2025

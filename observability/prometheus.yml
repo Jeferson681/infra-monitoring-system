@@ -3,7 +3,7 @@ global:
   evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: 'monitoring-app'
+  - job_name: 'infra-monitoring-system-app'
     static_configs:
       - targets: ['host.docker.internal:8000']
     metrics_path: /metrics

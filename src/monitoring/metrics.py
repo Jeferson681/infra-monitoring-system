@@ -416,7 +416,7 @@ def _temperature_collector() -> float | None:
     if os.name != "posix":
         return None
     try:
-        script_path = Path(__file__).resolve().parents[2] / "system" / "scripts" / "temp.sh"
+        script_path = Path(__file__).resolve().parents[2] / "scripts" / "temp.sh"
         if script_path.exists() and os.access(script_path, os.X_OK):
             return _get_temp_from_script(script_path)
     except (OSError, subprocess.SubprocessError) as exc:
