@@ -11,8 +11,8 @@ logs/
 
 # Arquivos de ambiente e segredos
 .env
-!.env.example
 .env.*
+!.env.example
 
 # Cache e artefatos de ferramentas
 .mypy_cache/

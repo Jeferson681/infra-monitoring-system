@@ -50,6 +50,12 @@ The environment integrates Prometheus, Grafana, and Loki via containers declared
 - Isolated containers with controlled volume sharing.
 - End-to-end observable integration (collection → export → visualization).
 
+## 4.1 Service Access
+
+- Prometheus: http://localhost:9090
+- Grafana: http://localhost:3000
+- Loki: http://localhost:3100
+
 ---
 
 ## 5. Infrastructure as Code (Terraform)

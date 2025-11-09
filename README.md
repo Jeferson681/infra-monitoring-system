@@ -53,6 +53,15 @@ cd infra-monitoring-system
 # Construir e executar containers
 docker-compose up --build
 
+# Acessar Prometheus
+http://localhost:9090
+
+# Acessar Grafana
+http://localhost:3000
+
+# Acessar Loki
+http://localhost:3100
+
 # Acessar métricas locais
 http://localhost:8000/metrics
 ```
@@ -79,7 +88,7 @@ infra-monitoring-system/
 ## 🧰 Stack Técnica
 
 - **Linguagem:** Python
-- **Monitoramento:** Prometheus, Grafana
+- **Monitoramento:** Prometheus, Grafana, Loki
 - **Orquestração:** Docker, Docker Compose
 - **Infraestrutura:** Terraform
 - **Pipeline:** GitHub Actions

@@ -49,5 +49,15 @@ services:
     depends_on:
       - prometheus
 
+  loki:
+    image: grafana/loki:2.8.2
+    container_name: loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki-data:/loki
+    restart: unless-stopped
+
 volumes:
   grafana-data:
+  loki-data:
