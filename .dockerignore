@@ -1,3 +1,4 @@
+!.env.example
 # Espelhando .gitignore para build limpo
 __pycache__/
 *.pyc

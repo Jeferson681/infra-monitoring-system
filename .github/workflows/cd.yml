@@ -35,27 +35,19 @@ jobs:
             ${{ secrets.DOCKER_USERNAME }}/infra-monitoring-system:${{ github.ref_name }}
 
   deploy-staging:
-    if: github.ref == 'refs/heads/develop'
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
-      # Para ativar o deploy real, descomente as linhas abaixo e configure os secrets necessários
-      # - name: Configure AWS credentials (staging)
-      #   uses: aws-actions/configure-aws-credentials@v4
-      #   with:
-      #     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_STAGING }}
-      #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_STAGING }}
-      #     aws-region: us-east-1
-      # - name: Deploy to Amazon ECS (staging)
-      #   uses: aws-actions/amazon-ecs-deploy-task-definition@v1
-      #   with:
-      #     task-definition: ecs-task-def-staging.json
-      #     service: my-ecs-service-staging
-      #     cluster: my-ecs-cluster-staging
-      #     wait-for-service-stability: true
-      - name: Deploy AWS ECS (staging) demonstrativo
+      - name: Install Docker Compose
         run: |
-          echo "[DEMO] Esta etapa representa o deploy real em AWS ECS (staging). Para ativar, siga as instruções acima."
+          sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
+      - name: Deploy container local com Docker
+        run: |
+          docker-compose version
+          sudo service docker start || true
+          docker-compose pull || echo "Falha ao puxar imagens, verifique permissões e rede."
+          docker-compose up -d --build || echo "Falha ao subir containers, verifique logs."
       - name: Notificar sucesso no Discord (staging)
         if: success()
         run: |

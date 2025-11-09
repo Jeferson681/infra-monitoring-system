@@ -69,6 +69,12 @@ Métricas expostas em formato nativo Prometheus. - Containers isolados
 com compartilhamento controlado de volumes. - Integração observável
 ponta a ponta (coleta → exportação → visualização).
 
+## 4.1 Acesso aos Serviços
+
+- Prometheus: http://localhost:9090
+- Grafana: http://localhost:3000
+- Loki: http://localhost:3100
+
 ## 5. Infraestrutura como Código (Terraform)
 
 O Terraform está incluído somente com propósito educacional. Ele

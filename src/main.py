@@ -21,6 +21,9 @@ def main(argv: list[str] | None = None) -> None:
     Parâmetros:
         argv: lista de argumentos (para testes); quando None usa sys.argv.
     """
+    # Se nenhum argumento for passado, usa interval=1 e cycles=0 como padrão
+    if argv is None or (isinstance(argv, list) and len(argv) == 0):
+        argv = ["-i", "1", "-c", "0"]
     args = parse_args(argv)
     log_conf = get_log_config(args)
 
