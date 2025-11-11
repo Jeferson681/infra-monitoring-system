@@ -35,4 +35,4 @@ def test_run_loop_one_cycle(monkeypatch):
     monkeypatch.setattr("src.core.core._collect_and_emit", lambda s, v: {"state": "S"})
     monkeypatch.setattr("src.core.core._run_maintenance", lambda now, a, b, c, d, intervals: (a, b, c, d))
 
-    core._run_loop(interval=0, cycles=1, verbose_level=0)
+    core.run_loop(interval=0, cycles=1, verbose_level=0)

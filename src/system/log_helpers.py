@@ -3,6 +3,9 @@
 
 Fornece compressão, verificação de idade de ficheiros,
 movimentações atômicas e escrita durável em disco.
+
+Todas as docstrings e comentários neste módulo devem estar em português
+para manter consistência com o restante do projeto.
 """
 
 from pathlib import Path
@@ -36,7 +39,7 @@ except (ImportError, AttributeError):
 # -----------------------
 # Escrita segura
 # -----------------------
-def write_text(path: Path, text: str) -> None:
+def write_text(path: Path, text: str) -> bool:
     """Anexe texto a `path` de forma segura, usando lock e fsync quando possível.
 
     Esta função tenta criar o diretório pai e aplica um lock exclusivo quando
@@ -69,11 +72,18 @@ def write_text(path: Path, text: str) -> None:
                         portalocker.unlock(fh)
                     except Exception as exc:
                         logger.debug("write_text: portalocker.unlock falhou em %s: %s", path, exc)
+        return True
+    except PermissionError as exc:
+        # Problemas de permissão não são fatais para o loop principal; registra
+        # como WARNING para visibilidade, sem marcar o serviço como falho.
+        logger.warning("write_text: permission denied writing to %s: %s", path, exc, exc_info=True)
+        return False
     except OSError as exc:
         logger.error("write_text: falhou em %s: %s", path, exc, exc_info=True)
+        return False
 
 
-def write_json(path: Path, obj: dict) -> None:
+def write_json(path: Path, obj: dict) -> bool:
     """Serialize um objeto como JSONL e anexe ao ficheiro `path`.
 
     Em caso de objetos não serializáveis por padrão, usa `default=str` como
@@ -84,20 +94,23 @@ def write_json(path: Path, obj: dict) -> None:
     except (TypeError, ValueError) as exc:
         try:
             line = _json.dumps(obj, ensure_ascii=False, default=str) + "\n"
-            logger.error("write_json: fallback default=str usado em %s: %s", path, exc, exc_info=True)
+            # Usa WARNING para serialização de fallback; é recuperável mas
+            # indica que tipos não eram estritamente serializáveis.
+            logger.warning("write_json: fallback default=str usado em %s: %s", path, exc, exc_info=True)
         except Exception as exc2:
             logger.error("write_json: falhou em %s: %s; %s", path, exc, exc2, exc_info=True)
-            return
-    write_text(path, line)
+            return False
+    return write_text(path, line)
 
 
 # -----------------------
 # Normalização e formatação
 # -----------------------
 def sanitize_log_name(raw_name: str, fallback: str = "debug_log") -> str:
-    """Sanitize o nome base de um ficheiro de log para uso seguro no filesystem.
+    """Sanitiza o nome base de um ficheiro de log para uso seguro no sistema de ficheiros.
 
     Remove caracteres potencialmente perigosos e limita o comprimento.
+    Retorna um nome seguro adequado para uso como ficheiro.
     """
     rn = Path(raw_name or fallback).name.lstrip(".")
     name = re.sub(r"[^A-Za-z0-9._-]+", "_", rn)
@@ -109,7 +122,7 @@ def sanitize_log_name(raw_name: str, fallback: str = "debug_log") -> str:
 
 
 def normalize_message_for_human(msg, max_len: int | None = 10000) -> str:
-    """Normalize uma mensagem para apresentação humana, removendo novas linhas.
+    """Normaliza uma mensagem para apresentação humana, removendo quebras de linha.
 
     Corta a mensagem para `max_len` quando definido.
     """
@@ -138,43 +151,43 @@ def build_json_entry(ts: str, level: str, msg, extra: dict | None = None) -> dic
 def build_human_line(ts: str, level: str, msg_str: str, extras: dict | None = None) -> str:
     r"""Compõe linha legível por humanos.
 
-    Por compatibilidade com consumidores existentes, o formato legacy é uma
+    Por compatibilidade com consumidores existentes, o formato legado é uma
     única linha com timestamp, nível, extras e a mensagem flattenada. O novo
     formato multilinha (header + body) pode ser ativado via
-    variavel de ambiente `MONITORING_HUMAN_MULTILINE=1`.
+    variável de ambiente `MONITORING_HUMAN_MULTILINE=1`.
 
-    Legacy (padrão):
+    Legado (padrão):
       <ts> [LEVEL] [extras...] <msg_str>\n
-    Multilinha (opt-in):
+    Multilinha (opcional):
       <ts> [LEVEL] [extras...]\n
       <msg_str>\n\n
     """
-    # decide whether to use multiline format
+    # decide se deve usar o formato multilinha
     use_multiline = _should_use_multiline(msg_str)
 
     extras_part = _format_extras_for_human(extras)
 
-    # Ensure msg_str is a string
+    # Garante que msg_str é uma string
     try:
         body = "" if msg_str is None else str(msg_str)
     except Exception:
         body = "<unrepr>"
 
     if use_multiline:
-        # Multiline: preserve internal newlines, trim trailing newlines and keep a blank separator
+        # Multiline: preserva quebras internas, remove novas linhas finais e mantém separador em branco
         body = body.rstrip("\r\n")
         header = f"{ts} [{level}]{extras_part}\n"
         return header + body + "\n\n"
     else:
-        # Legacy single-line: flatten internal newlines to spaces
+        # Formato legado: flatten de quebras de linha para espaços
         single = body.replace("\n", " ").replace("\r", " ").strip()
         return f"{ts} [{level}]{extras_part} {single}\n"
 
 
 def _format_extras_for_human(extras: dict | None) -> str:
-    """Format extras dict into a single string for human logs.
+    """Formata o dicionário `extras` numa única string para logs humanos.
 
-    Extracted from build_human_line to reduce its complexity.
+    Extraída de `build_human_line` para reduzir a complexidade desta função.
     """
     extras_part = ""
     if extras and isinstance(extras, dict):
@@ -191,7 +204,7 @@ def _format_extras_for_human(extras: dict | None) -> str:
 def _should_use_multiline(msg_str: object) -> bool:
     """Decide se devemos usar o formato multilinha para mensagens humanas.
 
-    Prefer multiline quando a variável de ambiente indicar ou quando a
+    Prefere multilinha quando a variável de ambiente indicar ou quando a
     mensagem contém quebras de linha internas.
     """
     try:
@@ -386,7 +399,9 @@ def ensure_dir_writable(p: Path) -> bool:
                 f.write("ok")
                 f.flush()
         except PermissionError as exc:
-            logger.error("ensure_dir_writable: permission denied writing to %s: %s", p, exc, exc_info=True)
+            # Permission issues are non-fatal for the main loop; warn and
+            # return False so callers can handle accordingly.
+            logger.warning("ensure_dir_writable: permission denied writing to %s: %s", p, exc, exc_info=True)
             return False
         except OSError as exc:
             logger.error("ensure_dir_writable: write test failed for %s: %s", p, exc, exc_info=True)
@@ -396,12 +411,12 @@ def ensure_dir_writable(p: Path) -> bool:
                 if test.exists():
                     test.unlink()
             except Exception:
-                # ignore cleanup failures; best-effort only
-                # nosec B110 - cleanup must not raise in best-effort path
+                # Ignorar falhas de limpeza; operação em modo de melhor esforço
+                # nosec B110 - a limpeza não deve lançar exceção no caminho de melhor esforço
                 pass
         return True
     except PermissionError as exc:
-        logger.error("ensure_dir_writable: permission denied creating %s: %s", p, exc, exc_info=True)
+        logger.warning("ensure_dir_writable: permission denied creating %s: %s", p, exc, exc_info=True)
         return False
     except OSError as exc:
         logger.error("ensure_dir_writable: failed for %s: %s", p, exc, exc_info=True)

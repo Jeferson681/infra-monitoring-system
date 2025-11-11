@@ -4,8 +4,8 @@ import importlib
 def test_main_initializes(monkeypatch, tmp_path):
     """Main should initialize logging and call ensure_default_last_ts without side-effects."""
     monkeypatch.setenv("MONITORING_LOG_ROOT", str(tmp_path))
-    # prevent long runs: make _run_loop a noop
-    monkeypatch.setattr("src.main._run_loop", lambda *a, **k: None)
+    # prevent long runs: make run_loop a noop
+    monkeypatch.setattr("src.main.run_loop", lambda *a, **k: None)
     monkeypatch.setenv("MONITORING_EXPORTER_ENABLE", "0")
     from src.main import main
 
@@ -16,8 +16,8 @@ def test_main_initialization(monkeypatch, tmp_path):
     """Main should call setup_debug handler, ensure_default_last_ts and optionally start exporter."""
     mod = importlib.import_module("src.main")
 
-    # avoid running the real _run_loop
-    monkeypatch.setattr("src.main._run_loop", lambda **k: None)
+    # avoid running the real run_loop
+    monkeypatch.setattr("src.main.run_loop", lambda **k: None)
 
     # make ensure_default_last_ts a no-op
     monkeypatch.setattr("src.main.ensure_default_last_ts", lambda: None)

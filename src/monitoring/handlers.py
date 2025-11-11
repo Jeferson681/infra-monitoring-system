@@ -9,6 +9,10 @@ import logging
 from typing import Any
 
 from . import treatments
+from src.system.network_learning import NetworkUsageLearningHandler
+from src.config import settings
+
+network_learning_handler = NetworkUsageLearningHandler()
 
 
 logger = logging.getLogger(__name__)
@@ -31,7 +35,12 @@ def _select_action(metric_lower: str) -> tuple[str | None, tuple]:
     if "disk" in metric_lower or "disk_percent" in metric_lower:
         return "check_disk_usage", ()
     if "memory" in metric_lower or "ram" in metric_lower or "memory_percent" in metric_lower:
-        return "trim_process_working_set_windows", ()
+        import os
+
+        if os.name == "posix":
+            return "trim_process_working_set_posix", ()
+        else:
+            return "trim_process_working_set_windows", ()
     if "network" in metric_lower or "ping" in metric_lower or "loss" in metric_lower or "latency" in metric_lower:
         return "reapply_network_config", ()
     if "cpu" in metric_lower:
@@ -129,64 +138,65 @@ def attempt_treatment(state: Any, name: str, _details: dict) -> dict | bool:
     - Respeita cooldowns configurados no `state`.
     - Retorna um dict com {'action': <name>, 'result': <...>} em sucesso ou False.
     """
+    # Filtro explícito para ignorar métricas absolutas (não tratáveis)
+    ignore_metrics = [
+        "memory_used_bytes",
+        "memory_total_bytes",
+        "disk_used_bytes",
+        "disk_total_bytes",
+        "temperature",
+        "latency_ms",
+        "bytes_sent",
+        "bytes_recv",
+    ]
+    if name in ignore_metrics:
+        return False
+
     now = time.monotonic()
 
     since = state.critic_since.get(name)
     if since is None:
-        logger.debug("tentativa_tratamento: %s ainda não sustentado", name)
         return False
     if now - since < float(getattr(state, "sustained_critic_seconds", 300)):
-        elapsed = int(now - since)
-        req = int(getattr(state, "sustained_critic_seconds", 300))
-        logger.debug(
-            "tentativa_tratamento: %s sustentado por %ds < requerido %ds",
-            name,
-            elapsed,
-            req,
-        )
         return False
 
     metric_lower = name.lower()
     action_name, action_args = _select_action(metric_lower)
     action_func = getattr(treatments, action_name, None) if action_name else None
+
     if action_name is None:
-        logger.debug("tentativa_tratamento: nenhuma ação específica para métrica %s", name)
         return False
 
+    # Se for tratamento de rede, acione o aprendizado antes do tratamento
+    if action_name == "reapply_network_config":
+        bytes_sent = getattr(state, "bytes_sent", None)
+        bytes_recv = getattr(state, "bytes_recv", None)
+        if bytes_sent is not None and bytes_recv is not None:
+            try:
+                # Garante que os argumentos sejam inteiros
+                bs = int(float(bytes_sent))
+                br = int(float(bytes_recv))
+                network_learning_handler.record_daily_usage(bs, br)
+                # Atualiza thresholds dinâmicos
+                limit = network_learning_handler.get_current_limit()
+                thresholds = settings.get_valid_thresholds()
+                thresholds["bytes_sent"]["critical"] = limit
+                thresholds["bytes_recv"]["critical"] = limit
+            except Exception as exc:
+                logger.debug("network_learning_handler.record_daily_usage falhou: %s", exc, exc_info=True)
+
     if _on_cooldown(state, action_name, now):
-        cd = getattr(state, "treatment_cooldowns", {}).get(action_name, 0)
-        last_ts = getattr(state, "last_treatment_run", {}).get(action_name, 0)
-        remaining = max(0, int(cd - (now - last_ts)))
-        logger.debug(
-            "tentativa_tratamento: pulando %s devido a cooldown (%ds restantes)",
-            action_name,
-            remaining,
-        )
         return False
 
     try:
-        logger.info("tentativa_tratamento: executando %s para métrica %s", action_name, name)
         if action_func is None:
-            logger.debug("tentativa_tratamento: função %s não encontrada em treatments", action_name)
             return False
-
-        # Executa a ação principal (inclui caso especial cleanup_temp_files)
         result = _run_main_action(state, action_name, action_func, action_args)
-
-        # Se executamos um check de disco, também tentar cleanup de temporários
-        # como ação auxiliar (melhor esforço), respeitando cooldown separado.
         if action_name == "check_disk_usage":
             _maybe_run_aux_cleanup(state, now)
-
-        # Sempre tentar uma ação auxiliar de limpeza de processos zumbi quando
-        # executamos um tratamento principal diferente de 'reap_zombie_processes'.
-        reap_result = _run_reap_aux(state, action_name, result, now)
-
-        # marcar último run para a ação principal
+        _run_reap_aux(state, action_name, result, now)
         if hasattr(state, "last_treatment_run") and isinstance(state.last_treatment_run, dict):
             state.last_treatment_run[action_name] = now
-        logger.debug("tentativa_tratamento: %s retornou %s (reap=%s)", action_name, result, reap_result)
         return {"action": action_name, "result": result}
-    except (OSError, RuntimeError, ValueError, TypeError, AttributeError) as exc:
-        logger.warning("tentativa_tratamento: %s falhou para %s: %s", action_name, name, exc, exc_info=True)
+    except (OSError, RuntimeError, ValueError, TypeError, AttributeError):
         return False

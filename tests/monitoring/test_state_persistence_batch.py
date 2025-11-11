@@ -40,12 +40,13 @@ def test_write_post_treatment_fallback(monkeypatch, tmp_path):
     monkeypatch.setenv("MONITORING_LOG_ROOT", str(tmp_path))
 
     snap = {"state": "post_treatment", "metrics": {}}
-    # call fallback; should create cache and json directories under tmp_path
+    # call fallback; agora só cria em .cache na raiz do projeto
     ss._write_post_treatment_fallback(snap)
-    cache_file = tmp_path / ".cache" / st._POST_TREATMENT_FILENAME
-    json_dir_file = tmp_path / "json" / f"monitoring-{__import__('time').strftime('%Y-%m-%d')}.jsonl"
+    from pathlib import Path
+
+    project_root = Path(__file__).resolve().parents[2]
+    cache_file = project_root / ".cache" / st._POST_TREATMENT_FILENAME
     assert cache_file.exists()
-    assert json_dir_file.exists()
 
 
 def test_persist_post_treatment_snapshot_fallback(monkeypatch, tmp_path):

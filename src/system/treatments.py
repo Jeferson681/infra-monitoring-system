@@ -1,7 +1,6 @@
-# vulture: ignore
-"""Tratamentos automáticos simples (memória, rede, disco, logs)."""
+# Persistência e aprendizagem de limite para bytes_sent/bytes_recv
 
-
+import datetime
 import logging
 import os
 import shutil
@@ -11,12 +10,66 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
-from .helpers import reap_children_nonblocking
+from .helpers import reap_children_nonblocking, record_network_usage, get_network_limit
 from .log_helpers import process_temp_item
 
 logger = logging.getLogger(__name__)
+
+
+## ...existing code...
+
+_excess_since: Optional[float] = None
+
+
+def update_network_usage_learning(bytes_sent: int, bytes_recv: int) -> bool:
+    """Atualiza o aprendizado de uso de rede e verifica se excede o limite aprendido."""
+    record_network_usage(bytes_sent, bytes_recv)
+    limit = get_network_limit()
+    total = bytes_sent + bytes_recv
+    allowed_hour = os.environ.get("NETWORK_TREATMENT_ALLOWED_HOUR")
+    current_hour = datetime.datetime.now().hour
+    # Controle de tempo: persistência do excesso por mais de 5min usando state.critic_since
+    now = datetime.datetime.now().timestamp()
+    global _excess_since
+    if total > limit:
+        if _excess_since is None:
+            _excess_since = now
+        excess_duration = now - _excess_since
+    else:
+        _excess_since = None
+        excess_duration = 0
+
+    # Trava horária
+    if allowed_hour is None:
+        return False
+    try:
+        allowed_hour_int = int(allowed_hour)
+    except Exception:
+        allowed_hour_int = None
+    if allowed_hour_int is None or current_hour != allowed_hour_int:
+        return False
+
+    # Se excesso persistir por mais de 5min e trava horária ativa, acione tratamento
+    if total > limit and excess_duration >= 300:
+        try:
+            from . import treatments
+
+            restart_func = getattr(treatments, "restart_interface", None)
+            if restart_func is not None:
+                restart_func()
+        except Exception as exc:
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.warning("update_network_usage_learning: restart_interface falhou: %s", exc, exc_info=True)
+        return True
+    return False
+
+
+# vulture: ignore
+"""Tratamentos automáticos simples (memória, rede, disco, logs)."""
 
 
 # vulture: ignore
@@ -95,6 +148,8 @@ def _iter_roots() -> list[Path]:
 
 
 # vulture: ignore
+
+
 def trim_process_working_set_windows(pid: int) -> bool:
     """Tente reduzir o working set de um processo no Windows usando EmptyWorkingSet.
 

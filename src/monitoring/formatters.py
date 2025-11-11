@@ -153,7 +153,7 @@ def _format_timestamp_line(ts_val) -> str:
 
 # Auxilia: _build_long_from_metrics — converte bytes para GB/percentual
 def _fmt_bytes_gb(used: int | None, total: int | None) -> str:
-    """Format the usage of bytes in GB and show percentage.
+    """Formata o uso de bytes em GB e mostra o percentual.
 
     Retorna 'Indisponivel' quando os dados forem insuficientes.
     """
@@ -172,7 +172,7 @@ def _fmt_bytes_gb(used: int | None, total: int | None) -> str:
 
 # Auxilia: _build_long_from_metrics — formata tráfego em MB/GB
 def _fmt_bytes_human(n: int | None) -> str:
-    """Format bytes into MB/GB for human readability.
+    """Formata bytes em MB/GB para legibilidade humana.
 
     Retorna 'Indisponivel' quando o valor for None ou inválido.
     """
@@ -193,10 +193,10 @@ def _fmt_bytes_human(n: int | None) -> str:
 
 
 def format_duration(seconds: float) -> str:
-    """Return formatted duration as H:MM:SS.
+    """Retorna a duração formatada como H:MM:SS.
 
     Formata a duração em segundos para a representação H:MM:SS.
-    Retorna '0:00:00' em caso de erro de parse.
+    Retorna '0:00:00' em caso de erro de parsing.
     """
     try:
         secs = int(round(float(seconds)))
@@ -208,7 +208,7 @@ def format_duration(seconds: float) -> str:
 
 
 def format_used_files_lines(used: dict) -> list[str]:
-    """Return formatted list of used files lines.
+    """Retorna lista formatada de linhas com arquivos usados.
 
     Formata o dicionário path->(min_line, max_line) em linhas legíveis para
     exibição, preservando o comportamento anterior de `averages._format_used_files_lines`.

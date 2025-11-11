@@ -27,7 +27,7 @@ from typing import Generator
 def _open_maybe_gzip(path: Path):
     """Abre um arquivo suportando gzip por extensão .gz.
 
-    Retorna um file-like em texto (str). Caller deve fechar o objeto.
+    Retorna um file-like em texto (str). Chamador deve fechar o objeto.
     """
     if str(path).endswith(".gz"):
         # gzip.open produz bytes; abrir em modo texto para facilitar leitura de linhas
@@ -67,7 +67,7 @@ def iter_jsonl(
         while True:
             line = fh.readline()
             if not line:
-                # EOF reached
+                # EOF atingido
                 if follow:
                     # aguardar e tentar novamente
                     time.sleep(retry_delay)

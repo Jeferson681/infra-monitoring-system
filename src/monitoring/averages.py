@@ -1,3 +1,19 @@
+"""Cálculo e persistência de médias/estatísticas agregadas.
+
+Este módulo contém utilitários para iterar sobre arquivos JSONL de
+monitoramento, agregar janelas temporais, computar médias por métrica,
+contagens por estado e gerar linhas de saída legíveis por humanos.
+
+Principais responsabilidades:
+- localizar os ficheiros JSONL do dia
+- iterar objetos JSON válidos (ignorando linhas malformadas)
+- agregar janelas temporais e calcular médias/contagens
+- produzir saídas usadas por rotinas de manutenção e relatórios
+
+Nota: as implementações internas tentam ser resilientes a erros de I/O
+e mantêm compatibilidade com a API usada pelos testes.
+"""
+
 from pathlib import Path
 from typing import Iterator, Optional, Dict, Any, List
 import json
@@ -570,8 +586,24 @@ def persist_last_time(last_ts: Optional[float] = None, name: str = "last_ts") ->
     }
 
     fpath = get_last_ts_file(name=name)
-    with fpath.open("w", encoding="utf-8") as fh:
-        json.dump(entry, fh, ensure_ascii=False)
+    try:
+        with fpath.open("w", encoding="utf-8") as fh:
+            json.dump(entry, fh, ensure_ascii=False)
+    except PermissionError as exc:
+        logging.getLogger(__name__).warning(
+            "persist_last_time: permission denied creating %s: %s", fpath, exc, exc_info=True
+        )
+        # best-effort: try append via write_text as fallback
+        try:
+            from ..system.log_helpers import write_text
+
+            write_text(fpath, json.dumps(entry, ensure_ascii=False) + "\n")
+        except Exception:
+            # best-effort fallback: ignore errors when attempting append fallback
+            # nosec B110 - intentional swallow: persistence is best-effort here
+            pass
+    except OSError as exc:
+        logging.getLogger(__name__).error("persist_last_time: failed writing %s: %s", fpath, exc, exc_info=True)
     return fpath
 
 

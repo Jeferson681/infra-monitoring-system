@@ -40,7 +40,7 @@ resource "docker_container" "monitoring_metrics" {
   }
   env = [
     "MONITORING_HTTP_PORT=8000",
-    "LOKI_URL=http://loki:3100/api/prom/push",
+  "LOKI_URL=http://loki:3100/loki/api/v1/push",
     "LOKI_LABELS=job=infra-monitoring-system"
   ]
 }

@@ -1,12 +1,14 @@
 """Subsistema de logs: rotação, compressão e persistência.
 
-Fornece helpers de nível superior para escrita de logs,
-rotação, compressão e limpeza de arquivos de archive.
+Fornece helpers de nível superior para escrita de logs, rotação,
+compressão e limpeza de arquivos de archive. Inclui auxiliares que
+preparam diretórios, nomeiam ficheiros e expõem API simples para gravação
+humana e JSONL para ingestão.
 """
 
 import os
 
-# errno not needed after removing local _ensure_dir_writable
+# comentários e notas internas mantidas mínimos; errno não é necessário
 import logging
 
 import time
@@ -173,8 +175,31 @@ def write_log(
 ) -> None:
     """Grava mensagens em arquivo texto e/ou jsonl.
 
-    Recebe uma ou várias mensagens e as escreve em formato humano (texto)
-    e/ou em formato estruturado (jsonl) conforme flags fornecidas.
+    Contrato e comportamento:
+      - "human_enable": quando True escreve uma linha legível em ``.log``;
+        por padrão esta escrita é suprimida para arquivos 'hourly' a menos
+        que a janela (`hourly_window_seconds`) permita.
+      - "json_enable": quando True escreve um objeto estruturado em ``.jsonl``
+        para ingestão por consumidores downstream.
+      - "safe_log_enable": quando True aplica um sufixo "_safe" no nome do
+        ficheiro e preserva o texto humano original (multi-linhas) quando
+        aplicável.
+
+    Observações de robustez:
+      - As escritas usam helpers atômicos (`write_text`, `write_json`) que
+        retornam ``True``/``False``; esta função ignora falhas de escrita
+        (não propaga exceções) mas regista warnings quando uma gravação falhar.
+      - A função não tem valor de retorno (side-effect only). Chamadores devem
+        confiar nos logs para diagnóstico de falhas de I/O.
+
+    Parâmetros (resumido):
+      - name: nome lógico do stream de logs (usado para nomear ficheiros).
+      - level: nível textual (eg. 'info', 'error').
+      - message: string ou lista de strings a escrever.
+      - extra: metadados opcionais (dict ou lista de dicts) associados às linhas.
+      - human_enable/json_enable/safe_log_enable: flags descritas acima.
+      - log: quando False evita escrita humana exceto quando hourly está ativo.
+      - hourly/hourly_window_seconds: controla escrita agregada por janela.
     """
     filename = _resolve_filename(name, safe_log_enable)
 
@@ -260,7 +285,14 @@ def _perform_human_write(
 ) -> None:
     """Executa a escrita humana em arquivo, respeitando flags e janela hourly.
 
-    Atualiza arquivo de timestamp para controlar gravações `hourly`.
+    Detalhes:
+      - Constrói uma linha de texto legível com timestamp e level via
+        `build_human_line` e delega para `write_text` (que faz escrita atômica).
+      - Se `write_text` falhar, um WARNING é registado; a função tenta não
+        propagar exceções para não interromper o loop principal.
+      - Quando `hourly` está ativo e a escrita for bem-sucedida, atualiza um
+        ficheiro de controle em ``.cache`` contendo o timestamp da última
+        gravação humana para controlar futuras escritas agregadas.
     """
     if not log and not hourly:
         logger.debug("human write suprimido (log=False e hourly=False)")
@@ -268,8 +300,10 @@ def _perform_human_write(
 
     if _hourly_allows_write(name, hourly, hourly_window_seconds):
         human_line = build_human_line(format_date_for_log(None), level, human_msg, extra)
-        write_text(plain_path, human_line)
-        if hourly:
+        ok = write_text(plain_path, human_line)
+        if not ok:
+            logger.warning("_perform_human_write: falha ao escrever human log %s", plain_path)
+        if hourly and ok:
             try:
                 project_root = Path(__file__).resolve().parents[2]
                 cache_dir = project_root / ".cache"
@@ -280,7 +314,18 @@ def _perform_human_write(
             except Exception as exc:
                 logger.debug("_perform_human_write: não foi possível escrever hourly ts: %s", exc, exc_info=True)
     else:
-        logger.debug("human write ignorado pela janela hourly")
+        # Mensagem mais explícita para diagnosticar quando uma escrita humana
+        # é suprimida pelo mecanismo 'hourly'. Incluir o nome do log e a
+        # janela ajuda a identificar chamadas agregadas (ex: average_log).
+        try:
+            logger.debug(
+                "Escrita humana suprimida para '%s': dentro da janela hourly de %s segundos; última escrita recente",
+                name,
+                hourly_window_seconds,
+            )
+        except Exception:
+            # fallback simples caso haja problema ao formatar a mensagem
+            logger.debug("human write ignorado pela janela hourly")
 
 
 # Auxiliar de write_log: constrói e grava um objeto JSON em jsonl para ingestão
@@ -289,13 +334,15 @@ def _perform_json_write(jsonl_path: Path, ts: str, level: str, msg, extra: dict 
 
     Mantém formato compatível com consumidores de métricas/ingestão.
     """
-    # Avoid embedding human-oriented summaries in the canonical JSON feed.
-    # Keep metrics and other machine-readable keys only.
+    # Evitar incluir sumários orientados ao humano no feed JSON canónico.
+    # Manter apenas chaves e métricas legíveis por máquinas.
     safe_extra = None
     if isinstance(extra, dict):
         safe_extra = {k: v for k, v in extra.items() if k not in ("summary_short", "summary_long")}
     json_obj = build_json_entry(ts, level, msg, safe_extra)
-    write_json(jsonl_path, json_obj)
+    ok = write_json(jsonl_path, json_obj)
+    if ok is False:
+        logger.warning("_perform_json_write: falha ao escrever jsonl %s", jsonl_path)
 
 
 # Retorna o caminho do arquivo de debug do dia; usado por debug logging
@@ -336,7 +383,8 @@ def ensure_log_dirs_exist(root: str | Path | None = None) -> None:
         # cheap check; if any missing, force resolution/creation via get_log_paths
         if not p.exists():
             try:
-                # this will create the directories via _ensure_dir_writable
+                # isto cria os diretórios chamando get_log_paths (que usa
+                # ensure_dir_writable internamente)
                 get_log_paths(root)
             except Exception as exc:
                 logger.debug("ensure_log_dirs_exist: failed to recreate %s: %s", p, exc, exc_info=True)

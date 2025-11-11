@@ -8,26 +8,21 @@ services:
     command: python -m src.main
     environment:
       - INFRA_MONITORING_SYSTEM_EXPORTER_ENABLE=0
+      - MONITORING_CYCLES=0
     volumes:
       - ./logs:/app/logs
       - ./reports:/app/reports
       - ./.cache:/app/.cache
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
 
-  infra-monitoring-system-metrics:
-    build: .
-    container_name: infra-monitoring-system_metrics
-    command: python -m src.exporter.main_http
-    environment:
-      - INFRA_MONITORING_SYSTEM_HTTP_PORT=8000
-      - LOKI_URL=http://loki:3100/api/prom/push
-      - LOKI_LABELS=job=infra-monitoring-system
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./logs:/app/logs
-      - ./.cache:/app/.cache
-    restart: unless-stopped
 
   prometheus:
     image: prom/prometheus:latest
@@ -36,8 +31,7 @@ services:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
       - "9090:9090"
-    depends_on:
-      - infra-monitoring-system-metrics
+    # depends_on removido pois o serviço de métricas foi excluído
 
   grafana:
     image: grafana/grafana:latest

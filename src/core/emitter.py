@@ -6,17 +6,19 @@ para reduzir responsabilidades do `core` e facilitar testes.
 """
 
 import logging
+
+# ruff: noqa: D401
 from ..monitoring.formatters import normalize_for_display, format_snapshot_human
 from ..system.logs import write_log
 
 _NO_DATA_STR = "Sem dados"
 
 
-def _format_human_msg(snapshot: dict | None, result: dict) -> str:
-    """Format a human-readable message from snapshot/result.
+def _format_human_msg(snapshot: dict | None, result: dict) -> str:  # noqa: D401
+    """Formate uma mensagem legível por humanos a partir do snapshot/result.
 
-    Delegates to centralized formatter when possible and falls back to a
-    minimal representation on error.
+    Delegará para o formatador centralizado quando possível e, em caso de
+    erro, retorna uma representação mínima.
     """
     try:
         return format_snapshot_human(snapshot, result)
@@ -24,10 +26,10 @@ def _format_human_msg(snapshot: dict | None, result: dict) -> str:
         return f"state={result.get('state')}"
 
 
-def _print_snapshot_short(snap: dict | None) -> None:
-    """Print a short summary of the snapshot to stdout.
+def _print_snapshot_short(snap: dict | None) -> None:  # noqa: D401
+    """Imprima um resumo curto do snapshot no stdout.
 
-    Prints a default message when snapshot is not available.
+    Imprime uma mensagem padrão quando o snapshot não estiver disponível.
     """
     if not isinstance(snap, dict):
         print(_NO_DATA_STR)
@@ -47,11 +49,10 @@ def _print_snapshot_short(snap: dict | None) -> None:
     print(_NO_DATA_STR)
 
 
-def _print_snapshot_long(snap: dict | None) -> None:
-    """Print a long multi-line snapshot to stdout.
+def _print_snapshot_long(snap: dict | None) -> None:  # noqa: D401
+    """Imprima um snapshot longo multilinha no stdout.
 
-    Falls back to a metric-derived long summary when explicit summary is
-    not present.
+    Em falta de sumário explícito, tenta derivar um resumo longo a partir das métricas.
     """
     if not isinstance(snap, dict):
         print("SNAPSHOT: Sem dados")
@@ -75,18 +76,18 @@ def _print_snapshot_long(snap: dict | None) -> None:
     print("SNAPSHOT:", snap)
 
 
-def emit_snapshot(snapshot: dict | None, result: dict, verbose_level: int) -> None:
-    """Emit a snapshot to logging subsystem and optionally to stdout.
+def emit_snapshot(snapshot: dict | None, result: dict, verbose_level: int) -> None:  # noqa: D401
+    """Emita um snapshot para o subsistema de logs e opcionalmente para stdout.
 
-    - writes JSON canonical feed for ingestion
-    - if verbose_level > 0, prints human readable short/long output
+    - escreve o feed JSON canônico para ingestão
+    - se verbose_level > 0, imprime saída humana (curta/longa)
     """
     logger = logging.getLogger(__name__)
 
     try:
         human_msg = _format_human_msg(snapshot, result)
         try:
-            # Write only JSON for the canonical monitoring feed here.
+            # Escreve apenas JSON para o feed canônico de monitoring.
             write_log("monitoring", "INFO", human_msg, extra=snapshot, human_enable=False, json_enable=True)
         except Exception as exc:
             logger.info("Falha ao escrever log via write_log: %s", exc)

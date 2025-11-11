@@ -26,9 +26,9 @@ def _read_maintenance_intervals() -> tuple[int, int, int, int]:
     except (TypeError, ValueError):
         rotate_interval = 24 * 3600
     try:
-        compress_interval = int(os.getenv("MONITORING_COMPRESS_INTERVAL_SEC", str(60 * 60)))
+        compress_interval = int(os.getenv("MONITORING_COMPRESS_INTERVAL_SEC", str(24 * 3600)))
     except (TypeError, ValueError):
-        compress_interval = 60 * 60
+        compress_interval = 24 * 3600
     try:
         safe_remove_interval = int(os.getenv("MONITORING_SAFE_REMOVE_INTERVAL_SEC", str(24 * 3600 * 7)))
     except (TypeError, ValueError):
