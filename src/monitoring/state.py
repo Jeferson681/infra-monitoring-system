@@ -1,8 +1,10 @@
-"""System State Manager (final clean replacement).
+"""Gerenciamento do estado do sistema.
 
-Minimal, clean implementation of the public APIs used by the tests. Keeps
-the post-treatment worker best-effort and small so tests can reliably
-import and exercise the module.
+Implementação mínima e clara das APIs públicas usadas pelos testes. Mantém o
+worker de pós-tratamento em modo best-effort e pequeno para facilitar
+importação e testes. Define constantes de estado, funções para computar
+estados por métrica e utilitários de persistência para histórico de
+pós-tratamento.
 """
 
 import time
@@ -244,8 +246,19 @@ class SystemState:
 
         cache_dir = base / _CACHE_DIRNAME
         cache_dir.mkdir(parents=True, exist_ok=True)
-        with (cache_dir / _POST_TREATMENT_FILENAME).open("a", encoding="utf-8") as fh:
-            fh.write(_json.dumps(snap, ensure_ascii=False) + "\n")
+        try:
+            from ..system.log_helpers import write_json as _write_json
+
+            _write_json(cache_dir / _POST_TREATMENT_FILENAME, snap)
+        except Exception:
+            # Best-effort fallback: attempt direct append but do not raise
+            try:
+                with (cache_dir / _POST_TREATMENT_FILENAME).open("a", encoding="utf-8") as fh:
+                    fh.write(_json.dumps(snap, ensure_ascii=False) + "\n")
+            except Exception:
+                # Best-effort fallback: ignore write errors while attempting direct append
+                # nosec B110 - intentional swallow: persistence is best-effort here
+                pass
 
         json_dir = base / "json"
         json_dir.mkdir(parents=True, exist_ok=True)
@@ -253,8 +266,18 @@ class SystemState:
         for k, v in snap.items():
             if k not in entry:
                 entry[k] = v
-        with (json_dir / f"monitoring-{_time.strftime('%Y-%m-%d')}.jsonl").open("a", encoding="utf-8") as mf:
-            mf.write(_json.dumps(entry, ensure_ascii=False) + "\n")
+        try:
+            from ..system.log_helpers import write_json as _write_json2
+
+            _write_json2(json_dir / f"monitoring-{_time.strftime('%Y-%m-%d')}.jsonl", entry)
+        except Exception:
+            try:
+                with (json_dir / f"monitoring-{_time.strftime('%Y-%m-%d')}.jsonl").open("a", encoding="utf-8") as mf:
+                    mf.write(_json.dumps(entry, ensure_ascii=False) + "\n")
+            except Exception:
+                # Best-effort fallback: ignore write errors while attempting direct append
+                # nosec B110 - intentional swallow: persistence is best-effort here
+                pass
 
     def _post_treatment_worker(self, metrics_snapshot: dict[str, Any]) -> None:
         """Worker logic for post-treatment; kept best-effort and resilient."""

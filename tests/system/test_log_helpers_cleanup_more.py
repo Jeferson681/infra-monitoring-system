@@ -53,9 +53,9 @@ def test_write_text_outer_oserror_fallback(tmp_path, monkeypatch):
 
     monkeypatch.setattr(Path, "open", fake_open, raising=False)
 
-    # write_text logs the error and returns None (best-effort). Ensure no file created.
+    # write_text logs the error and returns False on failure. Ensure no file created.
     res = lh.write_text(target, "hello\n")
-    assert res is None
+    assert res is False
     assert not target.exists()
 
 

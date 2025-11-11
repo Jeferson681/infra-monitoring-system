@@ -14,7 +14,7 @@ Comentários e mensagens de log estão em português.
 
 import os
 from pathlib import Path
-from ..system.helpers import merge_env_items
+from ..system.helpers import merge_env_items, read_env_file
 
 
 # Constantes e padrões globais
@@ -97,8 +97,20 @@ def load_settings() -> dict:
     project_root = Path(__file__).resolve().parents[2]
     env_path = Path(os.getenv("MONITORING_ENV_FILE", project_root / ".env"))
 
+    # Copilot
     # Mescla .env com variáveis de ambiente do processo
-    env_items = merge_env_items(env_path, dict(os.environ))
+    # Se MONITORING_ENV_FILE foi explicitamente definido, consideramos que o
+    # arquivo apontado deve prevalecer sobre variáveis de ambiente do processo
+    # (isso ajuda em testes que criam um .env temporário). Caso contrário,
+    # mantemos o comportamento padrão: variáveis do processo sobrescrevem o
+    # arquivo .env.
+    process_env = dict(os.environ)
+    if os.getenv("MONITORING_ENV_FILE"):
+        file_items = read_env_file(env_path)
+        env_items = dict(process_env)
+        env_items.update(file_items)
+    else:
+        env_items = merge_env_items(env_path, process_env)
     _apply_threshold_overrides(env_items, thresholds, logger)
 
     treatment_policies = DEFAULT_TREATMENT_POLICIES.copy()

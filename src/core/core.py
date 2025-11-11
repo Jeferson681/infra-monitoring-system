@@ -17,21 +17,12 @@ from ..monitoring.averages import ensure_last_ts_exists
 
 _NO_DATA_STR = "Sem dados"
 
-# Maintenance helpers are provided by `src.system.maintenance` and imported above.
+# Helpers de manutenção estão em `src.system.maintenance` (importados acima).
 
 
 # ========================
 # 1. Funções auxiliares para formatação e emissão de snapshots
 # ========================
-
-
-# Auxilia _emit_snapshot; criado para formatar mensagem humana do snapshot
-
-# Auxilia _emit_snapshot; criado para imprimir resumo curto do snapshot
-
-# Auxilia _emit_snapshot; criado para imprimir resumo longo do snapshot
-
-# Auxilia _run_loop; responsável por emitir snapshot via emitter module
 
 
 # ========================
@@ -40,7 +31,7 @@ _NO_DATA_STR = "Sem dados"
 
 
 # Função principal do módulo; executa o loop de coleta e manutenção
-def _run_loop(interval: float, cycles: int, verbose_level: int) -> None:
+def run_loop(interval: float, cycles: int, verbose_level: int) -> None:
     """Loop principal do monitor que coleta métricas e executa manutenção.
 
     Parâmetros:
@@ -48,24 +39,14 @@ def _run_loop(interval: float, cycles: int, verbose_level: int) -> None:
         cycles: número de ciclos a executar (0 = infinito).
         verbose_level: controla o nível de saída humana (0 = silencioso).
     """
-    import os
     import time
 
     thresholds = get_valid_thresholds()
     state = SystemState(thresholds)
-    # Lê intervalos configuráveis via env, mantendo defaults
-    env_interval = os.getenv("MONITORING_INTERVAL_SEC")
-    env_cycles = os.getenv("MONITORING_CYCLES")
-    try:
-        interval = float(env_interval) if env_interval is not None else interval
-    except Exception as exc:
-        logging.getLogger(__name__).warning(
-            f"MONITORING_INTERVAL_SEC inválido ('{env_interval}'): {exc}. Usando valor padrão."
-        )
-    try:
-        cycles = int(env_cycles) if env_cycles is not None else cycles
-    except Exception as exc:
-        logging.getLogger(__name__).warning(f"MONITORING_CYCLES inválido ('{env_cycles}'): {exc}. Usando valor padrão.")
+    # Obs: o parser de argumentos (`src.core.args.parse_args`) já aplica overrides
+    # via variáveis de ambiente quando adequado (prioridade: CLI > ENV > default).
+    # Não re-ler env aqui para evitar que variáveis de ambiente sobrescrevam
+    # valores fornecidos explicitamente pela linha de comando.
     executed = 0
     intervals = _read_maintenance_intervals()
     last_rotate = 0.0
@@ -104,7 +85,7 @@ def _ensure_runtime_checks() -> None:
     try:
         ensure_log_dirs_exist()
     except Exception as exc:
-        # do not fail the loop if the lightweight check has issues
+        # não falhar o loop se a verificação leve apresentar problemas
         logging.getLogger(__name__).debug("ensure_log_dirs_exist failed: %s", exc, exc_info=True)
     try:
         ensure_last_ts_exists()
@@ -128,3 +109,8 @@ def _collect_and_emit(state: SystemState, verbose_level: int) -> dict:
     snapshot = getattr(state, "current_snapshot", None)
     _emit_snapshot(snapshot if isinstance(snapshot, dict) else None, result, verbose_level)
     return result
+
+
+# Tornar a função disponível também sem a versão pública para retrocompatibilidade
+# (algumas referências internas/tests podem usar o nome com underscore).
+_run_loop = run_loop

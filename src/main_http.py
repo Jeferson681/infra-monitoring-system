@@ -18,12 +18,18 @@ except ImportError:
 
 
 class HealthHandler(BaseHTTPRequestHandler):
-    """HTTP handler para endpoints /health e (opcionalmente) /metrics."""
+    """Handler HTTP para endpoints de saúde e métricas.
+
+    Suporta `/health` (retorna um JSON com métricas de host e processo) e
+    `/metrics` quando o cliente Prometheus estiver disponível.
+    """
 
     def do_GET(self):
-        """Manipula requisições GET para /health, /metrics e outros endpoints.
+        """Trata requisições GET.
 
-        Retorna status do host, métricas do processo ou métricas Prometheus.
+        Endpoints suportados:
+        - /health: JSON com estado do host e métricas do processo.
+        - /metrics: métricas em formato Prometheus quando disponível.
         """
         if self.path == "/health":
             self.send_response(200)
@@ -40,7 +46,9 @@ class HealthHandler(BaseHTTPRequestHandler):
                 "process_uptime_seconds": float(max(0, (time.time() - proc.create_time()))),
                 "process_num_threads": proc.num_threads(),
             }
-            # Só adiciona a métrica se o método existir
+            # Só adiciona a métrica se o método existir (nem todas as plataformas
+            # expõem num_fds). Este bloco é best-effort e não deve falhar a
+            # requisição inteira se a métrica não puder ser obtida.
             num_fds_fn = getattr(proc, "num_fds", None)
             if callable(num_fds_fn):
                 try:
@@ -48,7 +56,7 @@ class HealthHandler(BaseHTTPRequestHandler):
                     if isinstance(fds, int):
                         process_metrics["process_num_fds"] = fds
                 except Exception as exc:
-                    # Pode ocorrer em plataformas sem suporte a num_fds; ignora silenciosamente
+                    # Possível em plataformas sem suporte; registrar em debug apenas
                     import logging
 
                     logging.getLogger(__name__).debug(
@@ -85,10 +93,15 @@ class HealthHandler(BaseHTTPRequestHandler):
 def run_http_server(port=8000, addr="0.0.0.0"):  # nosec B104
     """Inicia o servidor HTTP para expor os endpoints /health e /metrics.
 
-    Observação: O endereço padrão '0.0.0.0' expõe o serviço em todas as interfaces de rede, permitindo acesso externo.
-    Para maior segurança em ambiente local, utilize '127.0.0.1' para restringir o acesso ao localhost.
-    Sempre avalie a necessidade de exposição e proteja o serviço com firewall, autenticação
-    ou rede segura conforme o caso.
+    Args:
+        port: Porta TCP onde o servidor irá escutar (padrão: 8000).
+        addr: Endereço/host para binding (padrão: "0.0.0.0" - todas as
+            interfaces). Em ambientes locais use "127.0.0.1" quando apropriado.
+
+    Observação:
+        O serviço exposto pode conter informações sensíveis do host. Proteja
+        o acesso com firewall, autenticação ou redes privadas quando necessário.
+
     """
     server = HTTPServer((addr, port), HealthHandler)  # nosec
     print(f"[HTTP] Servindo em http://{addr}:{port} (/health, /metrics)")

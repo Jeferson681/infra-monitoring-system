@@ -97,15 +97,48 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
     parser = configure_argparser()
     ns = parser.parse_args(argv)
-    # Se modo time, permite override via env
+    # Mapeamento de argumentos para variáveis de ambiente
+    env_map = {
+        "interval": "MONITORING_INTERVAL_SEC",
+        "cycles": "MONITORING_CYCLES",
+        "cycle_mode": "MONITORING_CYCLE_MODE",
+        "verbose": "MONITORING_VERBOSE",
+        "log_root": "MONITORING_LOG_ROOT",
+        "log_level": "MONITORING_LOG_LEVEL",
+    }
+    import logging
+
+    # Aplicar overrides via variáveis de ambiente SOMENTE quando o argumento
+    # não foi fornecido pela linha de comando (CLI tem precedência).
+    for arg, env_var in env_map.items():
+        env_val = os.getenv(env_var)
+        if env_val is None:
+            continue
+        # se o usuário passou o argumento via CLI, não sobrescrever
+        try:
+            default_val = parser.get_default(arg)
+        except Exception:
+            default_val = None
+        current_val = getattr(ns, arg, None)
+        if current_val is not None and current_val != default_val:
+            # valor vindo da CLI tem prioridade
+            continue
+        try:
+            if arg == "interval":
+                setattr(ns, arg, float(env_val))
+            elif arg in ("cycles", "verbose"):
+                setattr(ns, arg, int(env_val))
+            else:
+                setattr(ns, arg, env_val)
+        except Exception as exc:
+            logging.getLogger(__name__).warning(f"{env_var} inválido ('{env_val}'): {exc}. Usando valor do argumento.")
+    # Se modo time, permite override via env específico
     if getattr(ns, "cycle_mode", "cycles") == "time":
         env_time = os.getenv("MONITORING_CYCLE_TIME_MIN")
         if env_time is not None:
             try:
                 ns.cycles = int(env_time)
             except Exception as exc:
-                import logging
-
                 logging.getLogger(__name__).warning(
                     f"MONITORING_CYCLE_TIME_MIN inválido ('{env_time}'): {exc}. Usando valor do argumento."
                 )
@@ -149,6 +182,6 @@ def get_log_config(args: argparse.Namespace) -> dict:
         if v >= 1:
             level = "INFO"
         else:
-            level = "WARNING"
+            level = "DEBUG"
 
     return {"level": level, "root": getattr(args, "log_root", None)}

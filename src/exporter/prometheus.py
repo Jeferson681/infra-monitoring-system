@@ -86,38 +86,50 @@ def _sanitize_metric_name(name: str) -> str:
     return "".join(out)
 
 
-def start_exporter(port: int | None = None, addr: str = "127.0.0.1") -> None:
+def start_exporter(port: int | None = None, addr: str | None = None) -> None:
     """Inicia o servidor HTTP do Prometheus Exporter no endereço e porta informados.
 
+    Comportamento:
+    - Mantém o comportamento atual quando nenhuma variável de ambiente é definida
+      (default addr = "127.0.0.1", port = 8000).
+    - Permite sobrescrever via variáveis de ambiente `MONITORING_EXPORTER_ADDR`
+      e `MONITORING_EXPORTER_PORT` quando os parâmetros `addr`/`port` forem None.
+
     Se `prometheus_client` não estiver disponível, apenas loga e não faz nada.
-    A porta pode ser definida pela variável de ambiente `MONITORING_EXPORTER_PORT` se `port` for None.
     """
     global _server_started
     if not _HAVE_PROM:
-        logger.warning("prometheus_client not installed; exporter disabled")
+        logger.warning("prometheus_client não instalado; exporter desativado")
         return
 
     if _server_started:
-        logger.debug("prometheus exporter already started")
+        logger.debug("exporter Prometheus já iniciado")
         return
 
     # Atualiza os Gauges do sistema a partir do JSONL ao iniciar o exporter
     jsonl_path = os.path.join(os.path.dirname(__file__), "..", "..", "logs", "json")
     expose_system_metrics_from_jsonl(jsonl_path)
 
+    # Resolve addr/port a partir de parâmetros ou variáveis de ambiente.
+    if addr is None:
+        addr = os.getenv("MONITORING_EXPORTER_ADDR", "127.0.0.1")
     if port is None:
-        try:
-            port = int(os.getenv("MONITORING_EXPORTER_PORT", "8000"))
-        except Exception:
-            # Se a conversão da porta falhar, usa valor padrão
+        env_port = os.getenv("MONITORING_EXPORTER_PORT")
+        if env_port is not None:
+            try:
+                port = int(env_port)
+            except Exception:
+                logger.warning("MONITORING_EXPORTER_PORT inválido ('%s'), usando 8000", env_port)
+                port = 8000
+        else:
             port = 8000
 
     try:
         start_http_server(port, addr)
         _server_started = True
-        logger.info("Prometheus exporter started on %s:%d", addr, port)
+        logger.info("Prometheus exporter iniciado em %s:%d", addr, port)
     except Exception as exc:
-        logger.exception("Failed to start prometheus exporter: %s", exc)
+        logger.exception("Falha ao iniciar Prometheus exporter: %s", exc)
 
 
 def expose_metric(name: str, value: float, description: str = "") -> None:
@@ -127,7 +139,7 @@ def expose_metric(name: str, value: float, description: str = "") -> None:
     Se `prometheus_client` não estiver disponível, apenas loga e retorna.
     """
     if not _HAVE_PROM:
-        logger.debug("prometheus_client not available; expose_metric %s=%s ignored", name, value)
+        logger.debug("prometheus_client não disponível; expose_metric %s=%s ignorado", name, value)
         return
 
     san = _sanitize_metric_name(name)
@@ -141,7 +153,7 @@ def expose_metric(name: str, value: float, description: str = "") -> None:
         g_cast = cast(Gauge, g)
         g_cast.set(float(value))
     except Exception as exc:
-        logger.debug("Failed to expose metric %s: %s", name, exc, exc_info=True)
+        logger.debug("Falha ao expor métrica %s: %s", name, exc, exc_info=True)
 
 
 def expose_process_metrics() -> None:
@@ -179,4 +191,4 @@ def expose_process_metrics() -> None:
                 # Pode ocorrer em plataformas sem suporte a num_fds; ignora silenciosamente
                 logger.debug("Falha ao obter número de descritores de arquivos: %s", exc, exc_info=True)
     except Exception as exc:
-        logger.debug("Failed to expose process metrics: %s", exc, exc_info=True)
+        logger.debug("Falha ao expor métricas do processo: %s", exc, exc_info=True)
