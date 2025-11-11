@@ -8,7 +8,7 @@ def test_configure_argparser_defaults():
     """Teste para configuração de argumentos padrão do parser."""
     p = args_mod.configure_argparser()
     ns = p.parse_args([])
-    assert ns.interval == 1.0
+    assert ns.interval == 3.0
     assert ns.cycles == 1
 
 

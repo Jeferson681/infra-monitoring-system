@@ -3,7 +3,7 @@
 [![CI](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/ci.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/ci.yml)
 [![CD](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/cd.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/cd.yml)
 [![Coverage](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/tests-coverage.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/tests-coverage.yml)
-[![Dependabot Updates](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/dependabot/dependabot-updates/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/dependabot/dependabot-updates)
+[![Dependabot](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/dependabot/dependabot-updates/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/dependabot/dependabot-updates)
 [![Gitleaks](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/gitleaks-scan.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/gitleaks-scan.yml)
 [![Snyk](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/snyk-scan.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/snyk-scan.yml)
 [![Trivy](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/trivy-scan.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/trivy-scan.yml)
@@ -13,114 +13,111 @@
 
 ## 📘 Overview
 
-Application developed for **real-time local system metrics collection and exposure**, focused on **automation, continuous integration, and observability**.
-Written in **Python**, the application collects **CPU, memory, and process** data, exporting metrics for integration with **Prometheus** and **Grafana**.
-The project is both **didactic and professional**, serving as a validation environment for automation and infrastructure best practices.
+Professional and educational application for **local system metrics collection and exposition**, focused on **automation, CI/CD, and observability**.
+Developed in **Python**, integrates metrics and logs with the **Prometheus + Grafana + Loki** ecosystem.
 
 ---
 
 ## 🧩 Architecture & Flow
 
-1. **Continuous Integration (CI)**
-   Runs tests, lint, and dependency validations on every commit.
-   Ensures integrity before build.
-
-2. **Tests & Coverage**
-   Measures automated test coverage to maintain code quality.
-
-3. **Continuous Delivery (CD)**
-   Automatically builds and publishes the Docker image.
-   Controls versions and post-deploy validations.
-
-4. **Security Automation**
-   - **Dependabot:** keeps dependencies up to date.
-   - **Gitleaks:** prevents secret leaks.
-   - **Snyk:** detects package vulnerabilities.
-   - **Trivy:** scans Docker images for vulnerabilities.
-
-5. **Infrastructure as Code (IaC)**
-   Terraform is used for **demonstrative provisioning**, documenting the possibility of replicating the environment in the cloud, although main execution occurs locally.
+1. **Continuous Integration (CI)** — validates code, dependencies, and tests.
+2. **Test Coverage** — measures automated test coverage.
+3. **Continuous Delivery (CD)** — builds and publishes the Docker image automatically.
+4. **Security Automation:**
+   - Dependabot (dependencies)
+   - Gitleaks (secrets)
+   - Snyk (package vulnerabilities)
+   - Trivy (image analysis)
+5. **Infrastructure as Code (IaC)** — Terraform documents environment automation, **no real execution** during CD.
 
 ---
 
 ## ⚙️ Local Execution
 
-```bash
-# Clone the repository
+```shell
 git clone https://github.com/Jeferson681/infra-monitoring-system.git
 cd infra-monitoring-system
-
-# Build and run containers
 docker-compose up --build
+```
 
-# Access Prometheus
-http://localhost:9090
+**Local services:**
+- Prometheus → http://localhost:9090
+- Grafana → http://localhost:3000
+- Loki → http://localhost:3100
+- Exporter → http://localhost:8000/metrics
 
-# Access Grafana
-http://localhost:3000
+Run via virtualenv:
 
-# Access Loki
-http://localhost:3100
+```shell
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 
-# Access local metrics
-http://localhost:8000/metrics
+# Enable exporter and start monitoring
+export MONITORING_EXPORTER_ENABLE=1
+export MONITORING_EXPORTER_ADDR=127.0.0.1
+export MONITORING_EXPORTER_PORT=8000
+python -m src.main -i 1 -c 0
 ```
 
 ---
 
-## 🧱 Directory Structure
+## 🏗️ Directory Structure
 
 ```
 infra-monitoring-system/
-│
 ├── src/                  # Main source code
 ├── tests/                # Automated tests
-├── infra/                # Infrastructure (alertmanager, promtail, prometheus, terraform)
-│   └── terraform/        # Demonstrative provisioning (README_TERRAFORM.md, main.tf)
+├── infra/                # Configurations (promtail, terraform, prometheus)
+│   └── terraform/        # IaC demo
 ├── .github/workflows/    # CI/CD pipelines
-├── Dockerfile            # Container image
+├── Dockerfile            # Docker image
 ├── docker-compose.yml    # Container orchestration
 └── README.md
 ```
 
 ---
 
-## 🧰 Tech Stack
+## 🧑‍💻 Tech Stack
 
 - **Language:** Python
 - **Monitoring:** Prometheus, Grafana, Loki
 - **Orchestration:** Docker, Docker Compose
-- **Infrastructure:** Terraform
+- **IaC:** Terraform
 - **Pipeline:** GitHub Actions
-- **Operating System:** Linux (WSL compatible)
+- **OS:** Linux / WSL
 
 ---
 
-## 🔐 Security & Compliance
+## 🔒 Security & Compliance
 
-The project adopts multiple security and automation validators to prevent failures and vulnerabilities:
-- Gitleaks (secrets)
-- Snyk (packages)
-- Trivy (images)
-- Dependabot (dependencies)
+- **Gitleaks** — prevents secret exposure.
+- **Snyk** — detects vulnerabilities.
+- **Trivy** — scans Docker images.
+- **Dependabot** — keeps dependencies secure and up to date.
 
-These steps are automated in the pipelines and visible via badges at the top.
+All checks are automated via GitHub Actions pipelines.
 
 ---
 
-## 🏗️ Infrastructure (Terraform)
+## 🏕️ Infrastructure (Terraform)
 
-Terraform is included **as a professional demonstration module**, highlighting IaC expertise.
-Its use is **documented but not executed** during CD, as the program depends on local host metrics.
+Terraform is used as a **demonstrative IaC module**, showing conceptual mastery and automation best practices.
+Since the system relies on local metrics, **no real cloud provisioning is performed**.
 
-📄 Full documentation available at
-[`infra/terraform/README_TERRAFORM.md`](./infra/terraform/README_TERRAFORM.md)
+---
+
+## 🧑‍🔬 Technical Note — psutil Collection Limit
+
+`psutil` collects metrics from the current process environment.
+When running in containers, metrics represent only the container context, not the host system.
+
+For full infrastructure observability, use **node_exporter** or **cadvisor**.
+This application is intended for educational and DevOps pipeline validation purposes.
 
 ---
 
 ## 📎 License
 
-This project is free to use for educational and demonstrative purposes.
 Distributed under the **MIT** license.
-
----
+Full documentation available at [`/DOCS.EN.md`](./DOCS.EN.md).

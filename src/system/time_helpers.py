@@ -1,3 +1,12 @@
+"""Funções utilitárias para extrair timestamps de objetos de log.
+
+Este módulo fornece helpers que tentam localizar e normalizar campos de
+data/tempo em estruturas JSON-like (dicts e listas). A principal função
+exportada é ``extract_epoch(obj)`` que tenta vários locais comuns e faz
+parsing de formatos numéricos e ISO, retornando um float (segundos desde
+epoch) ou ``None`` quando não encontrar um timestamp.
+"""
+
 from typing import Any, Optional, Iterator
 import datetime
 import logging

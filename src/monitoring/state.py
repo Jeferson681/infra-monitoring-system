@@ -1,8 +1,10 @@
-"""System State Manager (final clean replacement).
+"""Gerenciamento do estado do sistema.
 
-Minimal, clean implementation of the public APIs used by the tests. Keeps
-the post-treatment worker best-effort and small so tests can reliably
-import and exercise the module.
+Implementação mínima e clara das APIs públicas usadas pelos testes. Mantém o
+worker de pós-tratamento em modo best-effort e pequeno para facilitar
+importação e testes. Define constantes de estado, funções para computar
+estados por métrica e utilitários de persistência para histórico de
+pós-tratamento.
 """
 
 import time
@@ -25,7 +27,7 @@ _CACHE_DIRNAME = ".cache"
 _POST_TREATMENT_FILENAME = "post_treatment_history.jsonl"
 
 
-def _compute_metric_states(metrics: dict, thresholds: dict) -> dict:
+def _compute_metric_states(metrics: dict, thresholds: dict, ignore_metrics: Optional[list[str]] = None) -> dict:
     state_field_map = {
         "cpu_percent": "state_cpu",
         "memory_used_bytes": "state_ram",
@@ -35,8 +37,11 @@ def _compute_metric_states(metrics: dict, thresholds: dict) -> dict:
         "bytes_sent": "state_bytes_sent",
         "bytes_recv": "state_bytes_recv",
     }
+    ignore_metrics = ignore_metrics or []
     out: dict = {}
     for metric, key in state_field_map.items():
+        if metric in ignore_metrics:
+            continue
         value = (metrics or {}).get(metric)
         limits = (thresholds or {}).get(metric, {}) or {}
         warn = limits.get("warning")
@@ -54,15 +59,32 @@ def _compute_metric_states(metrics: dict, thresholds: dict) -> dict:
 
 
 def compute_metric_states(metrics: dict, thresholds: dict) -> dict:
-    """Public wrapper for per-metric state calculation."""
-    # Tests expect an empty mapping when both inputs are empty; preserve that
+    """Public wrapper for per-metric state calculation, ignorando métricas informativas/duplicadas sem tratamento."""
+    # Métricas a ignorar: informativas, duplicadas ou sem tratamento
+    ignore_metrics = [
+        "memory_total_bytes",
+        "disk_used_bytes",
+        "disk_total_bytes",
+        "temperature",
+        "latency_ms",
+        "bytes_sent",
+        "bytes_recv",
+    ]
     if not metrics and not thresholds:
         return {}
-    return _compute_metric_states(metrics or {}, thresholds or {})
+    return _compute_metric_states(metrics or {}, thresholds or {}, ignore_metrics)
 
 
 class SystemState:
-    """Manage snapshots and run a background post-treatment worker."""
+    """Gerencia snapshots de métricas e executa o worker de pós-tratamento em background.
+
+    - thresholds: Limites por métrica para avaliação de estado.
+    - critical_duration: Tempo de persistência em estado crítico antes do tratamento.
+    - post_treatment_wait_seconds: Espera antes do pós-tratamento.
+    - critic_since: Controle de tempo para persistência de estado crítico.
+    """
+
+    critic_since: dict[str, float]
 
     def __init__(
         self, thresholds: dict[str, Any], *, critical_duration: int | None = None, post_treatment_wait_seconds: int = 10
@@ -94,6 +116,7 @@ class SystemState:
         self.treatment_active = False
         self.critical_start_time = 0.0
         self.last_state = STATE_STABLE
+        self.critic_since = {}  # type: dict[str, float]
         self._lock = Lock()
 
     def evaluate_metrics(self, metrics: dict[str, Any]) -> str:
@@ -101,6 +124,18 @@ class SystemState:
 
         Retorna a string de estado calculada (ex.: 'STABLE', 'WARNING', 'CRITICAL').
         """
+        # Atualiza thresholds dinâmicos de rede com valor aprendido
+        try:
+            from src.system.network_learning import NetworkUsageLearningHandler
+
+            learning = NetworkUsageLearningHandler()
+            limit = learning.get_current_limit()
+            if "bytes_sent" in self.thresholds:
+                self.thresholds["bytes_sent"]["critical"] = limit
+            if "bytes_recv" in self.thresholds:
+                self.thresholds["bytes_recv"]["critical"] = limit
+        except Exception as exc:
+            logging.warning(f"Falha ao definir limite crítico: {exc}")
         state = self._evaluate_against_thresholds(metrics or {})
         self._update_snapshots(state, metrics or {})
         return state
@@ -216,16 +251,20 @@ class SystemState:
                 logging.getLogger(__name__).debug("post_treatment write fallback failed: %s", _exc)
 
     def _write_post_treatment_primary(self, snap: dict[str, Any]) -> None:
-        """Primary path: use configured log paths and helper write_json."""
-        from ..system.logs import get_log_paths
+        """Primary path: use .cache in project root and helper write_json."""
         from ..system.log_helpers import write_json
-
-        lp = get_log_paths()
-        (lp.root / _CACHE_DIRNAME).mkdir(parents=True, exist_ok=True)
-        write_json(lp.root / _CACHE_DIRNAME / _POST_TREATMENT_FILENAME, snap)
-
+        from pathlib import Path
         import time as _time
 
+        project_root = Path(__file__).resolve().parents[2]
+        cache_dir = project_root / _CACHE_DIRNAME
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        write_json(cache_dir / _POST_TREATMENT_FILENAME, snap)
+
+        # Mantém registro em logs/json/monitoring-*.jsonl normalmente
+        from ..system.logs import get_log_paths
+
+        lp = get_log_paths()
         entry = {"ts": datetime.now(timezone.utc).isoformat(), "level": "INFO", "msg": "post_treatment"}
         for k, v in snap.items():
             if k not in entry:
@@ -233,28 +272,23 @@ class SystemState:
         write_json(lp.json_dir / f"monitoring-{_time.strftime('%Y-%m-%d')}.jsonl", entry)
 
     def _write_post_treatment_fallback(self, snap: dict[str, Any]) -> None:
-        """Fallback path: write directly under MONITORING_LOG_ROOT or packaged logs directory."""
-        import os as _os
+        """Fallback path: write only to .cache in project root."""
+        from pathlib import Path
         import json as _json
-        from pathlib import Path as _Path
-        import time as _time
 
-        root = _os.getenv("MONITORING_LOG_ROOT")
-        base = _Path(root) if root else _Path(__file__).resolve().parents[2] / "logs"
-
-        cache_dir = base / _CACHE_DIRNAME
+        project_root = Path(__file__).resolve().parents[2]
+        cache_dir = project_root / _CACHE_DIRNAME
         cache_dir.mkdir(parents=True, exist_ok=True)
-        with (cache_dir / _POST_TREATMENT_FILENAME).open("a", encoding="utf-8") as fh:
-            fh.write(_json.dumps(snap, ensure_ascii=False) + "\n")
+        try:
+            from ..system.log_helpers import write_json as _write_json
 
-        json_dir = base / "json"
-        json_dir.mkdir(parents=True, exist_ok=True)
-        entry = {"ts": datetime.now(timezone.utc).isoformat(), "level": "INFO", "msg": "post_treatment"}
-        for k, v in snap.items():
-            if k not in entry:
-                entry[k] = v
-        with (json_dir / f"monitoring-{_time.strftime('%Y-%m-%d')}.jsonl").open("a", encoding="utf-8") as mf:
-            mf.write(_json.dumps(entry, ensure_ascii=False) + "\n")
+            _write_json(cache_dir / _POST_TREATMENT_FILENAME, snap)
+        except Exception:
+            try:
+                with (cache_dir / _POST_TREATMENT_FILENAME).open("a", encoding="utf-8") as fh:
+                    fh.write(_json.dumps(snap, ensure_ascii=False) + "\n")
+            except Exception as exc:
+                logging.warning(f"Falha ao gravar snapshot: {exc}")
 
     def _post_treatment_worker(self, metrics_snapshot: dict[str, Any]) -> None:
         """Worker logic for post-treatment; kept best-effort and resilient."""
@@ -349,11 +383,15 @@ class SystemState:
 
     def _persist_post_treatment_snapshot(self, snap: dict[str, Any]) -> None:
         try:
-            from ..system.logs import get_log_paths  # type: ignore
+            # import get_log_paths removido, não é mais necessário
             from ..system.log_helpers import write_json  # type: ignore
 
-            lp = get_log_paths()
-            hist_path = lp.root / _CACHE_DIRNAME / _POST_TREATMENT_FILENAME
+            # get_log_paths() removido, não é mais necessário
+            # Corrige para sempre criar .cache na raiz do projeto
+            from pathlib import Path
+
+            project_root = Path(__file__).resolve().parents[2]
+            hist_path = project_root / _CACHE_DIRNAME / _POST_TREATMENT_FILENAME
             hist_path.parent.mkdir(parents=True, exist_ok=True)
             try:
                 write_json(hist_path, snap)
@@ -393,3 +431,14 @@ class SystemState:
         except Exception:  # nosec B110
             pass
         return out
+
+
+## Instância global do estado do sistema para uso compartilhado
+try:
+    from ..config.settings import load_settings
+
+    thresholds = (load_settings() or {}).get("thresholds", {})
+except Exception:
+    thresholds = {}
+
+global_state = SystemState(thresholds)

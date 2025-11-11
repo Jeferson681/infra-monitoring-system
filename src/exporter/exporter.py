@@ -115,9 +115,9 @@ def start_exporter(port: int | None = None, addr: str = "127.0.0.1") -> None:
     try:
         start_http_server(port, addr)
         _server_started = True
-        logger.info("Prometheus exporter started on %s:%d", addr, port)
+        logger.info("Prometheus exporter iniciado em %s:%d", addr, port)
     except Exception as exc:
-        logger.exception("Failed to start prometheus exporter: %s", exc)
+        logger.exception("Falha ao iniciar Prometheus exporter: %s", exc)
 
 
 def expose_metric(name: str, value: float, description: str = "") -> None:
@@ -144,7 +144,7 @@ def expose_metric(name: str, value: float, description: str = "") -> None:
             g_cast = cast(Gauge, g)
             g_cast.set(float(value))
     except Exception as exc:
-        logger.debug("Failed to expose metric %s: %s", name, exc, exc_info=True)
+        logger.debug("Falha ao expor métrica %s: %s", name, exc, exc_info=True)
 
 
 def expose_process_metrics() -> None:
@@ -156,19 +156,19 @@ def expose_process_metrics() -> None:
         # Coleta e exporta métricas do processo:
         # - Porcentagem de CPU
         cpu = proc.cpu_percent(interval=0.0)
-        expose_metric("process_cpu_percent", cpu, "CPU percent used by this process")
+        expose_metric("process_cpu_percent", cpu, "Percentual de CPU usado por este processo")
         # - Porcentagem de memória
         mem = proc.memory_percent()
-        expose_metric("process_memory_percent", mem, "Memory percent used by this process")
+        expose_metric("process_memory_percent", mem, "Percentual de memória usado por este processo")
         # - Memória RSS (resident set size)
         rss = getattr(proc.memory_info(), "rss", 0)
-        expose_metric("process_memory_rss_bytes", rss, "Resident memory used by this process (bytes)")
+        expose_metric("process_memory_rss_bytes", rss, "Memória residente usada por este processo (bytes)")
         # - Uptime do processo
         uptime = time.time() - proc.create_time()
-        expose_metric("process_uptime_seconds", uptime, "Uptime of this process in seconds")
+        expose_metric("process_uptime_seconds", uptime, "Tempo de atividade (uptime) deste processo em segundos")
         # - Número de threads
         threads = proc.num_threads()
-        expose_metric("process_num_threads", threads, "Number of threads in this process")
+        expose_metric("process_num_threads", threads, "Número de threads neste processo")
         # - Número de descritores de arquivos abertos (se disponível na plataforma)
         # Usa getattr para evitar erro de análise estática do linter
         num_fds_fn = getattr(proc, "num_fds", None)
@@ -177,9 +177,9 @@ def expose_process_metrics() -> None:
                 fds = num_fds_fn()
                 # Só expõe a métrica se fds for int
                 if isinstance(fds, int):
-                    expose_metric("process_num_fds", float(fds), "Number of open file descriptors")
+                    expose_metric("process_num_fds", float(fds), "Número de descritores de ficheiros abertos")
             except Exception as exc:
                 # Pode ocorrer em plataformas sem suporte a num_fds; ignora silenciosamente
                 logger.debug("Falha ao obter número de descritores de arquivos: %s", exc, exc_info=True)
     except Exception as exc:
-        logger.debug("Failed to expose process metrics: %s", exc, exc_info=True)
+        logger.debug("Falha ao expor métricas do processo: %s", exc, exc_info=True)

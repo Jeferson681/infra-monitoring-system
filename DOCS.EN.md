@@ -1,57 +1,60 @@
 # Infra Monitoring System — Technical Documentation
 
-## 1. Purpose and Context
+## 1. Purpose & Context
 
-This system was developed for practical study of **monitoring, automation, and continuous integration (CI/CD)**.
-The project collects and exposes system metrics (CPU, memory, processes, network) in real time, as well as structured logs integrable with **Prometheus**, **Grafana**, and **Loki**.
-Its goal is to demonstrate a complete and observable pipeline, combining **Infrastructure as Code (IaC)**, **security**, **containerization**, and **automated delivery**.
+This system was developed for educational purposes and to demonstrate best practices in monitoring, automation, and continuous integration.
+Implements collection and exposition of enriched metrics and logs, integrating with leading observability tools: **Prometheus**, **Grafana**, and **Loki**.
+
+The focus is to demonstrate the complete flow of **collection → persistence → export → analysis** in an automated, versioned, and secure environment.
 
 ---
 
 ## 2. General Architecture
 
-The system operates with two main containers:
+The system operates in two main containers:
 
-- **monitoring-app** — runs the monitoring core (`main.py`), responsible for collecting, processing, and persisting metrics in JSONL format.
-- **monitoring-metrics** — runs the HTTP exporter (`main_http.py`), which reads the JSONL and exposes metrics and logs via endpoints compatible with Prometheus and Loki.
+- **monitoring-app** — runs the monitoring core (`main.py`), responsible for collecting, processing, and writing metrics in JSONL format.
+- **monitoring-metrics** — runs the HTTP exporter (`main_http.py`), which reads JSONL and exposes metrics and logs on endpoints compatible with Prometheus and Loki.
 
-Both share the `/logs` volume, ensuring Promtail can access `.log` and `.json` files recursively. The file `infra/promtail/promtail-config.yml` defines the default collection behavior for Loki.
+Both share the `/logs` volume, ensuring Promtail can access `.log` and `.json` files.
+The file `infra/promtail/promtail-config.yml` defines the default collection behavior for Loki.
 
-> **Didactic note:** In production environments, host metrics collection should be performed locally or via a dedicated agent, not by internal monitoring containers.
+> **Technical note:** The `monitoring-metrics` container is for demonstration. In production, collection should be done locally or via a dedicated agent, not inside monitoring containers.
 
 ---
 
-## 3. Metrics and Logs Flow
+## 3. Metrics & Logs Flow
 
-### 3.1 Collection and Persistence
-The main module collects system data (CPU, memory, disk, network, latency) and writes to rotating JSONL. Logs are formatted in structured JSON and stored in the same shared volume.
+### 3.1 Collection & Persistence
+The main module collects system data (CPU, memory, disk, network, latency) and writes to rotating JSONL.
+Logs are structured in JSON and stored in the same shared volume.
 
 ### 3.2 Export
-The HTTP exporter initializes by reading the last line of the JSONL and updates Prometheus *Gauges*. No metric is recalculated --- only the latest snapshot is exposed.
+The exporter reads the last line of JSONL and updates Prometheus *Gauges*, exposing only the current snapshot.
 
-**Exporters:**
-- `/health`: returns a JSON summary of system and process metrics.
-- `/metrics`: exposes the same data in Prometheus exposition format (plain text).
+**Available endpoints:**
+- `/health`: JSON summary of metrics.
+- `/metrics`: Prometheus exposition format (plain text).
 
 ### 3.3 Process Metrics
-Python process metrics (CPU, memory, threads, uptime, descriptors) are collected in real time. These metrics are not persisted, only exposed for container observability.
+Python process metrics (CPU, memory, threads, uptime, descriptors) are collected in real time and not persisted.
 
-**Recommendation:** Align Prometheus `scrape_interval` with the monitoring collection interval to avoid inconsistencies between snapshots.
+> **Recommendation:** Align Prometheus `scrape_interval` with the monitoring collection interval.
 
 ---
 
-## 4. Observability and Integration
+## 4. Observability & Integration
 
-The environment integrates Prometheus, Grafana, and Loki via containers declared in `docker-compose.yml` and Terraform modules (`infra/terraform/main.tf`). Environment variables and volumes should be reviewed to ensure path and permission alignment.
+Integration occurs via containers defined in `docker-compose.yml` and Terraform modules (`infra/terraform/main.tf`).
+Environment variables and volumes should be reviewed according to the execution environment.
 
 **Applied best practices:**
-- Structured and standardized logs.
-- Metrics exposed in native Prometheus format.
-- Isolated containers with controlled volume sharing.
-- End-to-end observable integration (collection → export → visualization).
+- Standardized, structured logs.
+- Native Prometheus metrics.
+- Isolated containers with controlled volumes.
+- End-to-end integration (collection → export → visualization).
 
-## 4.1 Service Access
-
+**Default access:**
 - Prometheus: http://localhost:9090
 - Grafana: http://localhost:3000
 - Loki: http://localhost:3100
@@ -60,69 +63,66 @@ The environment integrates Prometheus, Grafana, and Loki via containers declared
 
 ## 5. Infrastructure as Code (Terraform)
 
-Terraform is included for educational purposes only. It demonstrates infrastructure as code (IaC) definition for provisioning containers and observability services. As the system collects metrics from the host where it runs, cloud execution (e.g., AWS/ECS) will result in container/VM metrics, not physical host metrics. The recommended real deployment is building and pushing the Docker image to DockerHub.
+Terraform is included as a **IaC demonstration**.
+Shows automated, versioned environment definition, but **should not be run directly** — the system collects local metrics, making remote provisioning unnecessary.
+
+Recommended real deployment is **build and push the Docker image** to DockerHub.
 
 ---
 
-## 6. Webhook and Security
+## 6. Webhook & Security
 
-The Discord webhook is managed via GitHub Secrets, not exposed in code. Tokens and access keys used in pipelines are defined exclusively via secure environment (`Settings > Secrets and variables > Actions`).
+The Discord webhook is managed via **GitHub Secrets**, never exposed in code.
+Tokens and access keys used in pipelines are defined exclusively in `Settings > Secrets and variables > Actions`.
 
 ---
 
-## 7. Directory Structure
+## 7. Structure & Relevant Files
 
-    src/
-      core/            # Collection and processing logic
-      exporter/        # Prometheus and HTTP exporters
-      monitoring/      # Collection control and scheduling
-      system/          # Utility functions
-    infra/
-      promtail/        # Log configuration
-      terraform/       # IaC definitions
-    tests/             # Automated tests
-    .github/workflows/ # CI/CD (build, lint, tests)
+```
+src/
+  core/            # Collection and treatment logic
+  exporter/        # HTTP and Prometheus exporters
+  monitoring/      # Collection control and scheduling
+  system/          # Utility functions
+infra/
+  promtail/        # Log configuration
+  terraform/       # IaC definitions
+tests/             # Automated tests
+.github/workflows/ # CI/CD (build, lint, tests)
+```
 
 ---
 
 ## 8. Current Limitations
 
-- Physical host monitoring is not guaranteed in containerized execution.
-- The exporter depends on local reading of JSONL files --- no cache or streaming API.
-- The system does not implement authentication on endpoints.
-- Terraform and observability are for demonstration, not production.
+- Host collection is not guaranteed in containers.
+- Exporter depends on local JSONL reading.
+- Endpoints lack authentication.
+- Terraform and observability are for demonstration only.
 
 ---
 
-## 9. Evidências e Artefatos
+## 9. Evidence & Artifacts
 
-| Área        | Evidência                                                                                                                                       | Caminho                                               |
-|--------------|------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------|
-| CI           | ![CI](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/ci.yml/badge.svg)                                               | `.github/workflows/ci.yml`                            |
-| Coverage     | ![Tests & Coverage](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/tests-coverage.yml/badge.svg)                     | `.github/workflows/tests-coverage.yml`                |
-| CD           | ![CD](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/cd.yml/badge.svg)                                               | `.github/workflows/cd.yml`                            |
-| Terraform    | ![Terraform](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/terraform.yml/badge.svg)                                 | `.github/workflows/terraform.yml`                     |
-| Release      | ![Release](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/release.yml/badge.svg)                                     | `.github/workflows/release.yml`                       |
-| Dependabot   | ![Dependabot Updates](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/dependabot/dependabot-updates/badge.svg)        | `.github/workflows/dependabot/dependabot-updates`     |
-| Gitleaks     | ![Gitleaks](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/gitleaks-scan.yml/badge.svg)                              | `.github/workflows/gitleaks-scan.yml`                 |
-| Snyk         | ![Snyk](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/snyk-scan.yml/badge.svg)                                     | `.github/workflows/snyk-scan.yml`                     |
-| Trivy        | ![Trivy](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/trivy-scan.yml/badge.svg)                                   | `.github/workflows/trivy-scan.yml`                    |
-
-**Recommended screenshots:**
-- Successful CI pipeline execution.
-- Grafana dashboard showing system metrics.
-- Exporter returning data on `/health` and `/metrics` endpoints.
+| Area | Evidence | Path |
+|------|----------|------|
+| CI | ![CI](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/ci.yml/badge.svg) | `.github/workflows/ci.yml` |
+| Coverage | ![Tests](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/tests-coverage.yml/badge.svg) | `.github/workflows/tests-coverage.yml` |
+| CD | ![CD](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/cd.yml/badge.svg) | `.github/workflows/cd.yml` |
+| Terraform | ![Terraform](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/terraform.yml/badge.svg) | `.github/workflows/terraform.yml` |
+| Gitleaks | ![Gitleaks](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/gitleaks-scan.yml/badge.svg) | `.github/workflows/gitleaks-scan.yml` |
+| Snyk | ![Snyk](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/snyk-scan.yml) | `.github/workflows/snyk-scan.yml` |
+| Trivy | ![Trivy](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/trivy-scan.yml) | `.github/workflows/trivy-scan.yml` |
 
 ---
 
-## 10. Final Technical Note
+## Final Technical Note — `psutil` Collection Limit
 
-This project was developed for educational purposes and as a practical demonstration of best practices in development, automation, testing, and observability. The structure prioritizes modularity, traceability, and security, applying principles of continuous integration and validation in a controlled environment.
+The `psutil` module collects metrics only from the environment where the process is running.
+In containers or isolated namespaces, these metrics represent only the container context, not the host system.
 
-The source code is implemented in Python, focusing on clarity, testability, and separation of concerns. The infrastructure is defined in Terraform solely for educational purposes, illustrating concepts of automation and environment versioning, without active use during execution as it would affect local metric collection.
+Thus, its use is suitable for local diagnostics or in-process monitoring.
+For real observability, it is recommended to integrate **node_exporter** or **cadvisor**, ensuring access to host metrics without breaking isolation.
 
-The pipelines automate the steps of linting, testing, coverage, build, and security analysis, ensuring consistency and continuous quality control. Tools like Gitleaks, Snyk, Trivy, and Dependabot provide preventive validation of vulnerabilities and dependencies.
-
-Documentation follows the delivery cycle, prioritizing readability, technical review, and reproducibility of processes.
-
-Last update: 09/11/2025
+> **Future improvement:** include a dedicated intermediate agent for host collection, maintaining isolation and compatibility with distributed observability.
