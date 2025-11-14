@@ -13,9 +13,13 @@ scrape_configs:
     static_configs:
       - targets: []
         labels:
-          job: monitoring
+          job: infra-monitoring-system
           __path__: /logs/**/*.log
       - targets: []
         labels:
-          job: monitoring
+          job: infra-monitoring-system
+          __path__: /logs/**/*.jsonl
+      - targets: []
+        labels:
+          job: infra-monitoring-system
           __path__: /logs/**/*.json

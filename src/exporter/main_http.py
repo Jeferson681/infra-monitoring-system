@@ -134,7 +134,130 @@ class HealthHandler(BaseHTTPRequestHandler):
             out = self._value_to_prometheus(v)
             if out is not None:
                 lines.append(f"{k} {out}")
+
+        # Additional lightweight system metrics requested: load averages, cpu temp, network rates
+        # Load averages (if available on platform) — export 0 when unavailable
+        load_vals = self._get_load_averages()
+        if load_vals is not None:
+            l1, l5, l15 = load_vals
+        else:
+            l1 = l5 = l15 = 0.0
+        lines.append(f"monitoring_load_1 {self._value_to_prometheus(l1)}")
+        lines.append(f"monitoring_load_5 {self._value_to_prometheus(l5)}")
+        lines.append(f"monitoring_load_15 {self._value_to_prometheus(l15)}")
+
+        # CPU temperature (if available)
+        cpu_temp = self._get_cpu_temp_c(system_metrics)
+        if cpu_temp is None:
+            # use -1 to indicate unavailable
+            cpu_temp = -1.0
+        lines.append(f"monitoring_cpu_temp_c {self._value_to_prometheus(cpu_temp)}")
+
+        # Network rates (Mbps)
+        net_in, net_out = self._get_network_rates()
+        # export 0.0 when network rates are not yet available
+        if net_in is None:
+            net_in = 0.0
+        if net_out is None:
+            net_out = 0.0
+        lines.append(f"monitoring_net_in_mbps {self._value_to_prometheus(net_in)}")
+        lines.append(f"monitoring_net_out_mbps {self._value_to_prometheus(net_out)}")
         return "\n".join(lines).encode("utf-8")
+
+    # --- New helpers ---
+    def _get_load_averages(self):
+        """Return (1,5,15) load averages if supported, else None."""
+        try:
+            if hasattr(os, "getloadavg"):
+                vals = os.getloadavg()
+                return float(vals[0]), float(vals[1]), float(vals[2])
+        except Exception as exc:
+            import logging
+
+            logging.getLogger(__name__).debug("Falha ao obter load averages: %s", exc)
+        return None
+
+    def _get_cpu_temp_c(self, system_metrics):
+        """Try to obtain CPU temperature.
+
+        Prefer `psutil.sensors_temperatures()` when available. If that fails,
+        fall back to `system_metrics['metrics']['temperature']` from JSONL.
+        Returns Celsius as float, or `None` if unavailable.
+        """
+        try:
+            if hasattr(psutil, "sensors_temperatures"):
+                temps = psutil.sensors_temperatures()
+                if temps:
+                    # pick first available sensor temperature
+                    for key, entries in temps.items():
+                        if entries:
+                            t = entries[0].current
+                            if t is not None:
+                                return float(t)
+        except Exception as exc:
+            import logging
+
+            logging.getLogger(__name__).debug("Falha ao obter temperatura via psutil: %s", exc)
+        # fallback to system metrics JSONL
+        try:
+            if isinstance(system_metrics, dict):
+                m = system_metrics.get("metrics") if "metrics" in system_metrics else system_metrics
+                if isinstance(m, dict):
+                    temp = m.get("temperature")
+                    if temp is not None:
+                        return float(temp)
+        except Exception as exc:
+            import logging
+
+            logging.getLogger(__name__).debug("Falha ao ler temperatura do JSONL: %s", exc)
+        return None
+
+    # Module-level state for network counters to compute delta
+    _last_net = None
+    _last_net_ts = None
+
+    def _get_network_rates(self):
+        """Compute network in/out rates (Mbps) using psutil.net_io_counters().
+
+        Returns a tuple `(in_mbps, out_mbps)` or `(None, None)` on error.
+        """
+        try:
+            counters = psutil.net_io_counters()
+            now = time.time()
+            total_bytes_sent = getattr(counters, "bytes_sent", None)
+            total_bytes_recv = getattr(counters, "bytes_recv", None)
+            if total_bytes_sent is None or total_bytes_recv is None:
+                return None, None
+
+            last = self.__class__._last_net
+            last_ts = self.__class__._last_net_ts
+            # initialize if missing
+            if last is None or last_ts is None:
+                self.__class__._last_net = (total_bytes_recv, total_bytes_sent)
+                self.__class__._last_net_ts = now
+                return None, None
+
+            prev_recv, prev_sent = last
+            dt = now - last_ts
+            if dt <= 0:
+                return None, None
+
+            delta_recv = max(0, total_bytes_recv - prev_recv)
+            delta_sent = max(0, total_bytes_sent - prev_sent)
+            # bytes/sec -> megabits per second
+            in_mbps = (delta_recv / dt) * 8 / 1_000_000
+            out_mbps = (delta_sent / dt) * 8 / 1_000_000
+
+            # update stored counters
+            self.__class__._last_net = (total_bytes_recv, total_bytes_sent)
+            self.__class__._last_net_ts = now
+
+            return float(in_mbps), float(out_mbps)
+        except Exception as exc:
+            import logging
+
+            logging.getLogger(__name__).debug("Erro ao calcular taxas de rede: %s", exc)
+            return None, None
 
     def _value_to_prometheus(self, v):
         """Tenta normalizar um valor para um literal numérico aceito pelo Prometheus.
