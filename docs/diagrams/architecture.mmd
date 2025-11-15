@@ -1,0 +1,29 @@
+%% Mermaid architecture diagram for Infra Monitoring System
+flowchart LR
+  %% Containers and services
+  subgraph Docker_Stack[Docker Compose Stack]
+    direction TB
+    App["monitoring-app\n(main.py)\ncollect -> JSONL"]
+    Exporter["monitoring-metrics\n(main_http.py)\nreads JSONL -> /metrics /health"]
+    Prometheus["Prometheus\n(scrape /metrics)"]
+    Grafana["Grafana\n(dashboards)"]
+    Loki["Loki\n(logs)"]
+    Promtail["Promtail\n(forwards logs -> Loki)"]
+  end
+
+  Volume["Shared Volume\n/logs (JSONL, .log)"]
+  CI["GitHub Actions\n(CI / CD / Scans)"]
+  Terraform["Terraform (demo)\nIaC definitions"]
+
+  %% Relationships
+  App -->|writes JSONL| Volume
+  Exporter -->|reads JSONL| Volume
+  Exporter -->|exposes /metrics| Prometheus
+  Prometheus -->|data| Grafana
+  App -->|structured logs| Promtail
+  Promtail --> Loki
+  CI --> Docker_Stack
+  Terraform -->|demonstrates IaC| Docker_Stack
+
+  classDef infra fill:#f9f,stroke:#333,stroke-width:1px;
+  class Docker_Stack infra;

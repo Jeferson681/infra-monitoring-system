@@ -1,0 +1,12 @@
+%% Simple flow diagram: metrics and logs main flows
+flowchart LR
+  A["App\n(collect metrics & logs)"] -->|writes JSONL / exposes metrics| B["Exporter\n(/metrics)"]
+  B -->|scrape /metrics| C["Prometheus\n(time-series)"]
+  C -->|queries| D["Grafana\n(dashboards)"]
+
+  A -->|writes JSONL / log files| E["Promtail\n(log shipper)"]
+  E -->|push logs| F["Loki\n(log store)"]
+  F -->|queries| D
+
+  classDef core fill:#f0f9ff,stroke:#0366d6,stroke-width:1px;
+  class A,B,C,D,E,F core;
