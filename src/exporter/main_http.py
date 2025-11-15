@@ -317,3 +317,9 @@ if __name__ == "__main__":
     promtail_thread.start()
     # Inicia servidor HTTP (Prometheus)
     run_http_server(port=port)
+
+
+# Silence Vulture: these handler methods are callbacks used by `HTTPServer`
+# at runtime (BaseHTTPRequestHandler subclasses). Keep references so
+# static analyzers don't flag them as unused.
+_VULTURE_KEEP = [HealthHandler.do_GET, HealthHandler.log_message]

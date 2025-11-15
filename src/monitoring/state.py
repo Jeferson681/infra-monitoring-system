@@ -441,4 +441,7 @@ try:
 except Exception:
     thresholds = {}
 
-global_state = SystemState(thresholds)
+# NOTE: `global_state` was removed because it was not referenced anywhere in
+# the repository. Callers should instantiate `SystemState` explicitly when
+# required. Keeping a module-level singleton caused static-analysis noise and
+# may hide lifecycle assumptions.

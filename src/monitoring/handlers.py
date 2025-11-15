@@ -8,7 +8,7 @@ import time
 import logging
 from typing import Any
 
-from . import treatments
+from src.system import treatments
 from src.system.network_learning import NetworkUsageLearningHandler
 from src.config import settings
 

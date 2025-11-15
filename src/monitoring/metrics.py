@@ -143,6 +143,13 @@ def collect_metrics() -> dict[str, float | int | str | None]:
     _collect_temperature_and_timestamp(metrics)
     _collect_disk_usage_bytes(metrics)
 
+    # Best-effort: expose a small set of metrics to the Prometheus exporter
+    # if available. Keep failures non-fatal so metric collection remains robust.
+    try:
+        _export_some_metrics(metrics)
+    except Exception as exc:
+        logger.debug("_export_some_metrics failed: %s", exc, exc_info=True)
+
     return metrics
 
 
@@ -559,3 +566,8 @@ def get_disk_usage_info(path: str | None = None) -> tuple[int | None, int | None
 
 
 # End of latency implementations
+
+
+# Silence Vulture: utility functions used by operators/tests/runtime.
+# Keep benign references so static analyzers don't flag them as unused.
+_VULTURE_KEEP = [get_memory_info, get_disk_usage_info]

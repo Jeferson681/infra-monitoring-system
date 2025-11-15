@@ -1,7 +1,5 @@
 import json
 import os
-import time
-import psutil
 import logging
 from typing import Dict, cast
 
@@ -148,38 +146,18 @@ def expose_metric(name: str, value: float, description: str = "") -> None:
 
 
 def expose_process_metrics() -> None:
-    """Expõe métricas do processo Python atual (CPU, RAM, uptime, threads) como Gauges do Prometheus."""
-    if not _HAVE_PROM:
-        return
+    """Compatibility wrapper that delegates to the canonical implementation.
+
+    The real implementation lives in `src.exporter.prometheus`. Keep a thin
+    wrapper here to preserve the public API while avoiding duplicated code.
+    """
     try:
-        proc = psutil.Process()
-        # Coleta e exporta métricas do processo:
-        # - Porcentagem de CPU
-        cpu = proc.cpu_percent(interval=0.0)
-        expose_metric("process_cpu_percent", cpu, "Percentual de CPU usado por este processo")
-        # - Porcentagem de memória
-        mem = proc.memory_percent()
-        expose_metric("process_memory_percent", mem, "Percentual de memória usado por este processo")
-        # - Memória RSS (resident set size)
-        rss = getattr(proc.memory_info(), "rss", 0)
-        expose_metric("process_memory_rss_bytes", rss, "Memória residente usada por este processo (bytes)")
-        # - Uptime do processo
-        uptime = time.time() - proc.create_time()
-        expose_metric("process_uptime_seconds", uptime, "Tempo de atividade (uptime) deste processo em segundos")
-        # - Número de threads
-        threads = proc.num_threads()
-        expose_metric("process_num_threads", threads, "Número de threads neste processo")
-        # - Número de descritores de arquivos abertos (se disponível na plataforma)
-        # Usa getattr para evitar erro de análise estática do linter
-        num_fds_fn = getattr(proc, "num_fds", None)
-        if callable(num_fds_fn):
-            try:
-                fds = num_fds_fn()
-                # Só expõe a métrica se fds for int
-                if isinstance(fds, int):
-                    expose_metric("process_num_fds", float(fds), "Número de descritores de ficheiros abertos")
-            except Exception as exc:
-                # Pode ocorrer em plataformas sem suporte a num_fds; ignora silenciosamente
-                logger.debug("Falha ao obter número de descritores de arquivos: %s", exc, exc_info=True)
-    except Exception as exc:
-        logger.debug("Falha ao expor métricas do processo: %s", exc, exc_info=True)
+        # Import locally to avoid import-time side-effects and to keep the
+        # canonical implementation in one place.
+        from .prometheus import expose_process_metrics as _expose
+
+        _expose()
+    except Exception:
+        # Best-effort: do not raise if prometheus_client is missing or the
+        # delegated call fails.
+        return
