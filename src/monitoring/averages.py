@@ -403,9 +403,8 @@ def format_long_metric_from_aggregate(aggregate: Dict[str, Any]) -> str:
         # fallback: simple key: value lines
         lines = [f"{k}: {v}" for k, v in metrics_src.items()]
 
-    # decorate metric lines with counts/suffixes
-    counts_by_state = aggregate.get("counts_per_metric_by_state") or {}
-    out_lines = _decorate_metric_lines(lines, counts_by_state)
+    # Keep metric lines raw (do not add arrow decorations or suffixes)
+    out_lines = list(lines)
 
     # If used_files_lines present, format into human-friendly lines
     try:
@@ -454,58 +453,7 @@ def _build_metrics_src_from_aggregate(aggregate: Dict[str, Any]) -> Dict[str, An
     return metrics_src
 
 
-def _decorate_metric_lines(lines: List[str], counts_by_state: Dict[str, Any]) -> List[str]:
-    """Decorate metric lines with WARNING/CRITICAL suffixes and alignment.
-
-    Preserves the mapping and arrow-decoration behavior from the original
-    implementation.
-    """
-
-    def _state_suffix_for_metric_key(mkey: str) -> str:
-        return _compute_suffix_for_metric_key(counts_by_state, mkey)
-
-    # Mapeamento atualizado: cada prefixo de linha para a chave de métrica,
-    # e também para o campo de estado individual correspondente
-    mapping = {
-        "CPU:": "cpu_percent",
-        "RAM:": "memory_used_bytes",
-        "Disco:": "disk_used_bytes",
-        "Ping:": "ping_ms",
-        "Latência:": "latency_ms",
-        "Bytes enviados:": "bytes_sent",
-        "Bytes recebidos:": "bytes_recv",
-    }
-
-    metric_lines_idx = []
-    for i, ln in enumerate(lines):
-        for prefix in mapping.keys():
-            if ln.startswith(prefix):
-                metric_lines_idx.append(i)
-                break
-
-    max_len = 0
-    for i in metric_lines_idx:
-        max_len = max(max_len, len(lines[i]))
-
-    out_lines: List[str] = []
-    for i, ln in enumerate(lines):
-        for prefix, key in mapping.items():
-            if ln.startswith(prefix):
-                # Use the metric key (e.g. 'cpu_percent') to lookup per-metric
-                # state counts. Previously the code passed the state field
-                # name (e.g. 'state_cpu') which does not match the keys in
-                # counts_per_metric_by_state and prevented suffixes from
-                # appearing. Pass `key` so _compute_suffix_for_metric_key
-                # finds the correct counts dict.
-                suffix = _state_suffix_for_metric_key(key).lstrip()
-                target_col = max_len + 3
-                current_len = len(ln)
-                dash_count = max(1, target_col - current_len)
-                deco = " •" + ("-" * dash_count) + ">" + suffix
-                ln = ln + deco
-                break
-        out_lines.append(ln)
-    return out_lines
+# Decoration helpers removed: metric lines are output without arrow decorations
 
 
 def write_average_log(
@@ -549,13 +497,7 @@ def write_average_log(
         logging.getLogger(__name__).debug("write_log failed: %s", exc, exc_info=True)
 
 
-def _compute_suffix_for_metric_key(counts_by_state: Dict[str, Any], mkey: str) -> str:
-    d = counts_by_state.get(mkey) or {}
-    warn = int(d.get("WARNING", d.get("WARN", 0) or 0))
-    critical = int(d.get("CRITICAL", d.get("CRIT", 0)) or 0)
-    if warn > 0 or critical > 0:
-        return f" (WARNING={warn} CRITICAL={critical})"
-    return ""
+# _compute_suffix_for_metric_key removed (no longer used)
 
 
 def get_last_ts_file(name: str = "last_ts") -> Path:

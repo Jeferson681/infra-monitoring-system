@@ -15,22 +15,17 @@ disco candidatos, etc.).
 
 def update_network_usage_learning(bytes_sent: int, bytes_recv: int) -> bool:
     """Atualiza o aprendizado de uso de rede e verifica se excede o limite aprendido."""
-    record_network_usage(bytes_sent, bytes_recv)
-    limit = get_network_limit()
-    total = bytes_sent + bytes_recv
-    allowed_hour = os.environ.get("NETWORK_TREATMENT_ALLOWED_HOUR")
-    current_hour = datetime.datetime.now().hour
-    if allowed_hour is None:
-        return False
+    # Delega para a implementação canônica em `src.system.treatments`.
+    # Mantemos este wrapper para compatibilidade de API e para evitar
+    # duplicação de lógica no códigobase.
     try:
-        allowed_hour_int = int(allowed_hour)
+        from .treatments import update_network_usage_learning as _impl
+
+        return _impl(bytes_sent, bytes_recv)
     except Exception:
-        allowed_hour_int = None
-    if allowed_hour_int is None or current_hour != allowed_hour_int:
+        # Se a delegação falhar por qualquer motivo (import, runtime),
+        # falha de forma conservadora retornando False.
         return False
-    if total > limit:
-        return True
-    return False
 
 
 NETWORK_LEARNING_FILE = Path(".cache/network_usage_learning.json")
