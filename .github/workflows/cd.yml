@@ -48,17 +48,17 @@ jobs:
           sudo service docker start || true
           docker-compose pull || echo "Falha ao puxar imagens, verifique permissões e rede."
           docker-compose up -d --build || echo "Falha ao subir containers, verifique logs."
-      - name: Notificar sucesso no Discord (staging)
+      - name: Notify success on Discord (staging)
         if: success()
         run: |
           curl -H "Content-Type: application/json" \
-            -d '{"content": "✅ Deploy realizado com sucesso em STAGING!"}' \
+            -d '{"content": "✅ Deploy to STAGING succeeded: ${{ github.repository }} on ${{ github.ref_name }} (run #${{ github.run_number }})"}' \
             ${{ secrets.DISCORD_WEBHOOK_URL }}
-      - name: Notificar falha no Discord (staging)
+      - name: Notify failure on Discord (staging)
         if: failure()
         run: |
           curl -H "Content-Type: application/json" \
-            -d '{"content": "❌ Falha no deploy STAGING! Verifique os logs."}' \
+            -d '{"content": "❌ Deploy to STAGING failed: See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
             ${{ secrets.DISCORD_WEBHOOK_URL }}
 
   deploy-production:
@@ -85,15 +85,15 @@ jobs:
       - name: Deploy AWS ECS (prod) demonstrativo
         run: |
           echo "[DEMO] Esta etapa representa o deploy real em AWS ECS (prod). Para ativar, siga as instruções acima."
-      - name: Notificar sucesso no Discord (prod)
+      - name: Notify success on Discord (prod)
         if: success()
         run: |
           curl -H "Content-Type: application/json" \
-            -d '{"content": "✅ Deploy realizado com sucesso em PRODUÇÃO!"}' \
+            -d '{"content": "✅ Deploy to PRODUCTION succeeded: ${{ github.repository }} on ${{ github.ref_name }} (run #${{ github.run_number }})"}' \
             ${{ secrets.DISCORD_WEBHOOK_URL }}
-      - name: Notificar falha no Discord (prod)
+      - name: Notify failure on Discord (prod)
         if: failure()
         run: |
           curl -H "Content-Type: application/json" \
-            -d '{"content": "❌ Falha no deploy PRODUÇÃO! Verifique os logs."}' \
+            -d '{"content": "❌ Deploy to PRODUCTION failed: See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
             ${{ secrets.DISCORD_WEBHOOK_URL }}

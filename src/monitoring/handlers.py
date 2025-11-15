@@ -8,7 +8,7 @@ import time
 import logging
 from typing import Any
 
-from . import treatments
+from src.system import treatments
 from src.system.network_learning import NetworkUsageLearningHandler
 from src.config import settings
 
@@ -18,9 +18,7 @@ network_learning_handler = NetworkUsageLearningHandler()
 logger = logging.getLogger(__name__)
 
 
-# ========================
 # 0. Seleção de ação
-# ========================
 
 
 # Auxilia: attempt_treatment — seleciona ação por nome da métrica
@@ -48,9 +46,7 @@ def _select_action(metric_lower: str) -> tuple[str | None, tuple]:
     return None, ()
 
 
-# ========================
 # 1. Utilitários de execução
-# ========================
 
 
 # Auxilia: attempt_treatment — verifica se a ação está em cooldown
@@ -126,9 +122,7 @@ def _run_reap_aux(state: Any, action_name: str, result, now: float) -> object | 
     return reap_result
 
 
-# ========================
 # 2. Execução de tratamentos
-# ========================
 
 
 def attempt_treatment(state: Any, name: str, _details: dict) -> dict | bool:

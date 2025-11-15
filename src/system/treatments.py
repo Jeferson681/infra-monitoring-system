@@ -1,5 +1,3 @@
-# Persistência e aprendizagem de limite para bytes_sent/bytes_recv
-
 import datetime
 import logging
 import os
@@ -30,7 +28,7 @@ def update_network_usage_learning(bytes_sent: int, bytes_recv: int) -> bool:
     total = bytes_sent + bytes_recv
     allowed_hour = os.environ.get("NETWORK_TREATMENT_ALLOWED_HOUR")
     current_hour = datetime.datetime.now().hour
-    # Controle de tempo: persistência do excesso por mais de 5min usando state.critic_since
+    # Persistência do excesso por 5 minutos antes de agir
     now = datetime.datetime.now().timestamp()
     global _excess_since
     if total > limit:
@@ -41,7 +39,7 @@ def update_network_usage_learning(bytes_sent: int, bytes_recv: int) -> bool:
         _excess_since = None
         excess_duration = 0
 
-    # Trava horária
+    # Janela horária configurável
     if allowed_hour is None:
         return False
     try:
@@ -89,7 +87,7 @@ def cleanup_temp_files(days: int = 7) -> None:
         for item in sorted(tmpdir.iterdir()):
             process_temp_item(item, max_age)
     except OSError as exc:
-        # Be conservative: log and don't raise when scanning tempdir fails
+        # Log de depuração; não propagar erro em varredura de tempdir
         logger.debug("cleanup_temp_files: scanning %s failed: %s", tmpdir, exc, exc_info=True)
 
 
@@ -136,8 +134,7 @@ def _iter_roots() -> list[Path]:
     Em Windows retorna as letras de drive existentes; em POSIX retorna ['/'].
     """
     if os.name == "nt":
-        # Retornar apenas as letras que existem no sistema para evitar
-        # iterações inúteis sobre drives inexistentes.
+        # Retornar apenas letras de unidades existentes
         roots: list[Path] = []
         for d in string.ascii_uppercase:
             p = Path(f"{d}:/")
@@ -176,6 +173,51 @@ def trim_process_working_set_windows(pid: int) -> bool:
             kernel32.CloseHandle(h)
     except Exception as exc:
         logger.debug("trim_process_working_set_windows failed: %s", exc, exc_info=True)
+        return False
+
+
+def trim_process_working_set_posix(pid: int) -> bool:
+    """Best-effort: attempt to reduce a process working set on POSIX systems.
+
+    Notes:
+    - Linux/glibc provides ``malloc_trim(0)`` which can release unused heap
+      memory back to the kernel, but it only affects the calling process.
+    - Trimming another process's working set is not generally possible from
+      user-space in a portable, safe way; therefore this function only
+      attempts to act when ``pid`` refers to the current process.
+    - The operation is best-effort and failures are logged and return False.
+
+    """
+    if os.name != "posix":
+        return False
+    try:
+        # Só tenta agir no próprio processo; agir em outro PID não é portátil.
+        if int(pid) != os.getpid():
+            return False
+
+        import ctypes
+
+        # Tenta referências comuns do libc, depois o namespace do processo.
+        for libname in ("libc.so.6", None):
+            try:
+                libc = ctypes.CDLL(libname) if libname else ctypes.CDLL(None)
+            except Exception:
+                libc = None
+            if not libc:
+                continue
+            malloc_trim = getattr(libc, "malloc_trim", None)
+            if malloc_trim is None:
+                continue
+            try:
+                # chamada: int malloc_trim(size_t pad)
+                res = malloc_trim(0)
+                return bool(res)
+            except Exception as exc:
+                logger.debug("trim_process_working_set_posix: malloc_trim falhou: %s", exc, exc_info=True)
+                return False
+        return False
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("trim_process_working_set_posix erro inesperado: %s", exc, exc_info=True)
         return False
 
 
@@ -256,12 +298,14 @@ def _online_check(timeout: float = 2.0) -> bool:
         return False
 
 
-# Reminder: tratamentos que serão usados pela orquestração futura
-
-# cleanup_temp_files
-# check_disk_usage
-# trim_process_working_set_windows
-# reap_zombie_processes
-# reapply_network_config
-
-# FIM.
+# Silence Vulture: these functions are invoked dynamically by
+# `monitoring.handlers` via getattr(action_name) at runtime and are
+# therefore incorrectly reported as unused by static analyzers.
+_VULTURE_KEEP = [
+    cleanup_temp_files,
+    check_disk_usage,
+    trim_process_working_set_windows,
+    trim_process_working_set_posix,
+    reap_zombie_processes,
+    reapply_network_config,
+]

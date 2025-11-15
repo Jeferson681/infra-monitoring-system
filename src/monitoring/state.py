@@ -16,13 +16,13 @@ import logging
 from ..config.settings import load_settings
 from .formatters import normalize_for_display as _normalize_for_display
 
-# State constants
+# Constantes de estado
 STATE_STABLE = "STABLE"
 STATE_WARNING = "WARNING"
 STATE_CRITICAL = "CRITICAL"
 STATE_POST_TREATMENT = "post_treatment"
 
-# File name constants used for post-treatment persistence
+# Arquivos usados para persistência de pós-tratamento
 _CACHE_DIRNAME = ".cache"
 _POST_TREATMENT_FILENAME = "post_treatment_history.jsonl"
 
@@ -419,7 +419,7 @@ class SystemState:
             current = self.current_snapshot or {}
             post = self.post_treatment_snapshot or {}
             active = bool(self.treatment_active)
-        # Explicitly annotate as a generic mapping to allow mixing value types
+        # Anotação explícita do dicionário de saída
         out: dict[str, Any] = {"current": current}
         if active and post:
             out["post_treatment"] = post
@@ -433,12 +433,8 @@ class SystemState:
         return out
 
 
-## Instância global do estado do sistema para uso compartilhado
+## Instância global de thresholds lida a partir de configurações
 try:
-    from ..config.settings import load_settings
-
     thresholds = (load_settings() or {}).get("thresholds", {})
 except Exception:
     thresholds = {}
-
-global_state = SystemState(thresholds)

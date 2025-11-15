@@ -135,8 +135,8 @@ class HealthHandler(BaseHTTPRequestHandler):
             if out is not None:
                 lines.append(f"{k} {out}")
 
-        # Additional lightweight system metrics requested: load averages, cpu temp, network rates
-        # Load averages (if available on platform) — export 0 when unavailable
+        # Métricas adicionais leves: load averages, temperatura CPU e taxas de rede
+        # Load averages (0 quando indisponível)
         load_vals = self._get_load_averages()
         if load_vals is not None:
             l1, l5, l15 = load_vals
@@ -146,14 +146,14 @@ class HealthHandler(BaseHTTPRequestHandler):
         lines.append(f"monitoring_load_5 {self._value_to_prometheus(l5)}")
         lines.append(f"monitoring_load_15 {self._value_to_prometheus(l15)}")
 
-        # CPU temperature (if available)
+        # Temperatura da CPU (se disponível)
         cpu_temp = self._get_cpu_temp_c(system_metrics)
         if cpu_temp is None:
-            # use -1 to indicate unavailable
+            # usar -1 quando indisponível
             cpu_temp = -1.0
         lines.append(f"monitoring_cpu_temp_c {self._value_to_prometheus(cpu_temp)}")
 
-        # Network rates (Mbps)
+        # Taxas de rede (Mbps)
         net_in, net_out = self._get_network_rates()
         # export 0.0 when network rates are not yet available
         if net_in is None:
@@ -164,7 +164,7 @@ class HealthHandler(BaseHTTPRequestHandler):
         lines.append(f"monitoring_net_out_mbps {self._value_to_prometheus(net_out)}")
         return "\n".join(lines).encode("utf-8")
 
-    # --- New helpers ---
+    # Helpers
     def _get_load_averages(self):
         """Return (1,5,15) load averages if supported, else None."""
         try:
@@ -212,7 +212,7 @@ class HealthHandler(BaseHTTPRequestHandler):
             logging.getLogger(__name__).debug("Falha ao ler temperatura do JSONL: %s", exc)
         return None
 
-    # Module-level state for network counters to compute delta
+    # Estado de módulo para cálculo de deltas de rede
     _last_net = None
     _last_net_ts = None
 
@@ -317,3 +317,7 @@ if __name__ == "__main__":
     promtail_thread.start()
     # Inicia servidor HTTP (Prometheus)
     run_http_server(port=port)
+
+
+# Silencia Vulture: métodos usados como callbacks pelo `HTTPServer`.
+_VULTURE_KEEP = [HealthHandler.do_GET, HealthHandler.log_message]
