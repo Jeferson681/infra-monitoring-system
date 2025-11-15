@@ -112,10 +112,75 @@ tests/             # Testes automatizados
 | CD | ![CD](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/cd.yml/badge.svg) | `.github/workflows/cd.yml` |
 | Terraform | ![Terraform](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/terraform.yml/badge.svg) | `.github/workflows/terraform.yml` |
 | Gitleaks | ![Gitleaks](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/gitleaks-scan.yml/badge.svg) | `.github/workflows/gitleaks-scan.yml` |
-| Snyk | ![Snyk](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/snyk-scan.yml) | `.github/workflows/snyk-scan.yml` |
-| Trivy | ![Trivy](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/trivy-scan.yml) | `.github/workflows/trivy-scan.yml` |
+| Snyk | ![Snyk](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/snyk-scan.yml/badge.svg) | `.github/workflows/snyk-scan.yml` |
+| Trivy | ![Trivy](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/trivy-scan.yml/badge.svg) | `.github/workflows/trivy-scan.yml` |
 
 ---
+
+### Galeria de Artefatos
+
+A galeria compacta com miniaturas está disponível abaixo; clique em qualquer imagem para abri-la em tamanho real. Se preferir, abra `docs/prints/README.md` para a mesma galeria embutida na pasta das imagens.
+
+<table>
+  <tr>
+    <td align="center">
+      <a href="docs/prints/architecture.png"><img src="docs/prints/architecture.png" alt="Architecture" style="width:320px;border:1px solid #ddd"/></a>
+      <div><strong>Architecture</strong><br/><small>System components & flows</small></div>
+    </td>
+    <td align="center">
+      <a href="docs/prints/flow_simple.png"><img src="docs/prints/flow_simple.png" alt="Flow" style="width:320px;border:1px solid #ddd"/></a>
+      <div><strong>Simple Flow</strong><br/><small>High-level data flow</small></div>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <a href="docs/prints/dashboard_panel_grafana.png"><img src="docs/prints/dashboard_panel_grafana.png" alt="Grafana" style="width:320px;border:1px solid #ddd"/></a>
+      <div><strong>Grafana Dashboard</strong><br/><small>CPU / Memory / Disk panels</small></div>
+    </td>
+    <td align="center">
+      <a href="docs/prints/dashboard_panel_grafana2.png"><img src="docs/prints/dashboard_panel_grafana2.png" alt="Grafana 2" style="width:320px;border:1px solid #ddd"/></a>
+      <div><strong>Grafana Detail</strong><br/><small>Panel detail view</small></div>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <a href="docs/prints/target_prometheus_up.png"><img src="docs/prints/target_prometheus_up.png" alt="Prometheus targets" style="width:320px;border:1px solid #ddd"/></a>
+      <div><strong>Prometheus Targets</strong><br/><small>Targets UP</small></div>
+    </td>
+    <td align="center">
+      <a href="docs/prints/prometheus_query_graph.png"><img src="docs/prints/prometheus_query_graph.png" alt="Prometheus graph" style="width:320px;border:1px solid #ddd"/></a>
+      <div><strong>Prometheus Graph</strong><br/><small>Sample query result</small></div>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <a href="docs/prints/grafana_explore_loki_logs.png"><img src="docs/prints/grafana_explore_loki_logs.png" alt="Grafana logs" style="width:320px;border:1px solid #ddd"/></a>
+      <div><strong>Grafana Explore</strong><br/><small>Loki logs query</small></div>
+    </td>
+    <td align="center">
+      <a href="docs/prints/promtail_logs_loki.png"><img src="docs/prints/promtail_logs_loki.png" alt="Promtail" style="width:320px;border:1px solid #ddd"/></a>
+      <div><strong>Promtail Logs</strong><br/><small>Log shipping evidence</small></div>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <a href="docs/prints/docker_compose_up.png"><img src="docs/prints/docker_compose_up.png" alt="Docker" style="width:320px;border:1px solid #ddd"/></a>
+      <div><strong>Containers Running</strong><br/><small>docker compose ps</small></div>
+    </td>
+    <td align="center">
+      <a href="docs/prints/infra_monitoring_terminal.png"><img src="docs/prints/infra_monitoring_terminal.png" alt="Terminal" style="width:320px;border:1px solid #ddd"/></a>
+      <div><strong>Local Run</strong><br/><small>Exporter serving / health</small></div>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <a href="docs/prints/GitHub_Actions.png"><img src="docs/prints/GitHub_Actions.png" alt="CI" style="width:320px;border:1px solid #ddd"/></a>
+      <div><strong>CI Pipeline</strong><br/><small>GitHub Actions run</small></div>
+    </td>
+    <td/>
+  </tr>
+</table>
+
 
 ## Nota Técnica Final — Limite de Coleta com `psutil`
 
@@ -126,3 +191,13 @@ Assim, seu uso é adequado para diagnósticos locais ou monitoramento in-process
 Para observabilidade real, recomenda-se integrar **node_exporter** ou **cadvisor**, garantindo acesso às métricas do host físico sem violar isolamento.
 
 > **Melhoria futura:** incluir agente intermediário dedicado à coleta do host, mantendo o isolamento e compatibilidade com observabilidade distribuída.
+
+---
+
+## CONTATOS
+
+- Página pessoal: https://jeferson681.github.io/PAGE/
+- Email: jefersonoliveiradesousa681@gmail.com
+- LinkedIn: https://www.linkedin.com/in/jeferson-oliveira-de-sousa-ab8764164/
+
+---
