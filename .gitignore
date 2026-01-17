@@ -53,6 +53,6 @@ Thumbs.db
 print.txt
 
 # Backups locais de documentação (não versionar)
-docs/originals/
+# docs/originals/ (versionado agora para manter histórico de backups)
 
 ```
