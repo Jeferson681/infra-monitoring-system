@@ -43,6 +43,10 @@ def test_activation_and_post_treatment(monkeypatch, tmp_path):
     # monkeypatch write functions to avoid filesystem writes
     monkeypatch.setattr(ss, "_write_post_treatment_artifacts", lambda snap: None)
 
+    # Garantir execução síncrona do worker em ambiente de teste para evitar
+    # flakiness no CI: força POST_TREATMENT_SYNC=1
+    monkeypatch.setenv("POST_TREATMENT_SYNC", "1")
+
     # Activate by forcing critical state
     ss._activate_treatment({"cpu_percent": 99})
 

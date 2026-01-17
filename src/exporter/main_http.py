@@ -43,15 +43,19 @@ class HealthHandler(BaseHTTPRequestHandler):
             }
             self.wfile.write(json.dumps(status).encode("utf-8"))
         elif self.path == "/metrics":
-            if PROMETHEUS_AVAILABLE:
+            try:
+                from src.exporter.prometheus import get_metrics_bytes
+
+                payload = get_metrics_bytes()
                 self.send_response(200)
                 self.send_header("Content-type", "text/plain; version=0.0.4; charset=utf-8")
                 self.end_headers()
-                system_metrics = self._get_last_system_metrics()
-                process_metrics = self._get_process_metrics(prefix="process_", prometheus=True)
-                output = self._format_prometheus_metrics(system_metrics, process_metrics)
-                self.wfile.write(output)
-            else:
+                self.wfile.write(payload)
+            except Exception:
+                # If metrics generation fails, return 503 so scrapers know to retry later
+                import logging
+
+                logging.getLogger(__name__).exception("Falha ao gerar /metrics")
                 self.send_response(503)
                 self.end_headers()
         else:

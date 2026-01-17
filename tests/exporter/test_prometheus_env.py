@@ -1,25 +1,27 @@
-def test_start_exporter_reads_env(monkeypatch):
-    """Verifica que start_exporter usa MONITORING_EXPORTER_ADDR/PORT quando args forem None."""
+def test_start_exporter_initializes_without_starting_server(monkeypatch):
+    """start_exporter deve inicializar métricas, mas não iniciar um servidor HTTP."""
     import src.exporter.prometheus as prom
 
-    # Garantir que a flag de disponibilidade seja verdadeira para o teste
-    monkeypatch.setattr(prom, "_HAVE_PROM", True)
+    # Garantir estado limpo
     monkeypatch.setattr(prom, "_server_started", False)
-
-    monkeypatch.setenv("MONITORING_EXPORTER_ADDR", "0.0.0.0")
-    monkeypatch.setenv("MONITORING_EXPORTER_PORT", "12345")
 
     called = {}
 
+    # Substitui qualquer tentativa de start_http_server por um stub que marque chamada
     def fake_start_http_server(port, addr):
-        called["port"] = port
-        called["addr"] = addr
+        called["start_http_called"] = True
 
-    # Substitui a função real por um stub
-    monkeypatch.setattr(prom, "start_http_server", fake_start_http_server)
+    monkeypatch.setattr(prom, "start_http_server", fake_start_http_server, raising=False)
 
-    # Chama com None para que os valores venham do ambiente
+    # Substitui a população inicial de metrics para verificar que foi chamada
+    def fake_expose(jsonl_path):
+        called["exposed_from_jsonl"] = jsonl_path
+
+    monkeypatch.setattr(prom, "expose_system_metrics_from_jsonl", fake_expose)
+
+    # Chama start_exporter; não deve acionar start_http_server
     prom.start_exporter(port=None, addr=None)
 
-    assert called.get("port") == 12345
-    assert called.get("addr") == "0.0.0.0"
+    assert prom._server_started is True
+    assert "exposed_from_jsonl" in called
+    assert "start_http_called" not in called

@@ -69,12 +69,36 @@ def main(argv: list[str] | None = None) -> None:
 
     # Inicia o servidor HTTP de métricas em thread separada
     try:
-        from src.exporter.main_http import run_http_server
-        import threading
+        # Only start the fallback HTTP server when explicitly enabled to avoid
+        # starting two competing metric servers (prometheus_client vs fallback).
+        if os.getenv("MONITORING_HTTP_ENABLE", "0") in ("1", "true", "yes"):
+            # If exporter already started a metrics server, skip to avoid bind conflicts.
+            try:
+                from src.exporter import prometheus as _prom
 
-        port = int(os.getenv("MONITORING_HTTP_PORT", "8000"))
-        http_thread = threading.Thread(target=run_http_server, kwargs={"addr": "0.0.0.0", "port": port}, daemon=True)
-        http_thread.start()
+                if getattr(_prom, "_server_started", False):
+                    _logging.getLogger(__name__).info(
+                        "Metrics server already started by exporter; skipping fallback HTTP server"
+                    )
+                else:
+                    from src.exporter.main_http import run_http_server
+                    import threading
+
+                    port = int(os.getenv("MONITORING_HTTP_PORT", "8000"))
+                    addr = os.getenv("MONITORING_HTTP_ADDR", "127.0.0.1")
+                    http_thread = threading.Thread(
+                        target=run_http_server, kwargs={"addr": addr, "port": port}, daemon=True
+                    )
+                    http_thread.start()
+            except Exception:
+                # If we cannot import the exporter module, proceed to start the HTTP server.
+                from src.exporter.main_http import run_http_server
+                import threading
+
+                port = int(os.getenv("MONITORING_HTTP_PORT", "8000"))
+                addr = os.getenv("MONITORING_HTTP_ADDR", "127.0.0.1")
+                http_thread = threading.Thread(target=run_http_server, kwargs={"addr": addr, "port": port}, daemon=True)
+                http_thread.start()
     except Exception as exc:
         _logging.getLogger(__name__).warning("Falha ao iniciar servidor HTTP de métricas: %s", exc, exc_info=True)
 

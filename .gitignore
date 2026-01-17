@@ -1,6 +1,10 @@
 ###########################
 # IGNORE TUDO DE INFRAESTRUTURA COMO CÓDIGO E SENSÍVEL
 ###########################
+```ignore
+###########################
+# IGNORE TUDO DE INFRAESTRUTURA COMO CÓDIGO E SENSÍVEL
+###########################
 # Ambientes virtuais
 .venv/
 venv/
@@ -47,3 +51,8 @@ Thumbs.db
 
 # Prints do repositório didático
 print.txt
+
+# Backups locais de documentação (não versionar)
+docs/originals/
+
+```

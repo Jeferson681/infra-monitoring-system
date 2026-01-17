@@ -30,16 +30,9 @@ Recomendação: utilize uma conta ou workspace isolado para evitar modificaçõe
 
 ---
 
-## Observação sobre Métricas
-
-O sistema principal coleta métricas locais do host (CPU, memória, disco, rede) por meio da biblioteca psutil.
-Quando executado em infraestrutura provisionada via Terraform — como instâncias em nuvem, containers ou VMs — as métricas refletirão o ambiente provisionado, não o host físico.
-
-Isso é um comportamento esperado e válido para cenários de monitoramento de infraestrutura.
-Para coletar métricas do host físico, o ideal é executar o monitoramento diretamente no servidor ou expor os dados via API dedicada.
+Para detalhes sobre limites de coleta (`psutil`), persistência (JSONL) e ativação do exporter, consulte `docs/DECISIONS.md`. Instruções de execução e exemplos estão em `docs/RUN.md`.
 
 ---
-
 ## Em resumo
 
 O uso de Terraform neste projeto é plenamente funcional e opcional.

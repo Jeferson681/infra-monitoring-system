@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from threading import Thread, Lock
 from typing import Any, Optional
 import logging
+import os
 
 from ..config.settings import load_settings
 from .formatters import normalize_for_display as _normalize_for_display
@@ -351,11 +352,13 @@ class SystemState:
         thr = Thread(target=self._post_treatment_worker, args=(metrics,), daemon=True)
         thr.start()
 
+        # Optionally run synchronously for immediate persistence (disabled by default).
+        # Enable by setting POST_TREATMENT_SYNC=1 in the environment (useful for tests).
         try:
-            # also run synchronously for immediate persistence during tests
-            self._post_treatment_worker(metrics)
+            if os.getenv("POST_TREATMENT_SYNC", "0") in ("1", "true", "yes"):
+                self._post_treatment_worker(metrics)
         except Exception as _exc:
-            logging.getLogger(__name__).debug("post_treatment worker synchronous run failed: %s", _exc)
+            logging.getLogger(__name__).debug("post_treatment worker synchronous run failed: %s", _exc, exc_info=True)
 
     def _safe_collect(self, collect_fn) -> dict[str, Any]:
         try:

@@ -1,21 +1,32 @@
 # Infra Monitoring System — Technical Documentation
 
+# Documentation index
+
+This file was consolidated. Canonical technical docs are located at:
+
+- Portuguese (canonical): [docs/README-TECH.md](README-TECH.md)
+- English (canonical): [docs/README-TECH.EN.md](README-TECH.EN.md)
+
+Backups of original, full documents are stored under `docs/originals/` if you need to restore detailed content.
+
+Use the canonical files for detailed reading and open issues or PRs for reorganization requests.
+
 ## 1. Purpose & Context
 
 This system was developed for educational purposes and to demonstrate best practices in monitoring, automation, and continuous integration.
 Implements collection and exposition of enriched metrics and logs, integrating with leading observability tools: **Prometheus**, **Grafana**, and **Loki**.
 
-The focus is to demonstrate the complete flow of **collection → persistence → export → analysis** in an automated, versioned, and secure environment.
+      <a href="prints/architecture.png"><img src="prints/architecture.png" alt="Architecture" style="width:320px;border:1px solid #ddd"/></a>
 
 ---
 
-## 2. General Architecture
+      <a href="prints/flow_simple.png"><img src="prints/flow_simple.png" alt="Flow" style="width:320px;border:1px solid #ddd"/></a>
 
 The system operates in two main containers:
 
 - **monitoring-app** — runs the monitoring core (`main.py`), responsible for collecting, processing, and writing metrics in JSONL format.
 - **monitoring-metrics** — runs the HTTP exporter (`main_http.py`), which reads JSONL and exposes metrics and logs on endpoints compatible with Prometheus and Loki.
-
+      <a href="prints/dashboard_panel_grafana.png"><img src="prints/dashboard_panel_grafana.png" alt="Grafana" style="width:320px;border:1px solid #ddd"/></a>
 Both share the `/logs` volume, ensuring Promtail can access `.log` and `.json` files.
 The file `infra/promtail/promtail-config.yml` defines the default collection behavior for Loki.
 
@@ -119,62 +130,62 @@ tests/             # Automated tests
 
 ### Artifacts Gallery
 
-The compact thumbnail gallery is embedded below; click any image to open it at full size. You can also open `docs/prints/README.md` to view the same gallery inside the image folder.
+The compact thumbnail gallery is embedded below; click any image to open it at full size. You can also open `prints/README.md` to view the same gallery inside the image folder.
 
 <table>
   <tr>
     <td align="center">
-      <a href="docs/prints/architecture.png"><img src="docs/prints/architecture.png" alt="Architecture" style="width:320px;border:1px solid #ddd"/></a>
+      <a href="prints/architecture.png"><img src="prints/architecture.png" alt="Architecture" style="width:320px;border:1px solid #ddd"/></a>
       <div><strong>Architecture</strong><br/><small>System components & flows</small></div>
     </td>
     <td align="center">
-      <a href="docs/prints/flow_simple.png"><img src="docs/prints/flow_simple.png" alt="Flow" style="width:320px;border:1px solid #ddd"/></a>
+      <a href="prints/flow_simple.png"><img src="prints/flow_simple.png" alt="Flow" style="width:320px;border:1px solid #ddd"/></a>
       <div><strong>Simple Flow</strong><br/><small>High-level data flow</small></div>
     </td>
   </tr>
   <tr>
     <td align="center">
-      <a href="docs/prints/dashboard_panel_grafana.png"><img src="docs/prints/dashboard_panel_grafana.png" alt="Grafana" style="width:320px;border:1px solid #ddd"/></a>
+      <a href="prints/dashboard_panel_grafana.png"><img src="prints/dashboard_panel_grafana.png" alt="Grafana" style="width:320px;border:1px solid #ddd"/></a>
       <div><strong>Grafana Dashboard</strong><br/><small>CPU / Memory / Disk panels</small></div>
     </td>
     <td align="center">
-      <a href="docs/prints/dashboard_panel_grafana2.png"><img src="docs/prints/dashboard_panel_grafana2.png" alt="Grafana 2" style="width:320px;border:1px solid #ddd"/></a>
+      <a href="prints/dashboard_panel_grafana2.png"><img src="prints/dashboard_panel_grafana2.png" alt="Grafana 2" style="width:320px;border:1px solid #ddd"/></a>
       <div><strong>Grafana Detail</strong><br/><small>Panel detail view</small></div>
     </td>
   </tr>
   <tr>
     <td align="center">
-      <a href="docs/prints/target_prometheus_up.png"><img src="docs/prints/target_prometheus_up.png" alt="Prometheus targets" style="width:320px;border:1px solid #ddd"/></a>
+      <a href="prints/target_prometheus_up.png"><img src="prints/target_prometheus_up.png" alt="Prometheus targets" style="width:320px;border:1px solid #ddd"/></a>
       <div><strong>Prometheus Targets</strong><br/><small>Targets UP</small></div>
     </td>
     <td align="center">
-      <a href="docs/prints/prometheus_query_graph.png"><img src="docs/prints/prometheus_query_graph.png" alt="Prometheus graph" style="width:320px;border:1px solid #ddd"/></a>
+      <a href="prints/prometheus_query_graph.png"><img src="prints/prometheus_query_graph.png" alt="Prometheus graph" style="width:320px;border:1px solid #ddd"/></a>
       <div><strong>Prometheus Graph</strong><br/><small>Sample query result</small></div>
     </td>
   </tr>
   <tr>
     <td align="center">
-      <a href="docs/prints/grafana_explore_loki_logs.png"><img src="docs/prints/grafana_explore_loki_logs.png" alt="Grafana logs" style="width:320px;border:1px solid #ddd"/></a>
+      <a href="prints/grafana_explore_loki_logs.png"><img src="prints/grafana_explore_loki_logs.png" alt="Grafana logs" style="width:320px;border:1px solid #ddd"/></a>
       <div><strong>Grafana Explore</strong><br/><small>Loki logs query</small></div>
     </td>
     <td align="center">
-      <a href="docs/prints/promtail_logs_loki.png"><img src="docs/prints/promtail_logs_loki.png" alt="Promtail" style="width:320px;border:1px solid #ddd"/></a>
+      <a href="prints/promtail_logs_loki.png"><img src="prints/promtail_logs_loki.png" alt="Promtail" style="width:320px;border:1px solid #ddd"/></a>
       <div><strong>Promtail Logs</strong><br/><small>Log shipping evidence</small></div>
     </td>
   </tr>
   <tr>
     <td align="center">
-      <a href="docs/prints/docker_compose_up.png"><img src="docs/prints/docker_compose_up.png" alt="Docker" style="width:320px;border:1px solid #ddd"/></a>
+      <a href="prints/docker_compose_up.png"><img src="prints/docker_compose_up.png" alt="Docker" style="width:320px;border:1px solid #ddd"/></a>
       <div><strong>Containers Running</strong><br/><small>docker compose ps</small></div>
     </td>
     <td align="center">
-      <a href="docs/prints/infra_monitoring_terminal.png"><img src="docs/prints/infra_monitoring_terminal.png" alt="Terminal" style="width:320px;border:1px solid #ddd"/></a>
+      <a href="prints/infra_monitoring_terminal.png"><img src="prints/infra_monitoring_terminal.png" alt="Terminal" style="width:320px;border:1px solid #ddd"/></a>
       <div><strong>Local Run</strong><br/><small>Exporter serving / health</small></div>
     </td>
   </tr>
   <tr>
     <td align="center">
-      <a href="docs/prints/GitHub_Actions.png"><img src="docs/prints/GitHub_Actions.png" alt="CI" style="width:320px;border:1px solid #ddd"/></a>
+      <a href="prints/GitHub_Actions.png"><img src="prints/GitHub_Actions.png" alt="CI" style="width:320px;border:1px solid #ddd"/></a>
       <div><strong>CI Pipeline</strong><br/><small>GitHub Actions run</small></div>
     </td>
     <td/>
@@ -182,15 +193,9 @@ The compact thumbnail gallery is embedded below; click any image to open it at f
 </table>
 
 
-## Final Technical Note — `psutil` Collection Limit
+---
 
-The `psutil` module collects metrics only from the environment where the process is running.
-In containers or isolated namespaces, these metrics represent only the container context, not the host system.
-
-Thus, its use is suitable for local diagnostics or in-process monitoring.
-For real observability, it is recommended to integrate **node_exporter** or **cadvisor**, ensuring access to host metrics without breaking isolation.
-
-> **Future improvement:** include a dedicated intermediate agent for host collection, maintaining isolation and compatibility with distributed observability.
+For technical details on `psutil` limits, JSONL persistence and exporter activation, see `docs/DECISIONS.md`. Run instructions are in `docs/RUN.md`.
 
 ---
 

@@ -33,6 +33,9 @@ def test_threshold_override_accepts_critical(monkeypatch, tmp_path):
 def test_post_treatment_history_written(tmp_path, monkeypatch):
     """Trigger a post-treatment snapshot and verify history file is appended."""
     monkeypatch.setenv("MONITORING_LOG_ROOT", str(tmp_path))
+    # Force synchronous post-treatment worker in tests to avoid race conditions
+    # in CI environments where background threads can be delayed.
+    monkeypatch.setenv("POST_TREATMENT_SYNC", "1")
     thresholds = {"cpu_percent": {"warning": 1.0, "critical": 2.0}}
     st = SystemState(thresholds, critical_duration=0, post_treatment_wait_seconds=0)
 
@@ -62,6 +65,8 @@ def test_post_treatment_emitted_to_monitoring_feed(tmp_path, monkeypatch):
     contain 'alerts' and should NOT include 'summary_short'/'summary_long'.
     """
     monkeypatch.setenv("MONITORING_LOG_ROOT", str(tmp_path))
+    # Ensure worker runs synchronously in CI to avoid flakiness
+    monkeypatch.setenv("POST_TREATMENT_SYNC", "1")
     thresholds = {"cpu_percent": {"warning": 1.0, "critical": 2.0}}
     st = SystemState(thresholds, critical_duration=0, post_treatment_wait_seconds=0)
 

@@ -3,7 +3,7 @@ import os
 import time
 import psutil
 import logging
-from typing import Dict, cast
+from typing import Dict, cast, Iterable, Tuple, Any
 
 
 def expose_system_metrics_from_jsonl(jsonl_path: str) -> None:
@@ -60,7 +60,7 @@ _gauges: Dict[str, object] = {}
 _server_started = False
 
 try:
-    from prometheus_client import Gauge, start_http_server  # type: ignore
+    from prometheus_client import Gauge  # type: ignore
 
     _HAVE_PROM = True
 except Exception:  # pragma: no cover - optional dependency
@@ -97,39 +97,31 @@ def start_exporter(port: int | None = None, addr: str | None = None) -> None:
 
     Se `prometheus_client` não estiver disponível, apenas loga e não faz nada.
     """
+    """Initialize exporter metrics without starting an HTTP server.
+
+    NOTE: after refactor the HTTP server is provided by `main_http.run_http_server`.
+    `start_exporter()` now only initializes/promotes metric registration and
+    performs a best-effort initial population of Gauges from JSONL. It does NOT
+    start any HTTP server to avoid bind conflicts; the HTTP server is the
+    responsibility of `main_http` (primary).
+    """
     global _server_started
-    if not _HAVE_PROM:
-        logger.warning("prometheus_client não instalado; exporter desativado")
-        return
-
     if _server_started:
-        logger.debug("exporter Prometheus já iniciado")
+        logger.debug("exporter Prometheus already initialized")
         return
 
-    # Atualiza os Gauges do sistema a partir do JSONL ao iniciar o exporter
-    jsonl_path = os.path.join(os.path.dirname(__file__), "..", "..", "logs", "json")
-    expose_system_metrics_from_jsonl(jsonl_path)
-
-    # Resolve addr/port a partir de parâmetros ou variáveis de ambiente.
-    if addr is None:
-        addr = os.getenv("MONITORING_EXPORTER_ADDR", "127.0.0.1")
-    if port is None:
-        env_port = os.getenv("MONITORING_EXPORTER_PORT")
-        if env_port is not None:
-            try:
-                port = int(env_port)
-            except Exception:
-                logger.warning("MONITORING_EXPORTER_PORT inválido ('%s'), usando 8000", env_port)
-                port = 8000
-        else:
-            port = 8000
-
+    # Inicializa métricas a partir do JSONL (best-effort) para que a registry
+    # contenha valores iniciais quando `generate_latest()` for chamado.
     try:
-        start_http_server(port, addr)
-        _server_started = True
-        logger.info("Prometheus exporter iniciado em %s:%d", addr, port)
-    except Exception as exc:
-        logger.exception("Falha ao iniciar Prometheus exporter: %s", exc)
+        jsonl_path = os.path.join(os.path.dirname(__file__), "..", "..", "logs", "json")
+        expose_system_metrics_from_jsonl(jsonl_path)
+    except Exception:
+        logger.debug("Falha ao popular métricas iniciais do JSONL", exc_info=True)
+
+    # Mark as initialized to avoid repeated work; this does NOT imply a server
+    # was started.
+    _server_started = True
+    logger.info("Prometheus exporter initialized (no HTTP server started)")
 
 
 def expose_metric(name: str, value: float, description: str = "") -> None:
@@ -192,3 +184,94 @@ def expose_process_metrics() -> None:
                 logger.debug("Falha ao obter número de descritores de arquivos: %s", exc, exc_info=True)
     except Exception as exc:
         logger.debug("Falha ao expor métricas do processo: %s", exc, exc_info=True)
+
+
+def get_metrics_bytes() -> bytes:
+    """Return Prometheus exposition bytes for current metrics.
+
+    - If `prometheus_client` is available, return `generate_latest()` output.
+    - Otherwise, build a text exposition from the latest JSONL and a few
+      lightweight process/load metrics.
+    """
+    if _HAVE_PROM:
+        try:
+            from prometheus_client import generate_latest  # type: ignore
+
+            return generate_latest()
+        except Exception:
+            logger.debug("prometheus_client present but failed to generate latest", exc_info=True)
+
+    # Fallback: build a simple text exposition from JSONL and psutil
+    lines = []
+    try:
+        jsonl_path = os.path.join(os.path.dirname(__file__), "..", "..", "logs", "json")
+        files = [f for f in os.listdir(jsonl_path) if f.startswith("monitoring-") and f.endswith(".jsonl")]
+        if files:
+            files.sort(reverse=True)
+            latest_file = os.path.join(jsonl_path, files[0])
+            with open(latest_file, "rb") as f:
+                f.seek(0, os.SEEK_END)
+                pos = f.tell()
+                line = b""
+                while pos > 0:
+                    pos -= 1
+                    f.seek(pos)
+                    char = f.read(1)
+                    if char == b"\n" and line:
+                        break
+                    line = char + line
+                last_json = line.decode("utf-8").strip()
+            if last_json:
+                import json as _json
+
+                try:
+                    metrics = _json.loads(last_json)
+                except Exception:
+                    metrics = {}
+                # If metrics contains a 'metrics' sub-dict, use it
+                items: Iterable[Tuple[str, Any]] = ()
+                if isinstance(metrics, dict):
+                    m = metrics.get("metrics") if "metrics" in metrics else metrics
+                    if isinstance(m, dict):
+                        items = m.items()
+                for k, v in items:
+                    if isinstance(v, bool):
+                        out = "1" if v else "0"
+                    elif isinstance(v, (int, float)):
+                        out = str(v)
+                    else:
+                        try:
+                            out = str(float(v))
+                        except (ValueError, TypeError):
+                            continue
+                    lines.append(f"monitoring_{k} {out}")
+    except Exception as exc:
+        logger.debug("Falha ao montar métricas do JSONL: %s", exc, exc_info=True)
+
+    # Add process-level metrics
+    try:
+        proc = psutil.Process()
+        cpu = proc.cpu_percent(interval=0.0)
+        lines.append(f"process_cpu_percent {cpu}")
+        mem = proc.memory_percent()
+        lines.append(f"process_memory_percent {mem}")
+        rss = getattr(proc.memory_info(), "rss", 0)
+        lines.append(f"process_memory_rss_bytes {rss}")
+        uptime = time.time() - proc.create_time()
+        lines.append(f"process_uptime_seconds {uptime}")
+        threads = proc.num_threads()
+        lines.append(f"process_num_threads {threads}")
+    except Exception:
+        logger.debug("Falha ao coletar métricas do processo", exc_info=True)
+
+    # Load averages
+    try:
+        if hasattr(os, "getloadavg"):
+            l1, l5, l15 = os.getloadavg()
+            lines.append(f"monitoring_load_1 {float(l1)}")
+            lines.append(f"monitoring_load_5 {float(l5)}")
+            lines.append(f"monitoring_load_15 {float(l15)}")
+    except OSError:
+        pass
+
+    return "\n".join(lines).encode("utf-8")
