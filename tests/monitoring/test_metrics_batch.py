@@ -25,61 +25,43 @@ def test_parse_first_float_from_text():
 
 
 def test_get_temp_from_script_success_and_failure(monkeypatch):
-    """Teste para obtenção de temperatura via script, cobrindo sucesso e falha."""
+    """Teste para obtenção de temperatura via script (deprecated).
 
-    class FakeProc:
-        def __init__(self, out):
-            self.stdout = out
-
-    def fake_run_ok(cmd, capture_output, text, timeout):
-        return FakeProc("42.5\n")
-
-    def fake_run_err(cmd, capture_output, text, timeout):
-        raise metrics.subprocess.SubprocessError("fail")
-
-    monkeypatch.setattr(metrics.subprocess, "run", fake_run_ok)
-    # using Path to a fake script is fine; function only uses subprocess
-    assert metrics._get_temp_from_script(metrics.Path("fake")) == 42.5
-
-    monkeypatch.setattr(metrics.subprocess, "run", fake_run_err)
+    Esta função foi descontinuada. Mantida para compatibilidade com testes antigos.
+    Sempre retorna None.
+    """
+    # _get_temp_from_script é deprecated e sempre retorna None
     assert metrics._get_temp_from_script(metrics.Path("fake")) is None
+    assert metrics._get_temp_from_script(metrics.Path("another")) is None
 
 
+import sys
+import pytest
+
+
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="CPU temperature via psutil not supported on Windows")
 def test_temperature_collector_posix_and_nonposix(monkeypatch, tmp_path):
-    """Teste para coleta de temperatura em ambientes POSIX e não-POSIX."""
-    # Non-posix should return None
-    monkeypatch.setattr(metrics.os, "name", "nt")
-    assert metrics._temperature_collector() is None
+    """Teste para coleta de temperatura usando psutil.sensors_temperatures()."""
+    from types import SimpleNamespace
+    import pytest
 
-    # Posix path exists and executable -> delegate to _get_temp_from_script
-    monkeypatch.setattr(metrics.os, "name", "posix")
+    # Mock psutil.sensors_temperatures() para retornar dados de k10temp (AMD)
+    def mock_sensors_temps():
+        return {
+            "k10temp": [
+                SimpleNamespace(label="Tctl", current=45.5, high=None, critical=None),
+            ]
+        }
 
-    # Create a FakePath class to avoid instantiating PosixPath on Windows
-    class FakePath:
-        def __init__(self, p):
-            self._p = p
+    # Verificar que psutil tem o método
+    assert hasattr(metrics.psutil, "sensors_temperatures")
 
-        def resolve(self):
-            return self
+    # Mock sensors_temperatures para retornar dados
+    monkeypatch.setattr(metrics.psutil, "sensors_temperatures", mock_sensors_temps)
 
-        @property
-        def parents(self):
-            # allow indexing parents[2]
-            return [self, self, self]
-
-        def __truediv__(self, other):
-            return self
-
-        def exists(self):
-            return True
-
-        def __fspath__(self):
-            return str(self._p)
-
-    monkeypatch.setattr(metrics, "Path", FakePath)
-    monkeypatch.setattr(metrics.os, "access", lambda p, m: True)
-    monkeypatch.setattr(metrics, "_get_temp_from_script", lambda p: 30.0)
-    assert metrics._temperature_collector() == 30.0
+    # Deve retornar a temperatura de k10temp.Tctl
+    result = metrics._temperature_collector()
+    assert result == pytest.approx(45.5)
 
 
 def test_get_network_latency_ping_and_tcp(monkeypatch):

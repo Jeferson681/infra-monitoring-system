@@ -7,14 +7,14 @@ Agente local de coleta, tratamento e logs estruturados, utilizado como **alvo re
 
 ## O que é este projeto
 
-Este projeto implementa um **agente de monitoramento host-aware** que executa diretamente no sistema operacional, coletando métricas do host, estruturando logs e expondo informações de saúde da aplicação.  
+Este projeto implementa um **agente de monitoramento host-aware** que executa diretamente no sistema operacional, coletando métricas do host, estruturando logs e expondo informações de saúde da aplicação.
 Ele foi projetado para servir como um **alvo real e controlado** para aplicar e validar práticas DevOps — **não** como uma ferramenta de infraestrutura ou plataforma de monitoramento.
 
 ---
 
 ## Problema que resolve
 
-Projetos de aprendizado em DevOps frequentemente utilizam exemplos artificiais ou excessivamente simplificados.  
+Projetos de aprendizado em DevOps frequentemente utilizam exemplos artificiais ou excessivamente simplificados.
 Este agente fornece um **sistema real executando no host**, permitindo aplicar pipelines de CI/CD, stacks de observabilidade, estratégias de testes e conceitos de infraestrutura como código em um contexto mais próximo do mundo real, com escopo e limitações claramente definidos.
 
 ---

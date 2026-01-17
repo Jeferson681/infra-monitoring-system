@@ -10,7 +10,6 @@ import math
 import logging
 import socket
 import threading
-import os
 import re
 import subprocess
 import platform
@@ -142,6 +141,10 @@ def collect_metrics() -> dict[str, float | int | str | None]:
     _collect_latency_metrics(metrics)
     _collect_temperature_and_timestamp(metrics)
     _collect_disk_usage_bytes(metrics)
+
+    # Normalize temperature key for display formatting
+    if "temperature" in metrics:
+        metrics["temperature_celsius"] = metrics["temperature"]
 
     # Best-effort: expose a small set of metrics to the Prometheus exporter
     # if available. Keep failures non-fatal so metric collection remains robust.
@@ -381,23 +384,13 @@ def get_disk_percent(path: str | None = None) -> float | None:
 
 
 def _get_temp_from_script(script_path: Path) -> float | None:
-    """Execute o script `temp.sh` de forma segura e parseie um float de temperatura.
+    """Manter para compatibilidade com testes; descontinuado em favor de psutil.
 
-    Use subprocess.run sem shell para evitar injeção. Retorne float em graus
-    Celsius em sucesso ou None em falha/erro de parse.
+    Esta função foi mantida para compatibilidade com testes, mas o método
+    psutil é preferido. Será removida em futuras versões.
     """
-    try:
-        # executar o script com timeout para evitar bloqueios
-        proc = subprocess.run([str(script_path)], capture_output=True, text=True, timeout=5)
-    except (subprocess.SubprocessError, OSError) as exc:
-        logger.error("_get_temp_from_script falhou ao executar: %s", exc, exc_info=True)
-        return None
-
-    out = (proc.stdout or "").strip()
-    if not out:
-        return None
-
-    return _parse_first_float_from_text(out)
+    logger.debug("_get_temp_from_script: método descontinuado, usar psutil ao invés")
+    return None
 
 
 def _parse_first_float_from_text(text: str) -> float | None:
@@ -419,15 +412,46 @@ def _parse_first_float_from_text(text: str) -> float | None:
 
 
 def _temperature_collector() -> float | None:
-    """Collector usado pelo cache: retorna temperatura via script em POSIX."""
-    if os.name != "posix":
-        return None
+    """Collector usado pelo cache: retorna temperatura da CPU usando psutil."""
     try:
-        script_path = Path(__file__).resolve().parents[2] / "scripts" / "temp.sh"
-        if script_path.exists() and os.access(script_path, os.X_OK):
-            return _get_temp_from_script(script_path)
-    except (OSError, subprocess.SubprocessError) as exc:
-        logger.error("_temperature_collector falhou: %s", exc, exc_info=True)
+        # Tentar obter temperaturas usando psutil.sensors_temperatures()
+        if hasattr(psutil, "sensors_temperatures"):
+            temps = psutil.sensors_temperatures()
+            if temps:
+                # Preferir k10temp (AMD) ou coretemp (Intel)
+                for sensor_name in ("k10temp", "coretemp", "it8792", "nct6798"):
+                    if sensor_name in temps:
+                        entries = temps[sensor_name]
+                        if entries:
+                            # Buscar Tctl (AMD) ou Package (Intel)
+                            for entry in entries:
+                                if entry.label in ("Tctl", "Package", "Core 0"):
+                                    logger.debug(
+                                        "_temperature_collector: obtido de %s.%s = %.1f°C",
+                                        sensor_name,
+                                        entry.label,
+                                        entry.current,
+                                    )
+                                    return entry.current
+                            # Se não encontrar label específico, usar o primeiro
+                            if entries[0].current is not None:
+                                logger.debug(
+                                    "_temperature_collector: obtido de %s (primeiro) = %.1f°C",
+                                    sensor_name,
+                                    entries[0].current,
+                                )
+                                return entries[0].current
+
+                # Fallback: tentar qualquer sensor que não seja acpitz
+                for sensor_name, entries in temps.items():
+                    if sensor_name != "acpitz" and entries:
+                        current = entries[0].current
+                        if current is not None and current > 20:  # Filtrar valores suspeitos
+                            logger.debug("_temperature_collector: obtido de %s = %.1f°C", sensor_name, current)
+                            return current
+    except Exception as exc:
+        logger.error("_temperature_collector falhou ao usar psutil: %s", exc, exc_info=True)
+
     return None
 
 

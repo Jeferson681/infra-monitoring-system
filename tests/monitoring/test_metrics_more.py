@@ -45,19 +45,15 @@ def test_get_network_stats_and_disk_percent(monkeypatch, tmp_path):
 
 
 def test_parse_first_float_and_temp_script(tmp_path, monkeypatch):
-    """_get_temp_from_script parses numeric output from a script."""
+    """_get_temp_from_script é deprecated e retorna None."""
     # create a fake script file that prints a number
     script = tmp_path / "temp.sh"
     script.write_text("echo 42.5")
     script.chmod(0o755)
 
-    # monkeypatch subprocess.run to return object with stdout
-    class P:
-        stdout = "42.5\n"
-
-    monkeypatch.setattr(metrics.subprocess, "run", lambda *a, **k: P())
+    # _get_temp_from_script é deprecated, sempre retorna None
     val = metrics._get_temp_from_script(script)
-    assert val == 42.5 or val is None
+    assert val is None
 
 
 def test_tcp_latency_and_flags(monkeypatch):

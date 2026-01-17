@@ -151,6 +151,7 @@ def trim_process_working_set_windows(pid: int) -> bool:
     """Tente reduzir o working set de um processo no Windows usando EmptyWorkingSet.
 
     Retorna True em sucesso, False em plataformas não-Windows ou em falha.
+    O type: ignore é necessário porque WinDLL só existe no Windows.
     """
     if os.name != "nt":
         return False
@@ -160,8 +161,8 @@ def trim_process_working_set_windows(pid: int) -> bool:
         PROCESS_SET_QUOTA = 0x0100
         PROCESS_QUERY_INFORMATION = 0x0400
 
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        psapi = ctypes.WinDLL("psapi", use_last_error=True)
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+        psapi = ctypes.WinDLL("psapi", use_last_error=True)  # type: ignore[attr-defined]
 
         h = kernel32.OpenProcess(PROCESS_SET_QUOTA | PROCESS_QUERY_INFORMATION, False, pid)
         if not h:

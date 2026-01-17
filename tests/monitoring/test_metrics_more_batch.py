@@ -145,15 +145,26 @@ def test_get_cpu_freq_ghz(monkeypatch):
 
 
 def test_get_temp_from_script_and_collector(monkeypatch, tmp_path):
-    """Testa _get_temp_from_script e o coletor de temperatura."""
-    # simulate subprocess.run returning specific stdout
-    fake_proc = SimpleNamespace(stdout="Temp= 45.6 C\n", returncode=0)
-    monkeypatch.setattr(m.subprocess, "run", lambda *a, **k: fake_proc)
-    script = tmp_path / "temp.sh"
-    script.write_text("echo 45.6")
-    val = m._get_temp_from_script(script)
-    assert val == pytest.approx(45.6)
+    """Testa _get_temp_from_script (deprecated) e o novo coletor de temperatura."""
+    # _get_temp_from_script é deprecated e sempre retorna None
+    assert m._get_temp_from_script(tmp_path / "temp.sh") is None
 
-    # temperature collector should return None on non-posix
-    monkeypatch.setattr(m.os, "name", "nt", raising=False)
-    assert m._temperature_collector() is None
+    import sys
+    import pytest
+
+    # skip on Windows where psutil.sensors_temperatures() is not supported
+    pytest.importorskip("psutil")
+    if sys.platform.startswith("win"):
+        pytest.skip("CPU temperature via psutil not supported on Windows")
+
+    # temperature collector agora usa psutil.sensors_temperatures()
+    def mock_sensors_temps():
+        return {
+            "k10temp": [
+                SimpleNamespace(label="Tctl", current=50.2, high=None, critical=None),
+            ]
+        }
+
+    monkeypatch.setattr(m.psutil, "sensors_temperatures", mock_sensors_temps)
+    result = m._temperature_collector()
+    assert result == pytest.approx(50.2)
