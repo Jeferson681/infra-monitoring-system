@@ -15,6 +15,10 @@ from .log_helpers import process_temp_item
 
 logger = logging.getLogger(__name__)
 
+# Constantes de configuração
+NETWORK_EXCESS_THRESHOLD_SECONDS = 300  # 5 minutos
+NETWORK_TREATMENT_COOLDOWN_SECONDS = 3 * 24 * 3600  # 3 dias
+
 
 ## ...existing code...
 
@@ -50,7 +54,7 @@ def update_network_usage_learning(bytes_sent: int, bytes_recv: int) -> bool:
         return False
 
     # Se excesso persistir por mais de 5min e trava horária ativa, acione tratamento
-    if total > limit and excess_duration >= 300:
+    if total > limit and excess_duration >= NETWORK_EXCESS_THRESHOLD_SECONDS:
         try:
             from . import treatments
 
@@ -58,9 +62,6 @@ def update_network_usage_learning(bytes_sent: int, bytes_recv: int) -> bool:
             if restart_func is not None:
                 restart_func()
         except Exception as exc:
-            import logging
-
-            logger = logging.getLogger(__name__)
             logger.warning("update_network_usage_learning: restart_interface falhou: %s", exc, exc_info=True)
         return True
     return False

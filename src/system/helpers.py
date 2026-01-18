@@ -57,8 +57,6 @@ def record_network_usage(bytes_sent: int, bytes_recv: int) -> None:
         with NETWORK_LEARNING_FILE.open("w", encoding="utf-8") as f:
             json.dump(data, f)
     except Exception as exc:
-        import logging
-
         logging.getLogger(__name__).error("Erro ao salvar dados de rede: %s", exc, exc_info=True)
 
 

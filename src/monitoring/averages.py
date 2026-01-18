@@ -74,23 +74,6 @@ def _iter_jsonl_today(logs_root: Path) -> Iterator[tuple[dict, Path, int]]:
 # complexity inside _extract_epoch)
 
 
-def _human_bytes(b: Optional[float]) -> Optional[str]:
-    """Compatibility wrapper: delegate to formatters._fmt_bytes_human.
-
-    Keeps the old averages._human_bytes API used by tests and callers.
-    Returns None when input is None or invalid.
-    """
-    if b is None:
-        return None
-    try:
-        return _fmt_bytes_human(int(b))
-    except Exception:
-        return None
-
-
-# _human_bytes removed: use formatters._fmt_bytes_human directly where needed.
-
-
 def _compute_averages_and_counts(window: List[tuple], metric_keys: List[str]):
     """Compute sums, counts, averages and counts_by_state for a given window.
 
@@ -255,8 +238,8 @@ def extract_relevant(obj: dict) -> Dict[str, Any]:
         "ping_ms": m.get("ping_ms"),
         "latency_ms": m.get("latency_ms"),
         "temperature": m.get("temperature"),
-        "bytes_sent_human": _human_bytes(m.get("bytes_sent")),
-        "bytes_recv_human": _human_bytes(m.get("bytes_recv")),
+        "bytes_sent_human": _fmt_bytes_human(int(m["bytes_sent"])) if m.get("bytes_sent") is not None else None,
+        "bytes_recv_human": _fmt_bytes_human(int(m["bytes_recv"])) if m.get("bytes_recv") is not None else None,
     }
 
 
@@ -370,9 +353,9 @@ def _add_human_bytes(averages: Dict[str, Any]) -> None:
     """Adicione campos legíveis (GB) ao dicionário de médias quando aplicável."""
     try:
         if averages.get("bytes_sent") is not None:
-            averages["bytes_sent_human"] = _human_bytes(averages["bytes_sent"])
+            averages["bytes_sent_human"] = _fmt_bytes_human(int(averages["bytes_sent"]))
         if averages.get("bytes_recv") is not None:
-            averages["bytes_recv_human"] = _human_bytes(averages["bytes_recv"])
+            averages["bytes_recv_human"] = _fmt_bytes_human(int(averages["bytes_recv"]))
     except Exception:
         logging.getLogger(__name__).debug("_add_human_bytes failed", exc_info=True)
 
