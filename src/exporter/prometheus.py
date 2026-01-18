@@ -28,8 +28,16 @@ except Exception:  # pragma: no cover - optional dependency
     _HAVE_PROM = False
 
 
+# Cache para _sanitize_metric_name() para evitar reprocessamento de nomes iguais
+_sanitize_cache: Dict[str, str] = {}
+
+
 def _sanitize_metric_name(name: str) -> str:
     """Sanitiza o nome da métrica para o padrão Prometheus, substituindo caracteres inválidos por underline."""
+    # Verifica cache primeiro
+    if name in _sanitize_cache:
+        return _sanitize_cache[name]
+
     # Prometheus metric names: [a-zA-Z_:][a-zA-Z0-9_:]*
     out = []
     for i, ch in enumerate(name):
@@ -43,7 +51,9 @@ def _sanitize_metric_name(name: str) -> str:
                 out.append(ch)
             else:
                 out.append("_")
-    return "".join(out)
+    result = "".join(out)
+    _sanitize_cache[name] = result
+    return result
 
 
 def start_exporter(port: int | None = None, addr: str | None = None) -> None:

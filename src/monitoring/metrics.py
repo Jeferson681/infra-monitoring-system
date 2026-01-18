@@ -13,6 +13,7 @@ import threading
 import re
 import subprocess
 import platform
+from typing import Any, Callable
 
 import psutil
 from pathlib import Path
@@ -54,6 +55,10 @@ _CACHE: dict[str, dict] = {k: {"value": None, "ts": 0.0} for k in _METRIC_INTERV
 # o thread chamador — se já houver coleta em andamento, usamos o valor em cache.
 _LOCKS: dict[str, threading.Lock] = {k: threading.Lock() for k in _METRIC_INTERVALS.keys()}
 
+# Constantes de temperatura
+TEMPERATURE_MIN_THRESHOLD = 20.0  # Filtrar valores < 20°C como suspeitos
+SENSOR_PRIORITY_ORDER = ["k10temp", "coretemp", "it8792", "nct6798"]
+
 
 def _now() -> float:
     """Retorne um timestamp monotônico (em segundos).
@@ -77,7 +82,7 @@ def _is_stale(key: str) -> bool:
         return True
 
 
-def _cache_get_or_refresh(key: str, collector, *args, **kwargs):
+def _cache_get_or_refresh(key: str, collector: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
     """Retorne o valor em cache para `key`, atualizando quando stale.
 
     `collector` é um callable que será invocado para refazer a medição. Para
@@ -419,7 +424,7 @@ def _temperature_collector() -> float | None:
             temps = psutil.sensors_temperatures()
             if temps:
                 # Preferir k10temp (AMD) ou coretemp (Intel)
-                for sensor_name in ("k10temp", "coretemp", "it8792", "nct6798"):
+                for sensor_name in SENSOR_PRIORITY_ORDER:
                     if sensor_name in temps:
                         entries = temps[sensor_name]
                         if entries:
@@ -446,7 +451,7 @@ def _temperature_collector() -> float | None:
                 for sensor_name, entries in temps.items():
                     if sensor_name != "acpitz" and entries:
                         current = entries[0].current
-                        if current is not None and current > 20:  # Filtrar valores suspeitos
+                        if current is not None and current > TEMPERATURE_MIN_THRESHOLD:  # Filtrar valores suspeitos
                             logger.debug("_temperature_collector: obtido de %s = %.1f°C", sensor_name, current)
                             return current
     except Exception as exc:

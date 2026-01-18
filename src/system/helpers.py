@@ -3,6 +3,7 @@ import datetime
 import logging
 import os
 import socket
+import time
 from typing import List, Tuple
 from pathlib import Path
 
@@ -60,8 +61,21 @@ def record_network_usage(bytes_sent: int, bytes_recv: int) -> None:
         logging.getLogger(__name__).error("Erro ao salvar dados de rede: %s", exc, exc_info=True)
 
 
+# Cache para get_network_limit() para evitar releitura frequente de arquivo
+_network_limit_cache: dict[str, float | int] = {"value": NETWORK_DEFAULT_LIMIT, "ts": 0.0}
+
+
 def get_network_limit() -> int:
-    """Retorna o limite atual para bytes_sent/bytes_recv, aprendendo após 4 semanas."""
+    """Retorna o limite atual para bytes_sent/bytes_recv, aprendendo após 4 semanas.
+
+    Usa cache de 60 segundos para evitar releitura frequente do arquivo.
+    """
+    global _network_limit_cache
+    now = time.monotonic()
+
+    # Se cache ainda é válido (< 60 segundos), retorna valor em cache
+    if now - _network_limit_cache["ts"] < 60.0:
+        return int(_network_limit_cache["value"])
     if not NETWORK_LEARNING_FILE.exists():
         return NETWORK_DEFAULT_LIMIT
     try:
@@ -83,6 +97,11 @@ def get_network_limit() -> int:
     all_values = [v for week in weeks.values() for v in week]
     avg = sum(all_values) / max(1, len(all_values))
     limit = int(avg * (1 + NETWORK_MARGIN))
+
+    # Atualiza cache
+    _network_limit_cache["value"] = limit
+    _network_limit_cache["ts"] = now
+
     return limit
 
 

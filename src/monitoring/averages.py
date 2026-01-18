@@ -15,7 +15,7 @@ e mantêm compatibilidade com a API usada pelos testes.
 """
 
 from pathlib import Path
-from typing import Iterator, Optional, Dict, Any, List
+from typing import Iterator, Optional, Dict, Any, List, Tuple
 import json
 import datetime
 import logging
@@ -74,7 +74,9 @@ def _iter_jsonl_today(logs_root: Path) -> Iterator[tuple[dict, Path, int]]:
 # complexity inside _extract_epoch)
 
 
-def _compute_averages_and_counts(window: List[tuple], metric_keys: List[str]):
+def _compute_averages_and_counts(
+    window: List[tuple], metric_keys: List[str]
+) -> Tuple[Dict[str, Optional[float]], Dict[str, int], Dict[str, Dict[str, int]], Dict[str, int]]:
     """Compute sums, counts, averages and counts_by_state for a given window.
 
     Returns (averages, counts, counts_by_state_per_metric, state_counts).
