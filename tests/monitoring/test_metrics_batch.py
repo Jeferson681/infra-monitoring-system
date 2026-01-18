@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 
 from src.monitoring import metrics
+import sys
+import pytest
 
 
 def test_safe_float_and_counter():
@@ -35,15 +37,10 @@ def test_get_temp_from_script_success_and_failure(monkeypatch):
     assert metrics._get_temp_from_script(metrics.Path("another")) is None
 
 
-import sys
-import pytest
-
-
 @pytest.mark.skipif(sys.platform.startswith("win"), reason="CPU temperature via psutil not supported on Windows")
 def test_temperature_collector_posix_and_nonposix(monkeypatch, tmp_path):
     """Teste para coleta de temperatura usando psutil.sensors_temperatures()."""
     from types import SimpleNamespace
-    import pytest
 
     # Mock psutil.sensors_temperatures() para retornar dados de k10temp (AMD)
     def mock_sensors_temps():

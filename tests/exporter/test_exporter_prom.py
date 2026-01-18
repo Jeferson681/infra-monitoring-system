@@ -28,18 +28,19 @@ def test_sanitize_metric_name_and_expose_with_prom(monkeypatch):
 
     sys.modules["prometheus_client"] = fake_mod
 
-    # Now reload the exporter module to pick up the fake
+    # Now reload the canonical exporter package to pick up the fake
     import importlib
 
-    exp = importlib.reload(importlib.import_module("src.exporter.exporter"))
+    exp = importlib.reload(importlib.import_module("src.exporter.prometheus"))
 
     # test sanitize
     san = exp._sanitize_metric_name("1bad-name%!*")
     assert san[0] == "_"
 
-    # start exporter should not raise and should call fake_start_http_server
+    # start exporter should not raise; HTTP server is provided by main_http
     exp.start_exporter(port=9001, addr="127.0.0.1")
-    assert fake_mod.started == ("127.0.0.1", 9001)
+    # Prometheus exporter now only initializes metrics; it must NOT call start_http_server
+    assert fake_mod.started is None
 
     # expose metric should create and set a gauge
     exp.expose_metric("my.metric-name", 3.14)
@@ -63,7 +64,7 @@ def test_expose_metric_without_prom(monkeypatch):
 
     import importlib
 
-    exp = importlib.reload(importlib.import_module("src.exporter.exporter"))
+    exp = importlib.reload(importlib.import_module("src.exporter.prometheus"))
     if hasattr(exp, "_gauges"):
         exp._gauges.clear()
 

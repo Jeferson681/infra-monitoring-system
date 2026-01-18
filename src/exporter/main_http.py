@@ -290,7 +290,7 @@ class HealthHandler(BaseHTTPRequestHandler):
         pass
 
 
-def run_http_server(addr="localhost", port=8000):
+def run_http_server(addr="127.0.0.1", port=8000):
     """Inicia o servidor HTTP para expor métricas."""
     # Cria diretório de logs se não existir
     os.makedirs(os.path.dirname(__file__), exist_ok=True)

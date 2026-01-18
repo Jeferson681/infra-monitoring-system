@@ -1,56 +1,16 @@
-import json
-import os
-import time
-import psutil
-import logging
-from typing import Dict, cast, Iterable, Tuple, Any
-
-
-def expose_system_metrics_from_jsonl(jsonl_path: str) -> None:
-    """Lê a última linha do JSONL e expõe métricas do sistema como Gauges."""
-    if not _HAVE_PROM:
-        return
-    try:
-        files = [f for f in os.listdir(jsonl_path) if f.startswith("monitoring-") and f.endswith(".jsonl")]
-        if not files:
-            return
-        files.sort(reverse=True)
-        latest_file = os.path.join(jsonl_path, files[0])
-        with open(latest_file, "rb") as f:
-            f.seek(0, os.SEEK_END)
-            pos = f.tell()
-            line = b""
-            while pos > 0:
-                pos -= 1
-                f.seek(pos)
-                char = f.read(1)
-                if char == b"\n" and line:
-                    break
-                line = char + line
-            last_json = line.decode("utf-8").strip()
-        if last_json:
-            metrics = json.loads(last_json)
-            for k, v in metrics.items():
-                if isinstance(v, (int, float)):
-                    expose_metric(f"monitoring_{k}", float(v), f"System metric {k} from JSONL")
-    except Exception as exc:
-        logger.debug("Falha ao expor métricas do sistema do JSONL: %s", exc, exc_info=True)
-
-
-# prometheus_exporter.py
-# Utilitários para exportação de métricas no padrão Prometheus.
-
-# ...existing code...
-
-"""
-Utilitários para exportação de métricas no padrão Prometheus.
+"""Utilitários para exportação de métricas no padrão Prometheus.
 
 Exponha métricas para Prometheus como Gauges quando a biblioteca
 `prometheus_client` estiver disponível. Se a biblioteca não estiver
 instalada, as funções tornam-se no-ops e apenas logam advertências.
 """
 
-# ...existing code...
+import json
+import os
+import time
+import psutil
+import logging
+from typing import Dict, cast, Iterable, Tuple, Any
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +91,7 @@ def expose_metric(name: str, value: float, description: str = "") -> None:
     Se `prometheus_client` não estiver disponível, apenas loga e retorna.
     """
     if not _HAVE_PROM:
-        logger.debug("prometheus_client não disponível; expose_metric %s=%s ignorado", name, value)
+        logger.debug("prometheus_client not available; expose_metric %s=%s ignored", name, value)
         return
 
     san = _sanitize_metric_name(name)
@@ -146,6 +106,37 @@ def expose_metric(name: str, value: float, description: str = "") -> None:
         g_cast.set(float(value))
     except Exception as exc:
         logger.debug("Falha ao expor métrica %s: %s", name, exc, exc_info=True)
+
+
+def expose_system_metrics_from_jsonl(jsonl_path: str) -> None:
+    """Lê a última linha do JSONL e expõe métricas do sistema como Gauges."""
+    if not _HAVE_PROM:
+        return
+    try:
+        files = [f for f in os.listdir(jsonl_path) if f.startswith("monitoring-") and f.endswith(".jsonl")]
+        if not files:
+            return
+        files.sort(reverse=True)
+        latest_file = os.path.join(jsonl_path, files[0])
+        with open(latest_file, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            pos = f.tell()
+            line = b""
+            while pos > 0:
+                pos -= 1
+                f.seek(pos)
+                char = f.read(1)
+                if char == b"\n" and line:
+                    break
+                line = char + line
+            last_json = line.decode("utf-8").strip()
+        if last_json:
+            metrics = json.loads(last_json)
+            for k, v in metrics.items():
+                if isinstance(v, (int, float)):
+                    expose_metric(f"monitoring_{k}", float(v), f"System metric {k} from JSONL")
+    except Exception as exc:
+        logger.debug("Falha ao expor métricas do sistema do JSONL: %s", exc, exc_info=True)
 
 
 def expose_process_metrics() -> None:

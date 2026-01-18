@@ -30,6 +30,21 @@ def main(argv: list[str] | None = None) -> None:
         None
 
     """
+    # Carrega variáveis de ambiente do arquivo .env (se presente) usando o
+    # helper canônico para evitar duplicação de parsing. NÃO sobrescreve
+    # variáveis já definidas no ambiente do processo.
+    try:
+        from src.system.helpers import read_env_file
+
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        env_path = os.path.join(project_root, ".env")
+        env_items = read_env_file(env_path)
+        for k, v in env_items.items():
+            if os.getenv(k) is None:
+                os.environ[k] = v
+    except Exception:
+        _logging.getLogger(__name__).debug("falha ao carregar .env via helper", exc_info=True)
+
     # Comportamento de argumentos:
     # - Se argv for None -> usa os argumentos do processo (sys.argv via argparse)
     # - Se argv for lista vazia (chamadas de teste), aplica defaults locais
@@ -85,7 +100,13 @@ def main(argv: list[str] | None = None) -> None:
                     import threading
 
                     port = int(os.getenv("MONITORING_HTTP_PORT", "8000"))
-                    addr = os.getenv("MONITORING_HTTP_ADDR", "127.0.0.1")
+                    # Allow explicit override from environment so orchestrators
+                    # (docker-compose) can request a different bind (eg 0.0.0.0).
+                    # Default to localhost to avoid accidental exposure when the
+                    # program is started directly by a user.
+                    addr = os.getenv("MONITORING_HTTP_ADDR")
+                    if not addr:
+                        addr = "127.0.0.1"
                     http_thread = threading.Thread(
                         target=run_http_server, kwargs={"addr": addr, "port": port}, daemon=True
                     )
@@ -99,6 +120,17 @@ def main(argv: list[str] | None = None) -> None:
                 addr = os.getenv("MONITORING_HTTP_ADDR", "127.0.0.1")
                 http_thread = threading.Thread(target=run_http_server, kwargs={"addr": addr, "port": port}, daemon=True)
                 http_thread.start()
+
+            # Optionally start promtail/loki worker that sends heartbeat logs
+            # directly from the app process. Enabled via MONITORING_PROMTAIL_ENABLE.
+            if os.getenv("MONITORING_PROMTAIL_ENABLE", "0") in ("1", "true", "yes"):
+                try:
+                    from src.exporter.main_http import run_promtail_worker
+
+                    promtail_thread = threading.Thread(target=run_promtail_worker, daemon=True)
+                    promtail_thread.start()
+                except Exception:
+                    _logging.getLogger(__name__).debug("falha ao iniciar promtail worker", exc_info=True)
     except Exception as exc:
         _logging.getLogger(__name__).warning("Falha ao iniciar servidor HTTP de métricas: %s", exc, exc_info=True)
 
