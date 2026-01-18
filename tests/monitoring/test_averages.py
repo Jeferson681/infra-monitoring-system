@@ -5,6 +5,7 @@ import time
 import pytest
 
 import src.monitoring.averages as averages
+import src.monitoring.formatters as formatters
 from src.system.time_helpers import extract_epoch
 
 
@@ -22,8 +23,8 @@ def test__extract_epoch_numeric_and_iso():
 
 def test__human_bytes():
     """Valida a formatação human-readable de bytes."""
-    assert averages._human_bytes(1024**3) == "1.00 GB"
-    assert averages._human_bytes(None) is None
+    assert formatters._fmt_bytes_human(1024**3) == "1.00 GB"
+    assert formatters._fmt_bytes_human(None) == "Indisponivel"
 
 
 def test_extract_relevant_and_normalize_state():
