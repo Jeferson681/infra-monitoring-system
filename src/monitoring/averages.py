@@ -19,6 +19,7 @@ from typing import Iterator, Optional, Dict, Any, List, Tuple
 import json
 import datetime
 import logging
+import time
 from .formatters import _build_long_from_metrics, _fmt_bytes_human, format_used_files_lines, format_duration
 from .state import compute_metric_states
 from ..system.logs import write_log
@@ -29,33 +30,62 @@ from ..system.time_helpers import extract_epoch
 # do not import iter_jsonl_objects from averages (may be removed); decode JSONL inline
 
 
-def _find_candidate_files(root: Path) -> List[Path]:
+def _find_candidate_files(root: Path, pattern_prefix: str = "monitoring") -> List[Path]:
+    """Encontre possíveis localizações de arquivo JSONL para um padrão de arquivo.
+
+    Parâmetros:
+        root: diretório raiz onde procurar.
+        pattern_prefix: prefixo do arquivo (padrão: 'monitoring').
+    """
     t = datetime.date.today().strftime("%Y-%m-%d")
     return [
-        root / "logs" / "json" / "monitoring" / f"monitoring-{t}.jsonl",
-        root / "logs" / "json" / f"monitoring-{t}.jsonl",
-        root / "json" / "monitoring" / f"monitoring-{t}.jsonl",
-        root / "json" / f"monitoring-{t}.jsonl",
+        root / "logs" / "json" / pattern_prefix / f"{pattern_prefix}-{t}.jsonl",
+        root / "logs" / "json" / f"{pattern_prefix}-{t}.jsonl",
+        root / "json" / pattern_prefix / f"{pattern_prefix}-{t}.jsonl",
+        root / "json" / f"{pattern_prefix}-{t}.jsonl",
     ]
 
 
-def _iter_jsonl_file(path: Path) -> Iterator[tuple[dict, Path, int]]:
-    """Yield JSON objects from a single file path, skipping malformed lines."""
-    try:
-        with path.open("r", encoding="utf-8") as fh:
-            for lineno, ln in enumerate(fh, start=1):
-                ln = ln.strip()
-                if not ln:
-                    continue
-                try:
-                    obj = json.loads(ln)
-                except json.JSONDecodeError:
-                    # ignore malformed JSON lines
-                    continue
-                if isinstance(obj, dict):
-                    yield obj, path, lineno
-    except Exception as exc:
-        logging.getLogger(__name__).error("_iter_jsonl_file: failed reading %s: %s", path, exc, exc_info=True)
+def _iter_jsonl_file(path: Path, max_retries: int = 3) -> Iterator[tuple[dict, Path, int]]:
+    """Yield JSON objects from a single file path, skipping malformed lines.
+
+    Usa retry com backoff exponencial para lidar com arquivo sendo escrito.
+    """
+    for attempt in range(max_retries):
+        try:
+            with path.open("r", encoding="utf-8") as fh:
+                for lineno, ln in enumerate(fh, start=1):
+                    ln = ln.strip()
+                    if not ln:
+                        continue
+                    try:
+                        obj = json.loads(ln)
+                    except json.JSONDecodeError:
+                        # ignore malformed JSON lines
+                        continue
+                    if isinstance(obj, dict):
+                        yield obj, path, lineno
+            return  # Sucesso, sair
+        except IOError as exc:
+            if attempt < max_retries - 1:
+                # Retry com backoff exponencial
+                wait_time = 0.1 * (2**attempt)
+                logging.getLogger(__name__).debug(
+                    "_iter_jsonl_file: tentativa %d/%d falhou, aguardando %.2fs: %s",
+                    attempt + 1,
+                    max_retries,
+                    wait_time,
+                    exc,
+                )
+                time.sleep(wait_time)
+            else:
+                # Última tentativa falhou
+                logging.getLogger(__name__).error(
+                    "_iter_jsonl_file: falha após %d tentativas: %s", max_retries, exc, exc_info=True
+                )
+                raise
+        except Exception as exc:
+            logging.getLogger(__name__).error("_iter_jsonl_file: falha inesperada %s", exc, exc_info=True)
 
 
 def _iter_jsonl_today(logs_root: Path) -> Iterator[tuple[dict, Path, int]]:

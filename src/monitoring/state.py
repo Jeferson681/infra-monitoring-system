@@ -56,6 +56,14 @@ def _compute_metric_states(metrics: dict, thresholds: dict, ignore_metrics: Opti
                 out[key] = STATE_STABLE
         except Exception:
             out[key] = None
+
+    # Validar estados calculados
+    valid_states = {STATE_STABLE, STATE_WARNING, STATE_CRITICAL, None}
+    for key, state_val in out.items():
+        if state_val not in valid_states:
+            logging.getLogger(__name__).warning("_compute_metric_states: estado inválido para %s: %s", key, state_val)
+            out[key] = None
+
     return out
 
 
@@ -294,6 +302,7 @@ class SystemState:
     def _post_treatment_worker(self, metrics_snapshot: dict[str, Any]) -> None:
         """Worker logic for post-treatment; kept best-effort and resilient."""
         try:
+            start_time = time.monotonic()
             if metrics_snapshot:
                 _ = metrics_snapshot.get("timestamp", None) if isinstance(metrics_snapshot, dict) else None
             time.sleep(self.post_treatment_wait_seconds)
@@ -306,6 +315,13 @@ class SystemState:
 
             # Record and write snapshot using a small helper to keep this worker concise
             self._record_and_write_snapshot(snap)
+
+            # Log timing se demorou muito
+            elapsed = time.monotonic() - start_time
+            if elapsed > 0.5:
+                logging.getLogger(__name__).info(
+                    "post_treatment_worker levou %.2fs (sleep=%.2fs)", elapsed, self.post_treatment_wait_seconds
+                )
 
         except Exception as _exc:
             try:

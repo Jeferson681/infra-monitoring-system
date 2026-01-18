@@ -41,6 +41,12 @@ def run_loop(interval: float, cycles: int, verbose_level: int) -> None:
     """
     import time
 
+    # Validar intervalo mínimo recomendado
+    if interval < 0.1:
+        logging.getLogger(__name__).warning(
+            "Intervalo muito pequeno (%.2fs). Recomendado >= 0.1s para evitar sobrecarga", interval
+        )
+
     thresholds = get_valid_thresholds()
     state = SystemState(thresholds)
     # Obs: o parser de argumentos (`src.core.args.parse_args`) já aplica overrides
@@ -56,7 +62,11 @@ def run_loop(interval: float, cycles: int, verbose_level: int) -> None:
     try:
         while True:
             _ensure_runtime_checks()
+            cycle_start = time.monotonic()
             _collect_and_emit(state, verbose_level)
+            cycle_elapsed = time.monotonic() - cycle_start
+            if cycle_elapsed > 1.0:
+                logging.getLogger(__name__).warning("Ciclo lento: %.2fs (esperado < 1.0s)", cycle_elapsed)
             now = time.monotonic()
             try:
                 last_rotate, last_compress, last_safe_remove, last_hourly = _run_maintenance(
@@ -137,6 +147,11 @@ def _collect_and_emit(state: SystemState, verbose_level: int) -> dict:
     result = {"state": state_name, "metrics": metrics}
     snapshot = getattr(state, "current_snapshot", None)
     _emit_snapshot(snapshot if isinstance(snapshot, dict) else None, result, verbose_level)
+
+    # Log de ciclo completo em modo verbose
+    if verbose_level >= 2:
+        logging.getLogger(__name__).info("Ciclo completo: %d métricas coletadas, estado=%s", len(metrics), state_name)
+
     return result
 
 
