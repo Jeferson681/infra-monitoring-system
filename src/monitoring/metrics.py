@@ -1,8 +1,7 @@
-"""Coleta métricas do sistema.
+"""Coleta métricas do sistema (CPU, RAM, Disco, Latência, Rede, Temperatura).
 
-Coleta CPU, RAM, Disco, Ping/Latência, Rede e Temperatura.
-Preferir operações em Python puro e seguras; quando necessário usa
-fallbacks externos de forma controlada.
+Usa cache por métrica definido em `_METRIC_INTERVALS`. Algumas chaves
+estão agrupadas (ex.: ``memory``, ``disk``, ``network``, ``temperature``).
 """
 
 import time
@@ -38,13 +37,14 @@ _METRIC_INTERVALS: dict[str, float] = {
     "cpu_percent": 1.0,
     "memory_percent": 5.0,
     "disk_percent": 10.0,
+    "memory": 5.0,
     "cpu_freq_ghz": 30.0,
-    "network": 2.0,  # agrupa bytes_sent/bytes_recv
+    "network": 2.0,
     "ping_ms": 5.0,
     "latency_ms": 5.0,
-    "latency_method": 5.0,
     "latency_estimated": 5.0,
     "temperature": 30.0,
+    "disk": 10.0,
 }
 
 # cache: key -> { 'value': ..., 'ts': float(monotonic) }
@@ -147,10 +147,6 @@ def collect_metrics() -> dict[str, float | int | str | None]:
     _collect_temperature_and_timestamp(metrics)
     _collect_disk_usage_bytes(metrics)
 
-    # Normalize temperature key for display formatting
-    if "temperature" in metrics:
-        metrics["temperature_celsius"] = metrics["temperature"]
-
     # Best-effort: expose a small set of metrics to the Prometheus exporter
     # if available. Keep failures non-fatal so metric collection remains robust.
     try:
@@ -192,6 +188,7 @@ def _reset_cache_timestamps() -> None:
 
 
 def _collect_percent_metrics(metrics: dict[str, float | int | str | None]) -> None:
+    """Coleta percentuais: `cpu_percent`, `cpu_freq_ghz`, `memory_percent`, `disk_percent`."""
     cpu = _safe_float(_cache_get_or_refresh("cpu_percent", get_cpu_percent))
     metrics["cpu_percent"] = None if cpu is None else max(0.0, min(100.0, cpu))
 
@@ -207,29 +204,36 @@ def _collect_percent_metrics(metrics: dict[str, float | int | str | None]) -> No
 
 def _collect_memory_and_bytes(metrics: dict[str, float | int | str | None]) -> None:
     try:
-        vm = psutil.virtual_memory()
-        metrics["memory_used_bytes"] = int(getattr(vm, "used", 0))
-        metrics["memory_total_bytes"] = int(getattr(vm, "total", 0))
+        # Usa cache agrupado 'memory' para obter used/total juntos (mesmo intervalo
+        # do `memory_percent` — 5s). Não altera nomes/formatos.
+        mem = _cache_get_or_refresh("memory", get_memory_info) or (None, None)
+        used, total = (None, None)
+        try:
+            used, total = mem  # type: ignore
+        except Exception:
+            used, total = (None, None)
+        metrics["memory_used_bytes"] = int(used) if used is not None else None
+        # total em bytes (mesma fonte/cache 'memory')
+        metrics["memory_total_bytes"] = int(total) if total is not None else None
     except Exception:
         metrics["memory_used_bytes"] = None
         metrics["memory_total_bytes"] = None
 
 
 def _collect_network_metrics(metrics: dict[str, float | int | str | None]) -> None:
+    """Coleta `bytes_sent` e `bytes_recv` (cache `network`, contadores monotônicos)."""
     net = _cache_get_or_refresh("network", lambda: get_network_stats()) or {}
     metrics["bytes_sent"] = _safe_counter(net.get("bytes_sent"))
     metrics["bytes_recv"] = _safe_counter(net.get("bytes_recv"))
 
 
 def _collect_latency_metrics(metrics: dict[str, float | int | str | None]) -> None:
+    """Coleta `ping_ms`, `latency_ms` e `latency_estimated` (flag de fallback)."""
     ping = _safe_float(_cache_get_or_refresh("ping_ms", lambda: get_latency("8.8.8.8", 53, 1.0)))
     metrics["ping_ms"] = None if (ping is None or ping < 0.0) else ping
 
     latency = _safe_float(_cache_get_or_refresh("latency_ms", lambda: get_latency()))
-    latency_method = "tcp" if latency is not None else None
-
     metrics["latency_ms"] = None if (latency is None or latency < 0.0) else latency
-    metrics["latency_method"] = latency_method
     try:
         metrics["latency_estimated"] = bool(_last_latency_estimated)
     except Exception:
@@ -237,27 +241,22 @@ def _collect_latency_metrics(metrics: dict[str, float | int | str | None]) -> No
 
 
 def _collect_temperature_and_timestamp(metrics: dict[str, float | int | str | None]) -> None:
-    metrics["temperature"] = _cache_get_or_refresh("temperature", _temperature_collector)
+    """Coleta `temperature_celsius` (cache `temperature`) e `timestamp` (time.time())."""
+    metrics["temperature_celsius"] = _cache_get_or_refresh("temperature", _temperature_collector)
     metrics["timestamp"] = time.time()
 
 
 def _collect_disk_usage_bytes(metrics: dict[str, float | int | str | None]) -> None:
+    """Coleta `disk_used_bytes` e `disk_total_bytes` (cache `disk`)."""
     try:
-        disk_used = None
-        disk_total = None
-        candidates: list[object] = []
-        candidates = _disk_candidate_paths()
-        for p in candidates:
-            try:
-                du = psutil.disk_usage(str(p))
-                disk_used = int(getattr(du, "used", 0))
-                disk_total = int(getattr(du, "total", 0))
-                break
-            except OSError:
-                # problemas de I/O/permissão — tentar próximo candidato
-                continue
-        metrics["disk_used_bytes"] = disk_used
-        metrics["disk_total_bytes"] = disk_total
+        du = _cache_get_or_refresh("disk", get_disk_usage_info) or (None, None)
+        used, total = (None, None)
+        try:
+            used, total = du  # type: ignore
+        except Exception:
+            used, total = (None, None)
+        metrics["disk_used_bytes"] = int(used) if used is not None else None
+        metrics["disk_total_bytes"] = int(total) if total is not None else None
     except Exception:
         metrics["disk_used_bytes"] = None
         metrics["disk_total_bytes"] = None
@@ -460,11 +459,10 @@ def _temperature_collector() -> float | None:
     return None
 
 
-# _first_valid_temp removed as temperature reading now uses script-only fallback
-
-
 def get_network_stats() -> dict[str, int]:
     """Retorne estatísticas de rede (bytes enviados/recebidos) como inteiros."""
+    # psutil.net_io_counters() retorna contadores monotônicos totais desde o boot.
+    # Chamadas frequentes são evitadas pelo cache agrupado 'network' usado no coletor.
     net = psutil.net_io_counters()
     return {
         "bytes_sent": int(net.bytes_sent),

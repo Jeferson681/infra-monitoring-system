@@ -207,7 +207,10 @@ class HealthHandler(BaseHTTPRequestHandler):
             if isinstance(system_metrics, dict):
                 m = system_metrics.get("metrics") if "metrics" in system_metrics else system_metrics
                 if isinstance(m, dict):
-                    temp = m.get("temperature")
+                    temp = m.get("temperature_celsius") if isinstance(m, dict) else None
+                    # fallback to legacy key for backward compatibility
+                    if temp is None:
+                        temp = m.get("temperature")
                     if temp is not None:
                         return float(temp)
         except Exception as exc:

@@ -57,7 +57,7 @@ def main(argv: list[str] | None = None) -> None:
     log_conf = get_log_config(args)
 
     level = getattr(_logging, log_conf.get("level", "WARNING"), _logging.WARNING)
-    _logging.basicConfig(level=level, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    _logging.basicConfig(level=level, format="%(asctime)s %(levelname)s: %(message)s")
 
     try:
         _setup_debug_file_handler()

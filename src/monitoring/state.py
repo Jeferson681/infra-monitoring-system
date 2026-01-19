@@ -74,7 +74,7 @@ def compute_metric_states(metrics: dict, thresholds: dict) -> dict:
         "memory_total_bytes",
         "disk_used_bytes",
         "disk_total_bytes",
-        "temperature",
+        "temperature_celsius",
         "latency_ms",
         "bytes_sent",
         "bytes_recv",

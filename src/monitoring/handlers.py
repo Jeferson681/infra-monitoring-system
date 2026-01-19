@@ -138,7 +138,7 @@ def attempt_treatment(state: Any, name: str, _details: dict) -> dict | bool:
         "memory_total_bytes",
         "disk_used_bytes",
         "disk_total_bytes",
-        "temperature",
+        "temperature_celsius",
         "latency_ms",
         "bytes_sent",
         "bytes_recv",

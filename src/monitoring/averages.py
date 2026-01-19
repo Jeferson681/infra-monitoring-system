@@ -269,7 +269,7 @@ def extract_relevant(obj: dict) -> Dict[str, Any]:
         "bytes_recv": m.get("bytes_recv"),
         "ping_ms": m.get("ping_ms"),
         "latency_ms": m.get("latency_ms"),
-        "temperature": m.get("temperature"),
+        "temperature_celsius": m.get("temperature_celsius"),
         "bytes_sent_human": _fmt_bytes_human(int(m["bytes_sent"])) if m.get("bytes_sent") is not None else None,
         "bytes_recv_human": _fmt_bytes_human(int(m["bytes_recv"])) if m.get("bytes_recv") is not None else None,
     }
@@ -340,7 +340,7 @@ def aggregate_last_seconds(logs_root: Path, seconds: int = 10) -> Optional[Dict[
         "bytes_recv",
         "ping_ms",
         "latency_ms",
-        "temperature",
+        "temperature_celsius",
     )
 
     # Compute averages, counts and per-state counts using helper
