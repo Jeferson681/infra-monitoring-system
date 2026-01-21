@@ -1,3 +1,11 @@
+"""General system helper utilities.
+
+Small, lightweight helpers used across subsystems (host/port validation,
+reading simple .env files, candidate disk paths, etc.). Implementations are
+best-effort and minimize external dependencies to remain import-friendly in
+tests and CLI contexts.
+"""
+
 import json
 import datetime
 import logging
@@ -7,25 +15,18 @@ import time
 from typing import List, Tuple
 from pathlib import Path
 
-"""Helpers genéricos de sistema.
-Contém utilitários pequenos e sem dependências pesadas que são usados por
-vários subsistemas (validação de host/porta, leitura de .env, caminhos de
-disco candidatos, etc.).
-"""
-
 
 def update_network_usage_learning(bytes_sent: int, bytes_recv: int) -> bool:
-    """Atualiza o aprendizado de uso de rede e verifica se excede o limite aprendido."""
-    # Delega para a implementação canônica em `src.system.treatments`.
-    # Mantemos este wrapper para compatibilidade de API e para evitar
-    # duplicação de lógica no códigobase.
+    """Update network usage learning and check if the learned limit is exceeded."""
+    # Delegate to the canonical implementation in `src.system.treatments`.
+    # Keep this wrapper for API compatibility and to avoid duplicating logic.
     try:
         from .treatments import update_network_usage_learning as _impl
 
         return _impl(bytes_sent, bytes_recv)
     except Exception:
-        # Se a delegação falhar por qualquer motivo (import, runtime),
-        # falha de forma conservadora retornando False.
+        # If delegation fails for any reason (import/runtime),
+        # conservatively return False.
         return False
 
 
@@ -33,7 +34,7 @@ NETWORK_LEARNING_FILE = Path(".cache/network_usage_learning.json")
 
 
 def ensure_cache_dir_exists():
-    """Garante que o diretório .cache existe."""
+    """Ensure the .cache directory exists."""
     NETWORK_LEARNING_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 
@@ -58,22 +59,22 @@ def record_network_usage(bytes_sent: int, bytes_recv: int) -> None:
         with NETWORK_LEARNING_FILE.open("w", encoding="utf-8") as f:
             json.dump(data, f)
     except Exception as exc:
-        logging.getLogger(__name__).error("Erro ao salvar dados de rede: %s", exc, exc_info=True)
+        logging.getLogger(__name__).error("Failed to save network usage data: %s", exc, exc_info=True)
 
 
-# Cache para get_network_limit() para evitar releitura frequente de arquivo
+# Cache for get_network_limit() to avoid frequent file reads
 _network_limit_cache: dict[str, float | int] = {"value": NETWORK_DEFAULT_LIMIT, "ts": 0.0}
 
 
 def get_network_limit() -> int:
-    """Retorna o limite atual para bytes_sent/bytes_recv, aprendendo após 4 semanas.
+    """Return the current limit for bytes_sent/bytes_recv, learned over 4 weeks.
 
-    Usa cache de 60 segundos para evitar releitura frequente do arquivo.
+    Uses a 60-second cache to avoid frequent file reads.
     """
     global _network_limit_cache
     now = time.monotonic()
 
-    # Se cache ainda é válido (< 60 segundos), retorna valor em cache
+    # If the cache is still valid (< 60 seconds), return cached value
     if now - _network_limit_cache["ts"] < 60.0:
         return int(_network_limit_cache["value"])
     if not NETWORK_LEARNING_FILE.exists():
@@ -83,7 +84,7 @@ def get_network_limit() -> int:
             data = json.load(f)
     except Exception:
         return NETWORK_DEFAULT_LIMIT
-    # Agrupa por semana
+    # Group data by ISO year/week
     weeks: dict[tuple[int, int], list[int]] = {}
     for date_str, usage in data.items():
         dt = datetime.date.fromisoformat(date_str)
@@ -93,12 +94,12 @@ def get_network_limit() -> int:
         weeks[year_week].append(usage["bytes_sent"] + usage["bytes_recv"])
     if len(weeks) < NETWORK_LEARNING_WEEKS:
         return NETWORK_DEFAULT_LIMIT
-    # Calcula média semanal
+    # Compute weekly average
     all_values = [v for week in weeks.values() for v in week]
     avg = sum(all_values) / max(1, len(all_values))
     limit = int(avg * (1 + NETWORK_MARGIN))
 
-    # Atualiza cache
+    # Update cache
     _network_limit_cache["value"] = limit
     _network_limit_cache["ts"] = now
 
@@ -111,19 +112,18 @@ logger = logging.getLogger(__name__)
 
 
 def reap_children_nonblocking() -> List[Tuple[int, int]]:
-    """Recolha processos filhos terminados de forma não bloqueante (POSIX).
+    """Reap terminated child processes in a non-blocking manner (POSIX).
 
-    Retorna:
-        Lista de tuplas (pid, status) dos processos recolhidos. Em plataformas
-        não-POSIX retorna lista vazia.
+    Returns a list of (pid, status) tuples for reaped processes. On
+    non-POSIX platforms returns an empty list.
     """
     reaped: List[Tuple[int, int]] = []
     if os.name == "posix":
         try:
-            # Alguns analisadores estáticos/mypy reclamam do acesso direto a
-            # `os.WNOHANG` em plataformas onde a constante pode não existir.
-            # Usamos getattr com fallback para manter o comportamento POSIX
-            # e evitar erros de tipagem em outras plataformas.
+            # Some static analyzers/mypy complain about direct access to
+            # `os.WNOHANG` on platforms where the constant may not exist.
+            # Use getattr with a fallback to preserve POSIX behavior and
+            # avoid typing errors on other platforms.
             flags = getattr(os, "WNOHANG", 1)
             while True:
                 pid, status = os.waitpid(-1, flags)
@@ -131,17 +131,17 @@ def reap_children_nonblocking() -> List[Tuple[int, int]]:
                     break
                 reaped.append((pid, status))
         except ChildProcessError:
-            pass  # nenhum filho
+            pass  # no child processes
         except OSError:
-            pass  # plataforma ou permissão
+            pass  # platform or permission issue
     return reaped
 
 
 def validate_host_port(host: str, port: int) -> bool:
-    """Valida um par host:port para uso em conexões de rede.
+    """Validate a host:port pair for use in network connections.
 
-    Retorna True quando ``host`` for um endereço IPv4 válido e a porta estiver
-    no intervalo (1..65535).
+    Returns True when `host` is a valid IPv4 address and the port is in the
+    range (1..65535).
     """
     try:
         socket.inet_aton(host)
@@ -151,10 +151,10 @@ def validate_host_port(host: str, port: int) -> bool:
 
 
 def _disk_candidate_paths() -> list[object]:
-    r"""Retorne candidatos para checagem de uso de disco.
+    r"""Return candidate paths to check for disk usage.
 
-    A lista gerada tenta usar a âncora do sistema (ex: "C:\\" no Windows),
-    depois o root POSIX e, por fim, o literal '/', como fallback.
+    The generated list attempts to use the system anchor (e.g. "C:\\" on
+    Windows), then the POSIX root and finally the literal '/' as a fallback.
     """
     # Path is already imported at module level
 
@@ -164,7 +164,7 @@ def _disk_candidate_paths() -> list[object]:
         if anchor:
             candidates.append(Path(anchor))
     except Exception:  # nosec B110 - best-effort fallback for Path.anchor access
-        # Intencional: ignoramos erros aqui e usamos '/' como fallback
+        # Intentionally ignore errors here and fall back to '/'
         pass
     candidates.append(Path("/"))
     candidates.append("/")
@@ -172,13 +172,13 @@ def _disk_candidate_paths() -> list[object]:
 
 
 def read_env_file(path: Path | str) -> dict:
-    """Leia um ficheiro `.env` simples e retorne um dicionário key->value.
+    """Read a simple `.env` file and return a key->value dictionary.
 
-    Regras:
-    - Linhas vazias e que começam com '#' são ignoradas.
-    - A primeira '=' separa chave/valor; aspas simples ou duplas em torno do
-      valor são removidas.
-    - Se o ficheiro não existir, retorna um dict vazio.
+    Rules:
+    - Empty lines and lines starting with '#' are ignored.
+    - The first '=' separates key/value; surrounding single or double
+      quotes are removed from the value.
+    - If the file does not exist, returns an empty dict.
     """
     # Path is already imported at module level
 
@@ -196,9 +196,9 @@ def read_env_file(path: Path | str) -> dict:
                     continue
                 key, val = line.split("=", 1)
                 key = key.strip()
-                # remover espaços e aspas ao redor
+                # strip surrounding whitespace and quotes
                 val = val.strip().strip('"').strip("'")
-                # remover comentários inline após o valor (ex: "7  # default")
+                # remove inline comments after the value (e.g. "7  # default")
                 if "#" in val:
                     val = val.split("#", 1)[0].rstrip()
                 result[key] = val
@@ -209,7 +209,7 @@ def read_env_file(path: Path | str) -> dict:
 
 
 def read_jsonl(path: Path | str, use_lock: bool = False) -> list[dict]:
-    """Lê um arquivo .jsonl e retorna uma lista de dicts. Usa portalocker se solicitado."""
+    """Read a .jsonl file and return a list of dicts. Uses portalocker if requested."""
     p = Path(path)
     entries = []
     portalocker = None
@@ -229,7 +229,7 @@ def read_jsonl(path: Path | str, use_lock: bool = False) -> list[dict]:
             try:
                 entries.append(json.loads(line))
             except Exception as exc:
-                logging.warning(f"Linha JSON inválida ignorada: {exc}")
+                logging.warning(f"Invalid JSON line ignored: {exc}")
 
     try:
         if use_lock and portalocker:
@@ -244,13 +244,13 @@ def read_jsonl(path: Path | str, use_lock: bool = False) -> list[dict]:
 
 
 def merge_env_items(env_path: Path, process_env: dict) -> dict:
-    """Mescla itens de um ficheiro `.env` com o ambiente de processo.
+    """Merge items from a `.env` file into the process environment.
 
-    O mapeamento `process_env` (normalmente ``os.environ``) sobrescreve as
-    chaves do ficheiro. A função não tem efeitos colaterais.
+    The `process_env` mapping (usually ``os.environ``) takes precedence over
+    keys from the file. This function has no side effects on inputs.
     """
     file_items = read_env_file(env_path)
-    # Fazer uma cópia para evitar mutação dos inputs
+    # Make a copy to avoid mutating inputs
     out = dict(file_items)
     out.update(dict(process_env))
     return out

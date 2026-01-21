@@ -1,14 +1,13 @@
-"""Subsistema de logs: rotação, compressão e persistência.
+"""Logging subsystem: rotation, compression and persistence.
 
-Fornece helpers de nível superior para escrita de logs, rotação,
-compressão e limpeza de arquivos de archive. Inclui auxiliares que
-preparam diretórios, nomeiam ficheiros e expõem API simples para gravação
-humana e JSONL para ingestão.
+High-level helpers for writing human-readable logs and JSONL ingestion
+records, rotating and compressing archived files and preparing log
+directories. Designed to be robust and tolerant to I/O failures.
 """
 
 import os
 
-# comentários e notas internas mantidas mínimos; errno não é necessário
+# Keep internal comments minimal; errno handling is not required here
 import logging
 
 import time
@@ -35,9 +34,6 @@ from .log_helpers import (
 
 logger = logging.getLogger(__name__)
 
-# ========================
-# 0. Configuração padrão
-# ========================
 
 _raw_log_root = os.getenv("MONITORING_LOG_ROOT", "logs")
 if isinstance(_raw_log_root, str):
@@ -53,18 +49,12 @@ else:
 DEBUG_LOG_FILENAME = "debug_log"
 
 
-# ========================
-# 1. Diretórios e Paths
-# ========================
-
-
 @dataclass(frozen=True)
-# Representa os diretórios usados pelo subsistema de logs; alimenta demais helpers de I/O
 class LogPaths:
-    """Agrupa caminhos usados pelo subsistema de logging.
+    """Group paths used by the logging subsystem.
 
-    Contém os diretórios root, log, json, archive e debug usados por
-    funções de escrita, rotação e limpeza.
+    Contains the root, log, json, archive and debug directories used by
+    write/rotation/cleanup helpers.
     """
 
     root: Path
@@ -74,15 +64,15 @@ class LogPaths:
     debug_dir: Path
 
     def __iter__(self):
-        """Iterador simples que retorna tupla com os principais paths."""
+        """Yield a tuple with the main paths."""
         return iter((self.root, self.log_dir, self.json_dir, self.archive_dir))
 
 
 def get_log_paths(root: str | Path | None = None) -> LogPaths:
-    """Resolve raiz de logs e garante diretórios criados e graváveis.
+    """Resolve the log root and ensure writable directories exist.
 
-    Retorna um objeto `LogPaths` com diretórios preparados para escrita e
-    leitura pelos subsistemas de logging e archive.
+    Returns a `LogPaths` object with directories prepared for writing and
+    reading by the logging and archive subsystems.
     """
     try:
         # Prefer caller-provided root, then environment variable, then module-level LOG_ROOT
@@ -95,7 +85,7 @@ def get_log_paths(root: str | Path | None = None) -> LogPaths:
             candidate = LOG_ROOT
         log_root = Path(candidate)
     except Exception as exc:
-        logger.debug("get_log_paths: falha ao resolver root: %s", exc, exc_info=True)
+        logger.debug("get_log_paths: failed to resolve root: %s", exc, exc_info=True)
         project_root = Path(__file__).resolve().parents[2]
         log_root = project_root / "logs"
 
@@ -112,11 +102,11 @@ def get_log_paths(root: str | Path | None = None) -> LogPaths:
     return LogPaths(log_root, log_dir, json_dir, archive_dir, debug_dir)
 
 
-# Gera o nome base para arquivos de log; consumido por write_log
+# Generate the base filename for logs; consumed by write_log
 def _resolve_filename(name: str, safe_log_enable: bool) -> str:
-    """Gera nome base de arquivo de log com sufixo seguro e data.
+    """Generate a log filename base including optional safe suffix and date.
 
-    Inclui normalização do nome e sufixo `_safe` quando solicitado.
+    Normalizes the name and appends a `_safe` suffix when requested.
     """
     default = DEBUG_LOG_FILENAME
     base = sanitize_log_name(name or default, default)
@@ -126,22 +116,22 @@ def _resolve_filename(name: str, safe_log_enable: bool) -> str:
     return f"{base}-{date_str}"
 
 
-# Normaliza entradas de mensagem; usado por write_log
+# Normalize message inputs; used by write_log
 def _normalize_messages(message) -> list:
-    """Aceita string única, lista ou tupla e retorna lista.
+    """Accept a single string, list or tuple and return a list.
 
-    Garante que a lógica que itera mensagens sempre trabalhe com lista.
+    Ensures downstream logic that iterates messages always works with a list.
     """
     if isinstance(message, (list, tuple)):
         return list(message)
     return [message]
 
 
-# Normaliza o campo extra para uma lista do tamanho requerido; usado por write_log
+# Normalize the extra field to a list of the required length; used by write_log
 def _normalize_extras(extra, count: int) -> list:
-    """Normaliza extras para lista de tamanho fixo.
+    """Normalize extras to a fixed-length list.
 
-    Aceita dict (replicado), lista/tupla ou None; garante comprimento `count`.
+    Accepts a dict (replicated), list/tuple or None; guarantees length `count`.
     """
     if extra is None:
         return [None] * count
@@ -155,12 +145,7 @@ def _normalize_extras(extra, count: int) -> list:
     return [extra] * count
 
 
-# ========================
-# 3. Escrita de Logs
-# ========================
-
-
-# Escreve mensagens em .log e .jsonl; alimenta análise e ingestão
+# Write messages to .log and .jsonl; feeds analysis and ingestion pipelines
 def write_log(
     name: str,
     level: str,
@@ -173,33 +158,32 @@ def write_log(
     hourly: bool = False,
     hourly_window_seconds: int = 3600,
 ) -> None:
-    """Grava mensagens em arquivo texto e/ou jsonl.
+    """Write messages to a plain-text log and/or a JSONL file.
 
-    Contrato e comportamento:
-      - "human_enable": quando True escreve uma linha legível em ``.log``;
-        por padrão esta escrita é suprimida para arquivos 'hourly' a menos
-        que a janela (`hourly_window_seconds`) permita.
-      - "json_enable": quando True escreve um objeto estruturado em ``.jsonl``
-        para ingestão por consumidores downstream.
-      - "safe_log_enable": quando True aplica um sufixo "_safe" no nome do
-        ficheiro e preserva o texto humano original (multi-linhas) quando
-        aplicável.
+    Contract and behavior:
+        - `human_enable`: when True, write a human-readable line to ``.log``;
+            by default this is suppressed for 'hourly' files unless the window
+            (`hourly_window_seconds`) allows it.
+        - `json_enable`: when True, write a structured object to ``.jsonl`` for
+            downstream ingestion.
+        - `safe_log_enable`: when True, append a `_safe` suffix to the filename
+            and preserve the original human multi-line text when applicable.
 
-    Observações de robustez:
-      - As escritas usam helpers atômicos (`write_text`, `write_json`) que
-        retornam ``True``/``False``; esta função ignora falhas de escrita
-        (não propaga exceções) mas regista warnings quando uma gravação falhar.
-      - A função não tem valor de retorno (side-effect only). Chamadores devem
-        confiar nos logs para diagnóstico de falhas de I/O.
+    Robustness notes:
+        - Writes use atomic helpers (`write_text`, `write_json`) that return
+            ``True``/``False``; this function ignores write failures (does not
+            raise) but logs warnings when a write fails.
+        - The function has no return value (side-effect only). Callers should
+            rely on logs for diagnosing I/O failures.
 
-    Parâmetros (resumido):
-      - name: nome lógico do stream de logs (usado para nomear ficheiros).
-      - level: nível textual (eg. 'info', 'error').
-      - message: string ou lista de strings a escrever.
-      - extra: metadados opcionais (dict ou lista de dicts) associados às linhas.
-      - human_enable/json_enable/safe_log_enable: flags descritas acima.
-      - log: quando False evita escrita humana exceto quando hourly está ativo.
-      - hourly/hourly_window_seconds: controla escrita agregada por janela.
+    Parameters (summary):
+        - name: logical name of the log stream (used to name files).
+        - level: textual level (e.g. 'info', 'error').
+        - message: string or list of strings to write.
+        - extra: optional metadata (dict or list of dicts) associated with lines.
+        - human_enable/json_enable/safe_log_enable: flags described above.
+        - log: when False avoid human writes except when hourly is active.
+        - hourly/hourly_window_seconds: control aggregated windowed writes.
     """
     filename = _resolve_filename(name, safe_log_enable)
 
@@ -239,15 +223,15 @@ def write_log(
             _perform_json_write(jsonl_path, ts, level, msg, per_extra)
 
 
-# Auxiliar de write_log: decide se a escrita humana é permitida pela janela hourly
+# Helper for write_log: decide whether human write is allowed by hourly window
 def _hourly_allows_write(
     name: str, hourly: bool, hourly_window_seconds: int, project_root: Optional[Path] = None
 ) -> bool:
-    """Verifica se a janela 'hourly' permite escrita.
+    """Check whether the 'hourly' window allows a write.
 
-    Retorna True quando não em modo hourly ou quando a janela de tempo
-    desde a última escrita excede `hourly_window_seconds`.
-    O parâmetro opcional project_root permite especificar o diretório base para testes.
+    Returns True when not in hourly mode or when the time since the last
+    human write exceeds `hourly_window_seconds`. The optional `project_root`
+    parameter allows specifying the base directory for tests.
     """
     if not hourly:
         return True
@@ -268,11 +252,11 @@ def _hourly_allows_write(
             return (now_int - last) >= int(hourly_window_seconds)
         return True
     except Exception as exc:
-        logger.debug("_hourly_allows_write: erro ao verificar hourly: %s", exc, exc_info=True)
+        logger.debug("_hourly_allows_write: error checking hourly: %s", exc, exc_info=True)
         return True
 
 
-# Auxiliar de write_log: escreve linha humana em .log e atualiza timestamp hourly
+# Helper for write_log: write human line to .log and update hourly timestamp
 def _perform_human_write(
     plain_path: Path,
     name: str,
@@ -283,26 +267,27 @@ def _perform_human_write(
     hourly_window_seconds: int,
     log: bool,
 ) -> None:
-    """Executa a escrita humana em arquivo, respeitando flags e janela hourly.
+    """Perform the human-readable file write, respecting flags and hourly window.
 
-    Detalhes:
-      - Constrói uma linha de texto legível com timestamp e level via
-        `build_human_line` e delega para `write_text` (que faz escrita atômica).
-      - Se `write_text` falhar, um WARNING é registado; a função tenta não
-        propagar exceções para não interromper o loop principal.
-      - Quando `hourly` está ativo e a escrita for bem-sucedida, atualiza um
-        ficheiro de controle em ``.cache`` contendo o timestamp da última
-        gravação humana para controlar futuras escritas agregadas.
+    Details:
+        - Build a readable text line with timestamp and level via
+          `build_human_line` and delegate to `write_text` (which performs an
+          atomic write).
+        - If `write_text` fails a WARNING is logged; the function avoids
+          raising to not interrupt the main loop.
+        - When `hourly` is active and the write succeeds, update a control
+          file in ``.cache`` containing the timestamp of the last human write
+          to control future aggregated writes.
     """
     if not log and not hourly:
-        logger.debug("human write suprimido (log=False e hourly=False)")
+        logger.debug("human write suppressed (log=False and hourly=False)")
         return
 
     if _hourly_allows_write(name, hourly, hourly_window_seconds):
         human_line = build_human_line(format_date_for_log(None), level, human_msg, extra)
         ok = write_text(plain_path, human_line)
         if not ok:
-            logger.warning("_perform_human_write: falha ao escrever human log %s", plain_path)
+            logger.warning("_perform_human_write: failed to write human log %s", plain_path)
         if hourly and ok:
             try:
                 project_root = Path(__file__).resolve().parents[2]
@@ -312,57 +297,57 @@ def _perform_human_write(
                 with open(ts_file, "w", encoding="utf-8") as f:
                     f.write(str(int(time.time())))
             except Exception as exc:
-                logger.debug("_perform_human_write: não foi possível escrever hourly ts: %s", exc, exc_info=True)
+                logger.debug("_perform_human_write: failed to write hourly ts: %s", exc, exc_info=True)
     else:
-        # Mensagem mais explícita para diagnosticar quando uma escrita humana
-        # é suprimida pelo mecanismo 'hourly'. Incluir o nome do log e a
-        # janela ajuda a identificar chamadas agregadas (ex: average_log).
+        # More explicit message to aid diagnosis when a human write is
+        # suppressed by the 'hourly' mechanism. Including the log name and
+        # window length helps identify aggregated callers (e.g. average_log).
         try:
             logger.debug(
-                "Escrita humana suprimida para '%s': dentro da janela hourly de %s segundos; última escrita recente",
+                "Human write suppressed for '%s': within hourly window of %s seconds; recent write",
                 name,
                 hourly_window_seconds,
             )
         except Exception:
-            # fallback simples caso haja problema ao formatar a mensagem
-            logger.debug("human write ignorado pela janela hourly")
+            # simple fallback if formatting the message fails
+            logger.debug("human write ignored by hourly window")
 
 
-# Auxiliar de write_log: constrói e grava um objeto JSON em jsonl para ingestão
+# Helper for write_log: build and write a JSON object to JSONL for ingestion
 def _perform_json_write(jsonl_path: Path, ts: str, level: str, msg, extra: dict | None) -> None:
-    """Constrói o objeto JSON e delega para write_json.
+    """Build the JSON object and delegate to `write_json`.
 
-    Mantém formato compatível com consumidores de métricas/ingestão.
+    Keeps a format compatible with metrics/ingestion consumers.
     """
-    # Evitar incluir sumários orientados ao humano no feed JSON canónico.
-    # Manter apenas chaves e métricas legíveis por máquinas.
+    # Avoid including human-oriented summaries in the canonical JSON feed.
+    # Keep only machine-readable keys and metrics.
     safe_extra = None
     if isinstance(extra, dict):
         safe_extra = {k: v for k, v in extra.items() if k not in ("summary_short", "summary_long")}
     json_obj = build_json_entry(ts, level, msg, safe_extra)
     ok = write_json(jsonl_path, json_obj)
     if ok is False:
-        logger.warning("_perform_json_write: falha ao escrever jsonl %s", jsonl_path)
+        logger.warning("_perform_json_write: failed to write jsonl %s", jsonl_path)
 
 
-# Retorna o caminho do arquivo de debug do dia; usado por debug logging
+# Return the path to today's debug file; used by debug logging
 def get_debug_file_path() -> Path:
-    """Retorna caminho do arquivo de debug diário.
+    """Return the path to today's debug file.
 
-    Nomeia o arquivo com a data atual no diretório de debug.
+    Names the file with the current date inside the debug directory.
     """
     date_str = format_date_for_log(None)
     filename = f"debug_log-{date_str}.txt"
     return get_log_paths().debug_dir / filename
 
 
-# Auxiliar do loop: verifica e restabelece diretórios de logs se necessários
+# Loop helper: check and recreate log directories if needed
 def ensure_log_dirs_exist(root: str | Path | None = None) -> None:
-    """Garante existência dos diretórios de logs e recria se faltarem.
+    """Ensure the log directories exist and recreate them if missing.
 
-    Faz checagens leves (Path.exists()) e só escala para a criação completa
-    chamando a rotina de inicialização quando um caminho estiver ausente.
-    Projetada para ser chamada frequentemente pelo loop sem overhead.
+    Performs cheap checks (Path.exists()) and only escalates to full
+    creation by calling the initializer when a path is missing. Designed to
+    be called frequently from the loop without significant overhead.
     """
     try:
         # resolve candidate root (do not call get_log_paths() yet)
@@ -383,21 +368,16 @@ def ensure_log_dirs_exist(root: str | Path | None = None) -> None:
         # cheap check; if any missing, force resolution/creation via get_log_paths
         if not p.exists():
             try:
-                # isto cria os diretórios chamando get_log_paths (que usa
-                # ensure_dir_writable internamente)
+                # this creates the directories by calling get_log_paths (which uses
+                # ensure_dir_writable internally)
                 get_log_paths(root)
             except Exception as exc:
                 logger.debug("ensure_log_dirs_exist: failed to recreate %s: %s", p, exc, exc_info=True)
             break
 
 
-# ========================
-# 4. Rotação e Limpeza
-# ========================
-
-
 def rotate_logs(day_secs: int | None = None, week_secs: int | None = None) -> None:
-    """Rotaciona logs para archive."""
+    """Rotate logs to archive."""
     lp = get_log_paths()
     log_dir = lp.log_dir
     json_dir = lp.json_dir
@@ -418,7 +398,7 @@ def rotate_logs(day_secs: int | None = None, week_secs: int | None = None) -> No
 
 
 def compress_old_logs(day_secs: int | None = None, week_secs: int | None = None) -> None:
-    """Comprime arquivos rotativos antigos."""
+    """Compress old rotating files in the archive."""
     archive_dir = get_log_paths().archive_dir
     if not archive_dir.exists():
         return
@@ -433,7 +413,7 @@ def compress_old_logs(day_secs: int | None = None, week_secs: int | None = None)
 
 
 def safe_remove(retention_days: int = 7, safe_retention_days: int | None = 30) -> None:
-    """Remove arquivos antigos do archive."""
+    """Remove old files from the archive according to retention rules."""
     archive_dir = get_log_paths().archive_dir
     if not archive_dir.exists():
         return
@@ -450,4 +430,4 @@ def safe_remove(retention_days: int = 7, safe_retention_days: int | None = 30) -
                 p.unlink()
                 logger.info("safe_remove: removed %s", p)
             except Exception as exc:
-                logger.error("safe_remove: falha ao remover %s: %s", p, exc, exc_info=True)
+                logger.error("safe_remove: failed to remove %s: %s", p, exc, exc_info=True)

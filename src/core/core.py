@@ -1,7 +1,8 @@
-"""Core do programa de monitorização.
+"""Core monitoring loop and maintenance orchestration.
 
-Loop principal, emissão de snapshots e execução de rotinas de manutenção
-(rotação, compressão e limpeza).
+This module implements the main monitoring loop, snapshot emission and the
+periodic maintenance tasks (rotation, compression and cleanup). The implementation
+keeps runtime orchestration concise to ease testing and reuse.
 """
 
 import logging
@@ -15,44 +16,51 @@ from ..config.settings import get_valid_thresholds
 from ..monitoring.metrics import collect_metrics as _collect_metrics
 from ..monitoring.averages import ensure_last_ts_exists
 
-_NO_DATA_STR = "Sem dados"
+_NO_DATA_STR = "No data"
 
-# Helpers de manutenção estão em `src.system.maintenance` (importados acima).
-
-
-# ========================
-# 1. Funções auxiliares para formatação e emissão de snapshots
-# ========================
+# Maintenance helpers are provided by `src.system.maintenance` (imported above).
 
 
-# ========================
-# 2. Loop principal do monitoramento
-# ========================
+# ---------------------------------------------------------------------------
+# Helper and orchestration notes
+# ---------------------------------------------------------------------------
+# This module focuses on runtime orchestration: collecting metrics, emitting
+# snapshots and scheduling periodic maintenance. Helper implementations are
+# intentionally kept small and imported from their respective packages so
+# unit tests can exercise logic in isolation.
 
 
-# Função principal do módulo; executa o loop de coleta e manutenção
+# ---------------------------------------------------------------------------
+# Main monitoring loop
+# ---------------------------------------------------------------------------
+
+
 def run_loop(interval: float, cycles: int, verbose_level: int) -> None:
-    """Loop principal do monitor que coleta métricas e executa manutenção.
+    """Run the main monitoring loop: collect metrics and run maintenance tasks.
 
-    Parâmetros:
-        interval: atraso entre ciclos em segundos (float).
-        cycles: número de ciclos a executar (0 = infinito).
-        verbose_level: controla o nível de saída humana (0 = silencioso).
+    Args:
+        interval: Delay between cycles in seconds.
+        cycles: Number of cycles to run (0 = run indefinitely).
+        verbose_level: Controls human-facing output verbosity (0 = silent).
+
+    The function performs light runtime checks before each cycle, collects
+    metrics, emits snapshots and schedules periodic maintenance tasks. Heavy
+    failures in maintenance or collection are logged but do not stop the loop.
+
     """
     import time
 
-    # Validar intervalo mínimo recomendado
+    # Validate recommended minimum interval to avoid excessive load
     if interval < 0.1:
         logging.getLogger(__name__).warning(
-            "Intervalo muito pequeno (%.2fs). Recomendado >= 0.1s para evitar sobrecarga", interval
+            "Interval too small (%.2fs). Recommended >= 0.1s to avoid overload", interval
         )
 
     thresholds = get_valid_thresholds()
     state = SystemState(thresholds)
-    # Obs: o parser de argumentos (`src.core.args.parse_args`) já aplica overrides
-    # via variáveis de ambiente quando adequado (prioridade: CLI > ENV > default).
-    # Não re-ler env aqui para evitar que variáveis de ambiente sobrescrevam
-    # valores fornecidos explicitamente pela linha de comando.
+    # Note: the argument parser already applies environment overrides where
+    # appropriate (priority: CLI > ENV > default). Do not re-read environment
+    # variables here so CLI-provided values are not overwritten.
     executed = 0
     intervals = _read_maintenance_intervals()
     last_rotate = 0.0
@@ -66,14 +74,15 @@ def run_loop(interval: float, cycles: int, verbose_level: int) -> None:
             _collect_and_emit(state, verbose_level)
             cycle_elapsed = time.monotonic() - cycle_start
             if cycle_elapsed > 1.0:
-                logging.getLogger(__name__).warning("Ciclo lento: %.2fs (esperado < 1.0s)", cycle_elapsed)
+                logging.getLogger(__name__).warning("Slow cycle: %.2fs (expected < 1.0s)", cycle_elapsed)
             now = time.monotonic()
             try:
                 last_rotate, last_compress, last_safe_remove, last_hourly = _run_maintenance(
                     now, last_rotate, last_compress, last_safe_remove, last_hourly, intervals
                 )
             except Exception as exc:
-                logging.getLogger(__name__).debug("Erro ao agendar manutenção: %s", exc, exc_info=True)
+                # Best-effort: log maintenance scheduling errors at debug level
+                logging.getLogger(__name__).debug("Failed to schedule maintenance: %s", exc, exc_info=True)
             executed += 1
             if cycles != 0 and executed >= cycles:
                 break
@@ -81,47 +90,55 @@ def run_loop(interval: float, cycles: int, verbose_level: int) -> None:
                 try:
                     time.sleep(interval)
                 except Exception as exc:
-                    logging.getLogger(__name__).debug("Pausa interrompida: %s", exc, exc_info=True)
+                    # Sleep interruptions are non-fatal; log at debug level for diagnostics
+                    logging.getLogger(__name__).debug("Sleep interrupted: %s", exc, exc_info=True)
     except KeyboardInterrupt:
-        logging.info("Recebido KeyboardInterrupt, saindo...")
+        # Respect user interrupt and exit gracefully
+        logging.info("KeyboardInterrupt received, exiting...")
 
 
 def _ensure_runtime_checks() -> None:
-    """Verificações leves de runtime executadas antes de cada coleta.
+    """Perform lightweight runtime checks before each collection cycle.
 
-    Garante que os diretórios de logs existem e que o arquivo last_ts está presente.
-    Falhas são tratadas em modo 'best-effort' para não interromper o loop.
+    Ensures logging directories exist and the ``last_ts`` control file is present.
+    Failures are handled in a best-effort manner and logged at debug level so
+    the main loop is not interrupted by non-critical I/O errors.
     """
     try:
         ensure_log_dirs_exist()
     except Exception as exc:
-        # não falhar o loop se a verificação leve apresentar problemas
+        # Do not fail the main loop on lightweight I/O issues; record for debugging
         logging.getLogger(__name__).debug("ensure_log_dirs_exist failed: %s", exc, exc_info=True)
     try:
         ensure_last_ts_exists()
     except Exception as exc:
-        # não falhar o loop por problemas na verificação de last_ts
+        # Best-effort last_ts verification; log debug and continue
         logging.getLogger(__name__).debug("ensure_last_ts_exists failed: %s", exc, exc_info=True)
 
 
 def _collect_and_emit(state: SystemState, verbose_level: int) -> dict:
-    """Coleta métricas, avalia o estado e emite o snapshot.
+    """Collect metrics, evaluate system state and emit a snapshot.
 
-    Retorna o dicionário de resultado: {'state': <str>, 'metrics': <dict>}.
+    Returns a result dict with keys ``'state'`` and ``'metrics'`` suitable for
+    logging and downstream consumers. Metric collection is best-effort and
+    falls back to an empty mapping on failure. Post-evaluation treatments are
+    triggered for metrics that exceed configured thresholds.
     """
     try:
         metrics = _collect_metrics()
     except Exception:
         metrics = {}
 
-        # Aprendizagem diária do consumo de rede: registra bytes enviados/recebidos todo ciclo
+        # Daily network-usage learning: attempt to record bytes sent/received
+        # for the learning model when collection fails partially. This is
+        # best-effort and must not raise.
         try:
             from src.monitoring.handlers import network_learning_handler
 
             bytes_sent = metrics.get("bytes_sent")
             bytes_recv = metrics.get("bytes_recv")
             if bytes_sent is not None and bytes_recv is not None:
-                # Garante que os argumentos sejam inteiros
+                # Ensure arguments are integers before recording
                 try:
                     bs = int(float(bytes_sent))
                     br = int(float(bytes_recv))
@@ -129,10 +146,10 @@ def _collect_and_emit(state: SystemState, verbose_level: int) -> dict:
                 except (ValueError, TypeError):
                     pass
         except Exception as exc:
-            logging.getLogger(__name__).debug("Falha ao registrar aprendizagem diária de rede: %s", exc, exc_info=True)
+            logging.getLogger(__name__).debug("Failed to record daily network learning: %s", exc, exc_info=True)
 
     state_name = state.evaluate_metrics(metrics)
-    # Após avaliar métricas, verificar e tentar tratamento para cada métrica crítica
+    # After evaluating metrics, check and attempt treatments for critical metrics
     from src.monitoring.handlers import attempt_treatment
 
     thresholds = getattr(state, "thresholds", {})
@@ -140,7 +157,8 @@ def _collect_and_emit(state: SystemState, verbose_level: int) -> dict:
         crit = limits.get("critical")
         value = metrics.get(metric_name)
         if crit is not None and value is not None and value >= crit:
-            # Detalhes podem ser extendidos conforme necessário
+            # Trigger configured treatments for metrics that exceed critical limits.
+            # The treatment subsystem decides the concrete action and side-effects.
             attempt_treatment(state, metric_name, {"value": value, "threshold": crit})
     result = {"state": state_name, "metrics": metrics}
     snapshot = getattr(state, "current_snapshot", None)
@@ -148,11 +166,11 @@ def _collect_and_emit(state: SystemState, verbose_level: int) -> dict:
 
     # Log de ciclo completo em modo verbose
     if verbose_level >= 2:
-        logging.getLogger(__name__).info("Ciclo completo: %d métricas coletadas, estado=%s", len(metrics), state_name)
+        logging.getLogger(__name__).info("Cycle complete: %d metrics collected, state=%s", len(metrics), state_name)
 
     return result
 
 
-# Tornar a função disponível também sem a versão pública para retrocompatibilidade
-# (algumas referências internas/tests podem usar o nome com underscore).
+# Keep a private alias for backward compatibility: some internal code/tests may
+# reference ``_run_loop``.
 _run_loop = run_loop

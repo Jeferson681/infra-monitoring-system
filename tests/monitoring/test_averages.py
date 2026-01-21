@@ -24,7 +24,7 @@ def test__extract_epoch_numeric_and_iso():
 def test__human_bytes():
     """Valida a formatação human-readable de bytes."""
     assert formatters._fmt_bytes_human(1024**3) == "1.00 GB"
-    assert formatters._fmt_bytes_human(None) == "Indisponivel"
+    assert formatters._fmt_bytes_human(None) == "Unavailable"
 
 
 def test_extract_relevant_and_normalize_state():
@@ -105,7 +105,7 @@ def test_format_long_metric_from_aggregate_includes_used_lines(tmp_path):
         "used_files_lines": {str(tmp_path / "a.jsonl"): (10, 20)},
     }
     out = averages.format_long_metric_from_aggregate(agg)
-    assert "Linhas usadas" in out
+    assert "Used lines" in out
     assert "a.jsonl" in out
 
 

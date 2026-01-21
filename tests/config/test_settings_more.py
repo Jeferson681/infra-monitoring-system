@@ -46,7 +46,7 @@ def test_get_valid_thresholds_fallback_on_error(monkeypatch, caplog):
     out = settings_mod.get_valid_thresholds({"thresholds": {}})
     assert isinstance(out, dict)
     assert "cpu_percent" in out
-    assert any("Falha ao validar settings" in r.message for r in caplog.records)
+    assert any("Failed to validate settings" in r.message for r in caplog.records)
 
 
 def test_load_settings_env_override(monkeypatch, tmp_path):

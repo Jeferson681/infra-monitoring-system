@@ -1,9 +1,8 @@
-"""Pacote exporter: integrações com sistemas de exportação de métricas.
+"""Exporter package: integrations for exporting metrics.
 
-Fornece integração básica com Prometheus / sistemas de scraping.
-
-Oferece re-exports para manter compatibilidade com importações antigas
-como ``from src.exporter import start_exporter``.
+Provides basic integration points for Prometheus and other scraping
+systems. Re-exports common entrypoints to preserve backwards compatible
+imports such as ``from src.exporter import start_exporter``.
 """
 
 from .prometheus import start_exporter, expose_metric  # re-export

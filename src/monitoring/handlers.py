@@ -1,7 +1,8 @@
-"""Orquestrações de tratamentos automáticos para métricas críticas.
+"""Orchestration of automated treatments for critical metrics.
 
-Seleção de ação e execução controlada (cooldowns, janelas de sustentação)
-para correções automáticas. Comentários e logs em português.
+Selects and executes recovery actions using cooldowns and sustained-window
+logic. The module coordinates treatment execution while preserving the
+state and cooldown semantics used by higher-level orchestration.
 """
 
 import time
@@ -18,18 +19,15 @@ network_learning_handler = NetworkUsageLearningHandler()
 logger = logging.getLogger(__name__)
 
 
-# 0. Seleção de ação
-
-
-# Auxilia: attempt_treatment — seleciona ação por nome da métrica
+# Helper: attempt_treatment — select action by normalized metric name
 def _select_action(metric_lower: str) -> tuple[str | None, tuple]:
-    """Selecione a ação apropriada para uma métrica normalizada.
+    """Select the appropriate action for a normalized metric.
 
-    Retorna uma tupla (action_name, args) ou (None, ()) quando não houver ação.
+    Returns a tuple (action_name, args) or (None, ()) when no action applies.
     """
-    # retornamos apenas o nome da ação e os argumentos; a função é
-    # resolvida dinamicamente por getattr(treatments, action_name) quando
-    # o tratamento é executado
+    # we return only the action name and arguments; the function is
+    # resolved dynamically via getattr(treatments, action_name) when
+    # the treatment is executed
     if "disk" in metric_lower or "disk_percent" in metric_lower:
         return "check_disk_usage", ()
     if "memory" in metric_lower or "ram" in metric_lower or "memory_percent" in metric_lower:
@@ -46,14 +44,12 @@ def _select_action(metric_lower: str) -> tuple[str | None, tuple]:
     return None, ()
 
 
-# 1. Utilitários de execução
-
-
-# Auxilia: attempt_treatment — verifica se a ação está em cooldown
+# Helper: attempt_treatment — check if action remains in cooldown
 def _on_cooldown(state: Any, action_name: str, now: float) -> bool:
-    """Retorne True se a ação ainda estiver em cooldown.
+    """Return True if the action is still in cooldown.
 
-    `state` é esperado fornecer dicts `treatment_cooldowns` e `last_treatment_run`.
+    `state` is expected to provide `treatment_cooldowns` and
+    `last_treatment_run` mappings.
     """
     cooldown = getattr(state, "treatment_cooldowns", {}).get(action_name, 0)
     last = getattr(state, "last_treatment_run", {}).get(action_name, 0)
@@ -61,9 +57,9 @@ def _on_cooldown(state: Any, action_name: str, now: float) -> bool:
 
 
 def _run_main_action(state: Any, action_name: str, action_func, action_args):
-    """Execute a ação principal (tratamento) e retorne o resultado.
+    """Execute the main treatment action and return its result.
 
-    Mantém o caso especial para `cleanup_temp_files` sem alterar a lógica.
+    The special-case for `cleanup_temp_files` is preserved.
     """
     if action_name == "cleanup_temp_files":
         days = getattr(state, "cleanup_temp_age_days", None)
@@ -71,14 +67,15 @@ def _run_main_action(state: Any, action_name: str, action_func, action_args):
             return action_func(days)
         return action_func()
 
-    # chamar com argumentos somente se action_args for truthy
+    # call with arguments only when action_args is truthy
     return action_func(*action_args) if action_args else action_func()
 
 
 def _maybe_run_aux_cleanup(state: Any, now: float) -> None:
-    """Tente executar `cleanup_temp_files` como ação auxiliar (melhor esforço).
+    """Attempt to run `cleanup_temp_files` as an auxiliary action (best-effort).
 
-    Atualize `state.last_treatment_run` com o timestamp quando executado com sucesso.
+    Updates `state.last_treatment_run` with the timestamp when executed
+    successfully.
     """
     aux_name = "cleanup_temp_files"
     try:
@@ -90,49 +87,46 @@ def _maybe_run_aux_cleanup(state: Any, now: float) -> None:
                     aux_res = aux_func(days) if isinstance(days, int) else aux_func()
                     if hasattr(state, "last_treatment_run") and isinstance(state.last_treatment_run, dict):
                         state.last_treatment_run[aux_name] = now
-                    logger.info("tentativa_tratamento: auxiliar %s resultado=%s", aux_name, aux_res)
+                    logger.info("treatment_attempt: auxiliary %s result=%s", aux_name, aux_res)
                 except (OSError, RuntimeError, ValueError, TypeError, AttributeError) as exc:
-                    logger.debug("tentativa_tratamento: auxiliar %s falhou: %s", aux_name, exc, exc_info=True)
+                    logger.debug("treatment_attempt: auxiliary %s failed: %s", aux_name, exc, exc_info=True)
         else:
-            logger.debug("tentativa_tratamento: auxiliar %s em cooldown, pulando", aux_name)
+            logger.debug("treatment_attempt: auxiliary %s on cooldown, skipping", aux_name)
     except (OSError, RuntimeError, ValueError, TypeError, AttributeError) as exc:
-        logger.debug("tentativa_tratamento: erro verificando/realizando auxiliar %s: %s", aux_name, exc, exc_info=True)
+        logger.debug("treatment_attempt: error checking/executing auxiliary %s: %s", aux_name, exc, exc_info=True)
 
 
 def _run_reap_aux(state: Any, action_name: str, result, now: float) -> object | None:
-    """Execute (ou marque) a ação auxiliar `reap_zombie_processes`.
+    """Execute (or mark) the auxiliary action `reap_zombie_processes`.
 
-    Retorne o resultado do auxiliar (`reap_result`) preservando o comportamento
-    original em caso de exceção.
+    Return the auxiliary result (`reap_result`) preserving original behavior
+    in case of exceptions.
     """
     try:
         if action_name != "reap_zombie_processes":
             try:
                 reap_result = treatments.reap_zombie_processes()
             except (OSError, RuntimeError, ValueError, TypeError, AttributeError) as exc:
-                logger.debug("tentativa_tratamento: reap_zombie_processes falhou: %s", exc, exc_info=True)
+                logger.debug("treatment_attempt: reap_zombie_processes failed: %s", exc, exc_info=True)
                 reap_result = None
             if hasattr(state, "last_treatment_run") and isinstance(state.last_treatment_run, dict):
                 state.last_treatment_run["reap_zombie_processes"] = now
         else:
             reap_result = result
     except (OSError, RuntimeError, ValueError, TypeError, AttributeError) as exc:
-        logger.debug("tentativa_tratamento: erro ao executar aux reap_zombie_processes: %s", exc, exc_info=True)
+        logger.debug("treatment_attempt: error executing reap_zombie_processes aux: %s", exc, exc_info=True)
         reap_result = None
     return reap_result
 
 
-# 2. Execução de tratamentos
-
-
 def attempt_treatment(state: Any, name: str, _details: dict) -> dict | bool:
-    """Execute o tratamento automático para uma métrica crítica.
+    """Execute the automatic treatment for a critical metric.
 
-    - Verifica se a métrica cumpriu o período de sustento antes de agir.
-    - Respeita cooldowns configurados no `state`.
-    - Retorna um dict com {'action': <name>, 'result': <...>} em sucesso ou False.
+    - Check that the metric has satisfied the sustained window before acting.
+    - Respect cooldowns configured in `state`.
+    - Return a dict with {'action': <name>, 'result': <...>} on success or False.
     """
-    # Filtro explícito para ignorar métricas absolutas (não tratáveis)
+    # Explicit filter to ignore absolute (non-treatable) metrics
     ignore_metrics = [
         "memory_used_bytes",
         "memory_total_bytes",
@@ -161,23 +155,23 @@ def attempt_treatment(state: Any, name: str, _details: dict) -> dict | bool:
     if action_name is None:
         return False
 
-    # Se for tratamento de rede, acione o aprendizado antes do tratamento
+    # If this is a network treatment, trigger learning before applying the treatment
     if action_name == "reapply_network_config":
         bytes_sent = getattr(state, "bytes_sent", None)
         bytes_recv = getattr(state, "bytes_recv", None)
         if bytes_sent is not None and bytes_recv is not None:
             try:
-                # Garante que os argumentos sejam inteiros
+                # Ensure arguments are integers
                 bs = int(float(bytes_sent))
                 br = int(float(bytes_recv))
                 network_learning_handler.record_daily_usage(bs, br)
-                # Atualiza thresholds dinâmicos
+                # Update dynamic thresholds
                 limit = network_learning_handler.get_current_limit()
                 thresholds = settings.get_valid_thresholds()
                 thresholds["bytes_sent"]["critical"] = limit
                 thresholds["bytes_recv"]["critical"] = limit
             except Exception as exc:
-                logger.debug("network_learning_handler.record_daily_usage falhou: %s", exc, exc_info=True)
+                logger.debug("network_learning_handler.record_daily_usage failed: %s", exc, exc_info=True)
 
     if _on_cooldown(state, action_name, now):
         return False

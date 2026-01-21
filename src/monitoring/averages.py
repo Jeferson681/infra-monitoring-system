@@ -1,17 +1,9 @@
-"""Cálculo e persistência de médias/estatísticas agregadas.
+"""Aggregate averages and persist aggregated statistics.
 
-Este módulo contém utilitários para iterar sobre arquivos JSONL de
-monitoramento, agregar janelas temporais, computar médias por métrica,
-contagens por estado e gerar linhas de saída legíveis por humanos.
-
-Principais responsabilidades:
-- localizar os ficheiros JSONL do dia
-- iterar objetos JSON válidos (ignorando linhas malformadas)
-- agregar janelas temporais e calcular médias/contagens
-- produzir saídas usadas por rotinas de manutenção e relatórios
-
-Nota: as implementações internas tentam ser resilientes a erros de I/O
-e mantêm compatibilidade com a API usada pelos testes.
+Utilities to iterate monitoring JSONL files, aggregate time windows, compute
+per-metric averages and counts, and produce human-readable output lines used
+by maintenance routines and reports. Implementations are resilient to I/O
+errors and designed to remain compatible with existing test APIs.
 """
 
 from pathlib import Path
@@ -31,11 +23,20 @@ from ..system.time_helpers import extract_epoch
 
 
 def _find_candidate_files(root: Path, pattern_prefix: str = "monitoring") -> List[Path]:
-    """Encontre possíveis localizações de arquivo JSONL para um padrão de arquivo.
+    """Find possible locations of JSONL files for a given filename pattern.
 
-    Parâmetros:
-        root: diretório raiz onde procurar.
-        pattern_prefix: prefixo do arquivo (padrão: 'monitoring').
+    Parameters
+    ----------
+    root : Path
+        The root directory to search under.
+    pattern_prefix : str, optional
+        File prefix to search for (default: 'monitoring').
+
+    Returns
+    -------
+    List[Path]
+        Candidate file paths to check for today's JSONL.
+
     """
     t = datetime.date.today().strftime("%Y-%m-%d")
     return [
@@ -49,7 +50,7 @@ def _find_candidate_files(root: Path, pattern_prefix: str = "monitoring") -> Lis
 def _iter_jsonl_file(path: Path, max_retries: int = 3) -> Iterator[tuple[dict, Path, int]]:
     """Yield JSON objects from a single file path, skipping malformed lines.
 
-    Usa retry com backoff exponencial para lidar com arquivo sendo escrito.
+    Uses retries with exponential backoff to handle files being written.
     """
     for attempt in range(max_retries):
         try:
@@ -65,13 +66,13 @@ def _iter_jsonl_file(path: Path, max_retries: int = 3) -> Iterator[tuple[dict, P
                         continue
                     if isinstance(obj, dict):
                         yield obj, path, lineno
-            return  # Sucesso, sair
+            return  # Success, exit
         except IOError as exc:
             if attempt < max_retries - 1:
-                # Retry com backoff exponencial
+                # Retry with exponential backoff
                 wait_time = 0.1 * (2**attempt)
                 logging.getLogger(__name__).debug(
-                    "_iter_jsonl_file: tentativa %d/%d falhou, aguardando %.2fs: %s",
+                    "_iter_jsonl_file: attempt %d/%d failed, waiting %.2fs: %s",
                     attempt + 1,
                     max_retries,
                     wait_time,
@@ -79,19 +80,19 @@ def _iter_jsonl_file(path: Path, max_retries: int = 3) -> Iterator[tuple[dict, P
                 )
                 time.sleep(wait_time)
             else:
-                # Última tentativa falhou
+                # Last attempt failed
                 logging.getLogger(__name__).error(
-                    "_iter_jsonl_file: falha após %d tentativas: %s", max_retries, exc, exc_info=True
+                    "_iter_jsonl_file: failed after %d attempts: %s", max_retries, exc, exc_info=True
                 )
                 raise
         except Exception as exc:
-            logging.getLogger(__name__).error("_iter_jsonl_file: falha inesperada %s", exc, exc_info=True)
+            logging.getLogger(__name__).error("_iter_jsonl_file: unexpected failure %s", exc, exc_info=True)
 
 
 def _iter_jsonl_today(logs_root: Path) -> Iterator[tuple[dict, Path, int]]:
-    """Itera objetos JSON válidos do arquivo do dia em possíveis localizações.
+    """Iterate valid JSON objects from today's files in candidate locations.
 
-    Abre o arquivo candidato e decodifica cada linha JSON (ignora linhas inválidas).
+    Open candidate files and decode each JSON line (ignores invalid lines).
     """
     for c in _find_candidate_files(logs_root):
         if not c.exists():
@@ -147,13 +148,13 @@ def _process_window_item(
     if st_global is not None:
         state_counts[st_global] = state_counts.get(st_global, 0) + 1
 
-    # Use compute_metric_states (centralizado em state.py) para obter estados individuais
+    # Use compute_metric_states (centralized in state.py) to obtain individual states
     metrics_for_state = {k: rel.get(k) for k in metric_keys}
-    # manter compatibilidade; pode ser atualizado para passar thresholds reais
+    # keep compatibility; can be updated to pass real thresholds
     thresholds = {}  # type: Dict[str, Dict[str, Any]]
     metric_states = compute_metric_states(metrics_for_state, thresholds)
 
-    # Mapeamento de métrica para campo de estado individual (consistente com state.py)
+    # Mapping of metric to individual state field (consistent with state.py)
     state_field_map = {
         "cpu_percent": "state_cpu",
         "memory_used_bytes": "state_ram",
@@ -174,7 +175,7 @@ def _process_window_item(
             continue
         sums[k] = sums.get(k, 0.0) + num
         counts[k] = (counts.get(k, 0) or 0) + 1
-        # Estado individual da métrica, se existir
+        # Individual metric state, if present
         st_metric = None
         state_field = state_field_map.get(k)
         if state_field and metric_states.get(state_field):
@@ -237,18 +238,18 @@ def _build_used_files_lines(window: List[tuple]) -> Dict[str, tuple[int, int]]:
 
 
 def extract_relevant(obj: dict) -> Dict[str, Any]:
-    """Extraia campos relevantes de um objeto de log para agregação.
+    """Extract relevant fields from a log object for aggregation.
 
-    Retorna um dicionário com 'state' e as métricas brutas mapeadas para chaves
-    previsíveis usadas pelo agregado e formatadores.
+    Returns a dictionary with 'state' and raw metrics mapped to predictable
+    keys used by the aggregator and formatters.
 
-    Nota: historicamente o agregador procurava por `metrics_raw` enquanto o
-    emissor atual escreve `metrics` no JSONL. Para ser resiliente a ambas as
-    formas, prefira `metrics` e faça fallback para `metrics_raw`.
+    Note: historically the aggregator looked for `metrics_raw` while the
+    current emitter writes `metrics` in the JSONL. To be resilient to both
+    shapes prefer `metrics` and fall back to `metrics_raw`.
     """
-    # Prefer 'metrics' (escrito pelo feed) e caia para 'metrics_raw' se ausente
+    # Prefer 'metrics' (written by the feed) and fall back to 'metrics_raw' if absent
     m = obj.get("metrics") or obj.get("metrics_raw") or {}
-    # Extrai também os estados individuais se existirem
+    # Also extract individual states if present
     return {
         "state_cpu": obj.get("state_cpu"),
         "state_ram": obj.get("state_ram"),
@@ -276,10 +277,10 @@ def extract_relevant(obj: dict) -> Dict[str, Any]:
 
 
 def _normalize_state(s: Optional[str]) -> Optional[str]:
-    """Normalize strings de estado para valores canônicos em maiúsculas.
+    """Normalize state strings to canonical uppercase values.
 
-    Exemplos: 'CRITICAL' ou 'CRIT' -> 'CRITICAL'; 'WARN' -> 'WARNING'.
-    Retorna None quando a entrada for falsy.
+    Examples: 'CRITICAL' or 'CRIT' -> 'CRITICAL'; 'WARN' -> 'WARNING'.
+    Returns None when the input is falsy.
     """
     if not s:
         return None
@@ -295,16 +296,16 @@ def _normalize_state(s: Optional[str]) -> Optional[str]:
 
 
 def aggregate_last_seconds(logs_root: Path, seconds: int = 10) -> Optional[Dict[str, Any]]:
-    """Agregue métricas dos últimos `seconds` segundos a partir dos JSONL do dia.
+    """Aggregate metrics from the last `seconds` seconds from today's JSONL files.
 
-    Retorna um dicionário contendo médias, contagens e metadados, ou None se
-    não houver dados válidos. Projetado para ser resiliente a linhas JSON inválidas.
+    Returns a dict containing averages, counts and metadata, or None if no
+    valid data is available. Designed to be resilient to invalid JSON lines.
     """
     objs: List[tuple[dict, Path, int]] = list(_iter_jsonl_today(logs_root))
     if not objs:
         return None
 
-    # extrair timestamps e manter itens válidos (defensive unpack)
+    # extract timestamps and keep valid items (defensive unpack)
     items: List[tuple[dict, float, Path, int]] = []
     for entry in objs:
         try:
@@ -317,7 +318,7 @@ def aggregate_last_seconds(logs_root: Path, seconds: int = 10) -> Optional[Dict[
     if not items:
         return None
 
-    # janela: do maior timestamp até `seconds` antes
+    # window: from the largest timestamp back `seconds`
     last_ts = max(ts for (_, ts, __, ___) in items)
     cutoff = last_ts - float(seconds)
 
@@ -382,7 +383,7 @@ def aggregate_last_seconds(logs_root: Path, seconds: int = 10) -> Optional[Dict[
 
 
 def _add_human_bytes(averages: Dict[str, Any]) -> None:
-    """Adicione campos legíveis (GB) ao dicionário de médias quando aplicável."""
+    """Add human-readable (GB) fields to the averages dictionary when applicable."""
     try:
         if averages.get("bytes_sent") is not None:
             averages["bytes_sent_human"] = _fmt_bytes_human(int(averages["bytes_sent"]))
@@ -393,9 +394,9 @@ def _add_human_bytes(averages: Dict[str, Any]) -> None:
 
 
 def _safe_persist_last_time(last_ts: float) -> None:
-    """Persista last_ts em arquivo sem propagar exceções para o chamador.
+    """Persist last_ts to a file without propagating exceptions to the caller.
 
-    Registra em debug se ocorrer falha e segue em modo best-effort.
+    Logs at debug level on failure and continues in best-effort mode.
     """
     try:
         persist_last_time(last_ts=last_ts)
@@ -516,12 +517,12 @@ def write_average_log(
 
 
 def get_last_ts_file(name: str = "last_ts") -> Path:
-    """Retorne o Path para o ficheiro last_ts JSON e garanta que o pai exista.
+    """Return the Path for the last_ts JSON file and ensure its parent exists.
 
-    Se `logs_root` for None, resolve a partir do subsistema de logging para
-    que o cache fique sob o mesmo `logs_root` usado por `get_log_paths()`.
+    If `logs_root` is None, resolve from the logging subsystem so the cache
+    lives under the same `logs_root` used by `get_log_paths()`.
     """
-    # Cria o arquivo dentro de .cache na raiz do projeto
+    # Create the file inside .cache at the project root
     project_root = Path(__file__).resolve().parent.parent.parent
     cache_dir = project_root / ".cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -529,10 +530,10 @@ def get_last_ts_file(name: str = "last_ts") -> Path:
 
 
 def persist_last_time(last_ts: Optional[float] = None, name: str = "last_ts") -> Path:
-    """Persista um JSON único com o último timestamp (epoch) e ISO.
+    """Persist a small JSON object with the last timestamp (epoch and ISO).
 
-    Substitui o ficheiro com um pequeno objeto JSON. Se `last_ts` for None,
-    utiliza o timestamp UTC atual.
+    Overwrites the file with a compact JSON object. If `last_ts` is None,
+    use the current UTC timestamp.
     """
     if last_ts is None:
         last_ts = datetime.datetime.now(datetime.timezone.utc).timestamp()
@@ -565,7 +566,7 @@ def persist_last_time(last_ts: Optional[float] = None, name: str = "last_ts") ->
 
 
 def read_last_time(name: str = "last_ts") -> Optional[float]:
-    """Leia o ficheiro JSON e retorne o valor numérico `last_time` (epoch) ou None."""
+    """Read the JSON file and return the numeric `last_time` (epoch) or None."""
     fpath = get_last_ts_file(name=name)
     if not fpath.exists():
         return None
@@ -581,29 +582,29 @@ def read_last_time(name: str = "last_ts") -> Optional[float]:
         return None
 
 
-# Auxiliar leve: garante que o arquivo last_ts exista em tempo de execução
+# Lightweight helper: ensure the last_ts file exists at runtime
 def ensure_last_ts_exists(name: str = "last_ts") -> None:
-    """Garante existência do arquivo de controle `last_ts` durante execução.
+    """Ensure the control file `last_ts` exists at runtime.
 
-    Faz uma verificação rápida; se o ficheiro não existir, chama
-    `persist_last_time()` para criar o arquivo no `logs_root` fornecido
-    (ou no root padrão resolvido por `get_last_ts_file`). Projetado para
-    ser chamado frequentemente pelo loop sem overhead significativo.
+    Performs a quick check; if the file does not exist, calls
+    `persist_last_time()` to create the file in the provided `logs_root`
+    (or the default resolved by `get_last_ts_file`). Designed to be
+    called frequently by the loop with minimal overhead.
     """
     logger = logging.getLogger(__name__)
     try:
         fpath = get_last_ts_file(name=name)
     except Exception as exc:
-        logger.error("ensure_last_ts_exists: falha ao resolver caminho: %s", exc, exc_info=True)
+        logger.error("ensure_last_ts_exists: failed to resolve path: %s", exc, exc_info=True)
         return
 
     if not fpath.exists():
         try:
-            # persist_last_time cuida de criar o diretório pai quando necessário
+            # persist_last_time ensures the parent directory is created when needed
             persist_last_time(last_ts=None, name=name)
-            logger.debug("ensure_last_ts_exists: criado %s", fpath)
+            logger.debug("ensure_last_ts_exists: created %s", fpath)
         except Exception as exc:
-            logger.error("ensure_last_ts_exists: não foi possível criar %s: %s", fpath, exc, exc_info=True)
+            logger.error("ensure_last_ts_exists: failed to create %s: %s", fpath, exc, exc_info=True)
 
 
 def ensure_default_last_ts() -> None:
@@ -622,7 +623,7 @@ def ensure_default_last_ts() -> None:
             persist_last_time()
         except Exception as exc:
             logging.getLogger(__name__).debug("persist_last_time on startup init failed: %s", exc, exc_info=True)
-            # Persistir timestamp atual (persist_last_time cuida do diretório)
+            # Persist current timestamp (persist_last_time ensures the directory)
             try:
                 persist_last_time()
             except Exception as exc:

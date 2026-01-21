@@ -1,7 +1,9 @@
-"""Coleta métricas do sistema (CPU, RAM, Disco, Latência, Rede, Temperatura).
+"""System metric collection and normalization.
 
-Usa cache por métrica definido em `_METRIC_INTERVALS`. Algumas chaves
-estão agrupadas (ex.: ``memory``, ``disk``, ``network``, ``temperature``).
+Collects CPU, memory, disk, latency, network and temperature-related
+metrics. Uses a per-metric cache configured in ``_METRIC_INTERVALS`` and
+groups related keys (for example: ``memory``, ``disk``, ``network``,
+``temperature``) to reduce collection overhead.
 """
 
 import time
@@ -21,18 +23,15 @@ from ..system.helpers import validate_host_port, _disk_candidate_paths
 
 logger = logging.getLogger(__name__)
 
-# Flag indicando se a última medição de latency foi uma estimativa de timeout
+# Flag indicating whether the last latency measurement was a timeout estimate
 _last_latency_estimated: bool = False
-# Flag para evitar expor o 0% inicial do psutil na primeira coleta
+# Flag to avoid exposing an initial spurious 0% from psutil on first collection
 _cpu_warmed_up: bool = False
 
-# ========================
-# 1. Cache simples por métrica
-# ========================
-
-# Intervalos (em segundos) razoáveis para evitar consultas excessivas.
-# Ajuste conforme o ambiente / sensibilidade desejada.
-# Use um pequeno conjunto de chaves de cache, agrupando rede em um único item.
+# Simple per-metric cache
+# Reasonable intervals (in seconds) to avoid excessive queries.
+# Adjust for your environment/sensitivity as needed.
+# Use a small set of cache keys, grouping network into a single item.
 _METRIC_INTERVALS: dict[str, float] = {
     "cpu_percent": 1.0,
     "memory_percent": 5.0,
@@ -50,50 +49,51 @@ _METRIC_INTERVALS: dict[str, float] = {
 # cache: key -> { 'value': ..., 'ts': float(monotonic) }
 _CACHE: dict[str, dict] = {k: {"value": None, "ts": 0.0} for k in _METRIC_INTERVALS.keys()}
 
-# locks para garantir que não disparemos múltiplas coletas simultâneas para a
-# mesma métrica. Usamos try_acquire (non-blocking) no coletor para não bloquear
-# o thread chamador — se já houver coleta em andamento, usamos o valor em cache.
+# Locks to ensure we don't trigger multiple simultaneous collections for the
+# same metric. We use try_acquire (non-blocking) in the collector to avoid
+# blocking the caller thread — if a collection is already in progress we use
+# the cached value.
 _LOCKS: dict[str, threading.Lock] = {k: threading.Lock() for k in _METRIC_INTERVALS.keys()}
 
-# Constantes de temperatura
-TEMPERATURE_MIN_THRESHOLD = 20.0  # Filtrar valores < 20°C como suspeitos
+# Temperature constants
+TEMPERATURE_MIN_THRESHOLD = 20.0  # Filter values < 20°C as suspicious
 SENSOR_PRIORITY_ORDER = ["k10temp", "coretemp", "it8792", "nct6798"]
 
 
 def _now() -> float:
-    """Retorne um timestamp monotônico (em segundos).
+    """Return a monotonic timestamp (in seconds).
 
-    Usado internamente para medir envelhecimento do cache sem depender do relógio do sistema.
+    Used internally to measure cache age without depending on the system clock.
     """
     return time.monotonic()
 
 
 def _is_stale(key: str) -> bool:
-    """Retorne True se o valor em cache para `key` estiver stale.
+    """Return True if the cached value for `key` is stale.
 
-    Considera o intervalo configurado em `_METRIC_INTERVALS`.
+    Considers the interval configured in `_METRIC_INTERVALS`.
     """
     try:
         last = float(_CACHE.get(key, {}).get("ts", 0.0))
         interval = float(_METRIC_INTERVALS.get(key, 1.0))
         return (_now() - last) >= interval
     except (TypeError, ValueError) as exc:
-        logger.debug("_is_stale falhou para key %s: %s", key, exc, exc_info=True)
+        logger.debug("_is_stale failed for key %s: %s", key, exc, exc_info=True)
         return True
 
 
 def _cache_get_or_refresh(key: str, collector: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
-    """Retorne o valor em cache para `key`, atualizando quando stale.
+    """Return the cached value for `key`, refreshing it when stale.
 
-    `collector` é um callable que será invocado para refazer a medição. Para
-    chaves conhecidas usa locks por chave para evitar coletas concorrentes.
+    `collector` is a callable invoked to re-run the measurement. For known
+    keys a per-key lock is used to avoid concurrent collections.
     """
-    # se a chave for desconhecida, chame o collector diretamente
+    # if the key is unknown, call the collector directly
     if key not in _METRIC_INTERVALS:
         try:
             return collector(*args, **kwargs)
         except (TypeError, ValueError, RuntimeError, OSError) as exc:
-            logger.debug("collector falhou para key desconhecida %s: %s", key, exc, exc_info=True)
+            logger.debug("collector failed for unknown key %s: %s", key, exc, exc_info=True)
             return None
 
     # if not stale, return cached value
@@ -104,7 +104,7 @@ def _cache_get_or_refresh(key: str, collector: Callable[..., Any], *args: Any, *
         try:
             val = collector(*args, **kwargs)
         except (TypeError, ValueError, RuntimeError, OSError) as exc:
-            logger.debug("falha ao atualizar collector para key %s: %s", key, exc, exc_info=True)
+            logger.debug("failed to refresh collector for key %s: %s", key, exc, exc_info=True)
             val = None
         _CACHE[key]["value"] = val
         _CACHE[key]["ts"] = _now()
@@ -125,7 +125,7 @@ def _cache_get_or_refresh(key: str, collector: Callable[..., Any], *args: Any, *
         try:
             lock.release()
         except RuntimeError as exc:
-            logger.debug("lock.release() falhou: %s", exc, exc_info=True)
+            logger.debug("lock.release() failed: %s", exc, exc_info=True)
 
 
 def collect_metrics() -> dict[str, float | int | str | None]:
@@ -158,7 +158,7 @@ def collect_metrics() -> dict[str, float | int | str | None]:
 
 
 def _export_some_metrics(metrics: dict[str, float | int | str | None]) -> None:
-    """Expose a small set of metrics to Prometheus exporter if available.
+    """Expose a small set of metrics to the Prometheus exporter if available.
 
     This is a best-effort integration: failures are logged and ignored.
     """
@@ -184,11 +184,11 @@ def _reset_cache_timestamps() -> None:
         for k in _CACHE.keys():
             _CACHE[k]["ts"] = 0.0
     except (AttributeError, TypeError) as exc:
-        logger.debug("falha ao resetar timestamps do cache: %s", exc, exc_info=True)
+        logger.debug("failed to reset cache timestamps: %s", exc, exc_info=True)
 
 
 def _collect_percent_metrics(metrics: dict[str, float | int | str | None]) -> None:
-    """Coleta percentuais: `cpu_percent`, `cpu_freq_ghz`, `memory_percent`, `disk_percent`."""
+    """Collect percentages: `cpu_percent`, `cpu_freq_ghz`, `memory_percent`, `disk_percent`."""
     cpu = _safe_float(_cache_get_or_refresh("cpu_percent", get_cpu_percent))
     metrics["cpu_percent"] = None if cpu is None else max(0.0, min(100.0, cpu))
 
@@ -204,8 +204,8 @@ def _collect_percent_metrics(metrics: dict[str, float | int | str | None]) -> No
 
 def _collect_memory_and_bytes(metrics: dict[str, float | int | str | None]) -> None:
     try:
-        # Usa cache agrupado 'memory' para obter used/total juntos (mesmo intervalo
-        # do `memory_percent` — 5s). Não altera nomes/formatos.
+        # Use the grouped 'memory' cache to obtain used/total together (same
+        # interval as `memory_percent` — 5s). Does not change names/formats.
         mem = _cache_get_or_refresh("memory", get_memory_info) or (None, None)
         used, total = (None, None)
         try:
@@ -213,7 +213,7 @@ def _collect_memory_and_bytes(metrics: dict[str, float | int | str | None]) -> N
         except Exception:
             used, total = (None, None)
         metrics["memory_used_bytes"] = int(used) if used is not None else None
-        # total em bytes (mesma fonte/cache 'memory')
+        # total in bytes (same source/cache 'memory')
         metrics["memory_total_bytes"] = int(total) if total is not None else None
     except Exception:
         metrics["memory_used_bytes"] = None
@@ -221,14 +221,14 @@ def _collect_memory_and_bytes(metrics: dict[str, float | int | str | None]) -> N
 
 
 def _collect_network_metrics(metrics: dict[str, float | int | str | None]) -> None:
-    """Coleta `bytes_sent` e `bytes_recv` (cache `network`, contadores monotônicos)."""
+    """Collect `bytes_sent` and `bytes_recv` (uses grouped `network` cache)."""
     net = _cache_get_or_refresh("network", lambda: get_network_stats()) or {}
     metrics["bytes_sent"] = _safe_counter(net.get("bytes_sent"))
     metrics["bytes_recv"] = _safe_counter(net.get("bytes_recv"))
 
 
 def _collect_latency_metrics(metrics: dict[str, float | int | str | None]) -> None:
-    """Coleta `ping_ms`, `latency_ms` e `latency_estimated` (flag de fallback)."""
+    """Collect `ping_ms`, `latency_ms` and `latency_estimated` (fallback flag)."""
     ping = _safe_float(_cache_get_or_refresh("ping_ms", lambda: get_latency("8.8.8.8", 53, 1.0)))
     metrics["ping_ms"] = None if (ping is None or ping < 0.0) else ping
 
@@ -241,13 +241,13 @@ def _collect_latency_metrics(metrics: dict[str, float | int | str | None]) -> No
 
 
 def _collect_temperature_and_timestamp(metrics: dict[str, float | int | str | None]) -> None:
-    """Coleta `temperature_celsius` (cache `temperature`) e `timestamp` (time.time())."""
+    """Collect `temperature_celsius` (cache `temperature`) and `timestamp` (time.time())."""
     metrics["temperature_celsius"] = _cache_get_or_refresh("temperature", _temperature_collector)
     metrics["timestamp"] = time.time()
 
 
 def _collect_disk_usage_bytes(metrics: dict[str, float | int | str | None]) -> None:
-    """Coleta `disk_used_bytes` e `disk_total_bytes` (cache `disk`)."""
+    """Collect `disk_used_bytes` and `disk_total_bytes` (cache `disk`)."""
     try:
         du = _cache_get_or_refresh("disk", get_disk_usage_info) or (None, None)
         used, total = (None, None)
@@ -263,9 +263,9 @@ def _collect_disk_usage_bytes(metrics: dict[str, float | int | str | None]) -> N
 
 
 def _safe_float(val: object) -> float | None:
-    """Converta `val` para float; rejeite NaN/Inf e retorne None em erro.
+    """Convert `val` to float; reject NaN/Inf and return None on error.
 
-    Apenas int/float/str são aceitos; caso contrário retorne None.
+    Only int/float/str are accepted; otherwise return None.
     """
     if not isinstance(val, (int, float, str)):
         return None
@@ -279,7 +279,7 @@ def _safe_float(val: object) -> float | None:
 
 
 def _safe_counter(v: object) -> int | None:
-    """Converta e valide um valor tipo contador para int não-negativo ou None."""
+    """Convert and validate a counter-like value to a non-negative int or None."""
     if not isinstance(v, (int, float, str)):
         return None
     try:
@@ -290,11 +290,11 @@ def _safe_counter(v: object) -> int | None:
 
 
 def get_cpu_percent() -> float | None:
-    """Retorne a percentagem de uso de CPU (não bloqueante).
+    """Return CPU usage percent (non-blocking).
 
-    Observação: o psutil pode retornar 0.0 na primeira chamada (valor espúrio).
-    Para evitar expor esse ruído, tente uma pequena amostra bloqueante na
-    primeira coleta; se ainda for 0.0, retorne None para evitar valores enganosos.
+    Note: psutil may return 0.0 on the first call (spurious). To avoid
+    exposing that noise, take a brief blocking sample on first collection;
+    if still 0.0 return None to avoid misleading values.
     """
     global _cpu_warmed_up
     try:
@@ -302,16 +302,16 @@ def get_cpu_percent() -> float | None:
     except (OSError, RuntimeError):
         return None
 
-    # Se não aquecido e valor for 0.0, tentar pequena amostra bloqueante e
-    # marcar como aquecido. Se a nova amostra também for 0.0, retornar None
-    # para evitar mostrar um falso 0% na primeira coleta.
-    # usar comparação com epsilon para evitar checagens de igualdade direta
+    # If not warmed up and value is 0.0, take a small blocking sample and
+    # mark as warmed. If the new sample is also 0.0, return None to avoid
+    # exposing a spurious 0% on first collection.
+    # Use epsilon comparisons to avoid direct equality checks.
     eps = 1e-6
     if not _cpu_warmed_up and abs(val - 0.0) <= eps:
         try:
             val2 = psutil.cpu_percent(interval=0.05)
         except (OSError, RuntimeError) as exc:
-            logger.debug("amostra curta cpu_percent falhou: %s", exc, exc_info=True)
+            logger.debug("short cpu_percent sample failed: %s", exc, exc_info=True)
             val2 = None
         _cpu_warmed_up = True
         if val2 is None:
@@ -322,21 +322,21 @@ def get_cpu_percent() -> float | None:
 
 
 def get_cpu_freq_ghz() -> float | None:
-    """Retorne a frequência atual da CPU em GHz ou None se indisponível.
+    """Return the current CPU frequency in GHz or None if unavailable.
 
-    Usa psutil.cpu_freq() que normalmente retorna valores em MHz; convertemos
-    para GHz dividindo por 1000. Tratamos exceções e valores nulos.
+    Uses psutil.cpu_freq() which typically returns values in MHz; convert
+    to GHz by dividing by 1000. Handle exceptions and missing values.
     """
     try:
         f = psutil.cpu_freq()
     except (OSError, RuntimeError) as exc:
-        logger.debug("psutil.cpu_freq() falhou: %s", exc, exc_info=True)
+        logger.debug("psutil.cpu_freq() failed: %s", exc, exc_info=True)
         return None
 
     if not f:
         return None
 
-    # 'current' costuma estar em MHz; proteger contra None
+    # 'current' is usually in MHz; guard against None
     curr = getattr(f, "current", None)
     if curr is None:
         return None
@@ -350,21 +350,21 @@ def get_cpu_freq_ghz() -> float | None:
 
 
 def get_memory_percent() -> float:
-    """Retorne a percentagem de uso de RAM."""
+    """Return the memory usage percent."""
     return psutil.virtual_memory().percent
 
 
 def get_disk_percent(path: str | None = None) -> float | None:
-    r"""Retorne a percentagem de uso do disco para `path` especificado.
+    r"""Return the disk usage percent for the specified `path`.
 
-    Se `path` for None, escolha um default cross-platform:
-    - Windows: use a raiz do filesystem atual (ex.: 'C:\\') via Path().anchor
+    If `path` is None choose a cross-platform default:
+    - Windows: use the filesystem anchor (e.g. 'C:\\') via Path().anchor
     - POSIX: use '/'
 
-    Retorne None em caso de erro (p.ex. path inválido ou permissão).
+    Returns ``None`` on error (e.g. invalid path or permission).
     """
     try:
-        # resolve candidate path(s) to try — aceitamos str ou Path
+        # resolve candidate path(s) to try — accept str or Path
         candidates: list[object] = []
         if path:
             candidates.append(Path(path))
@@ -375,10 +375,10 @@ def get_disk_percent(path: str | None = None) -> float | None:
                 # psutil accepts str or Path; attempt disk_usage regardless of p.exists()
                 return psutil.disk_usage(str(p)).percent
             except OSError:
-                # tentar próximo candidato; sonda em melhor esforço, ignorar e continuar
+                # try next candidate; probe in best-effort mode and continue
                 continue  # nosec
 
-        # se nenhum candidato funcionou, tentar usar o primeiro mesmo que não exista
+        # if no candidate worked, try the first one even if it does not exist
         try:
             return psutil.disk_usage(str(candidates[0])).percent
         except OSError:
@@ -388,19 +388,19 @@ def get_disk_percent(path: str | None = None) -> float | None:
 
 
 def _get_temp_from_script(script_path: Path) -> float | None:
-    """Manter para compatibilidade com testes; descontinuado em favor de psutil.
+    """Kept for test compatibility; deprecated in favor of psutil.
 
-    Esta função foi mantida para compatibilidade com testes, mas o método
-    psutil é preferido. Será removida em futuras versões.
+    This function is retained for tests, but the psutil method is preferred
+    and this helper will be removed in future releases.
     """
-    logger.debug("_get_temp_from_script: método descontinuado, usar psutil ao invés")
+    logger.debug("_get_temp_from_script: deprecated; use psutil instead")
     return None
 
 
 def _parse_first_float_from_text(text: str) -> float | None:
-    """Tente extrair o primeiro número float de `text` e retorná-lo como float.
+    """Attempt to extract the first floating number from `text` and return it.
 
-    Retorna None se não houver número ou se o valor não for finito.
+    Return None if no number is found or the value is not finite.
     """
     if not text:
         return None
@@ -411,12 +411,12 @@ def _parse_first_float_from_text(text: str) -> float | None:
         v = float(m.group(1))
         return v if math.isfinite(v) else None
     except (ValueError, TypeError) as exc:
-        logger.error("_parse_first_float_from_text: parse falhou: %s", exc, exc_info=True)
+        logger.error("_parse_first_float_from_text: parse failed: %s", exc, exc_info=True)
         return None
 
 
 def _temperature_collector() -> float | None:
-    """Collector usado pelo cache: retorna temperatura da CPU usando psutil."""
+    """Collector used by the cache: return CPU temperature using psutil."""
     try:
         # Tentar obter temperaturas usando psutil.sensors_temperatures()
         if hasattr(psutil, "sensors_temperatures"):
@@ -437,7 +437,7 @@ def _temperature_collector() -> float | None:
                                         entry.current,
                                     )
                                     return entry.current
-                            # Se não encontrar label específico, usar o primeiro
+                            # If a specific label is not found, use the first one
                             if entries[0].current is not None:
                                 logger.debug(
                                     "_temperature_collector: obtido de %s (primeiro) = %.1f°C",
@@ -446,23 +446,23 @@ def _temperature_collector() -> float | None:
                                 )
                                 return entries[0].current
 
-                # Fallback: tentar qualquer sensor que não seja acpitz
+                # Fallback: try any sensor that is not acpitz
                 for sensor_name, entries in temps.items():
                     if sensor_name != "acpitz" and entries:
                         current = entries[0].current
-                        if current is not None and current > TEMPERATURE_MIN_THRESHOLD:  # Filtrar valores suspeitos
-                            logger.debug("_temperature_collector: obtido de %s = %.1f°C", sensor_name, current)
+                        if current is not None and current > TEMPERATURE_MIN_THRESHOLD:  # Filter suspicious low values
+                            logger.debug("_temperature_collector: obtained from %s = %.1f°C", sensor_name, current)
                             return current
     except Exception as exc:
-        logger.error("_temperature_collector falhou ao usar psutil: %s", exc, exc_info=True)
+        logger.error("_temperature_collector failed using psutil: %s", exc, exc_info=True)
 
     return None
 
 
 def get_network_stats() -> dict[str, int]:
-    """Retorne estatísticas de rede (bytes enviados/recebidos) como inteiros."""
-    # psutil.net_io_counters() retorna contadores monotônicos totais desde o boot.
-    # Chamadas frequentes são evitadas pelo cache agrupado 'network' usado no coletor.
+    """Return network statistics (bytes sent/received) as integers."""
+    # psutil.net_io_counters() returns monotonic counters since boot.
+    # Frequent calls are avoided by the grouped 'network' cache used by the collector.
     net = psutil.net_io_counters()
     return {
         "bytes_sent": int(net.bytes_sent),
@@ -471,25 +471,25 @@ def get_network_stats() -> dict[str, int]:
 
 
 def get_network_latency(host: str = "8.8.8.8", port: int = 53, timeout: float = 2.0) -> float | None:
-    """Retorna latência em ms.
+    """Return latency in ms.
 
-    1. Usa o binário `ping` do sistema (uma tentativa).
-    2. Se falhar, tenta conexão TCP (medição de latência real via socket).
+    1. Use the system `ping` binary (one attempt).
+    2. If that fails, try a TCP connection (actual latency measurement via socket).
 
-    Retorna um float em ms ou None.
+    Returns a float in ms or None.
     """
     global _last_latency_estimated
     _last_latency_estimated = False
 
-    # valida host/port
+    # validate host/port
     if not validate_host_port(host, port):
         logger.debug("validate_host_port failed for %s:%s, falling back to localhost", host, port)
         host = "127.0.0.1"
 
     def _build_ping_cmd(host: str, timeout: float) -> list[str]:
-        """Monte o comando de ping apropriado para a plataforma.
+        """Build the appropriate ping command for the platform.
 
-        Usa timeouts em ms no Windows e em segundos na maioria dos Unix.
+        Uses millisecond timeouts on Windows and seconds on most Unices.
         """
         system = platform.system().lower()
         if system.startswith("win"):
@@ -498,9 +498,9 @@ def get_network_latency(host: str = "8.8.8.8", port: int = 53, timeout: float = 
         return ["ping", "-c", "1", "-W", str(int(timeout)), host]
 
     def _parse_ping_output_for_ms(output: str) -> float | None:
-        """Parseie a saída do ping e retorne o tempo em ms, ou None se não achar.
+        """Parse ping output and return the time in ms, or None if not found.
 
-        A regex procura o padrão `= <num> ms` comum em muitas implementações.
+        The regex looks for the pattern `= <num> ms` common to many implementations.
         """
         m = re.search(r"=\s*([\d.]+)\s*ms", output)
         if not m:
@@ -509,32 +509,34 @@ def get_network_latency(host: str = "8.8.8.8", port: int = 53, timeout: float = 
             v = float(m.group(1))
             return v if math.isfinite(v) else None
         except (ValueError, TypeError) as exc:
-            logger.debug("get_network_latency: parse de ping falhou: %s", exc, exc_info=True)
+            logger.debug("get_network_latency: ping parse failed: %s", exc, exc_info=True)
             return None
 
-    # Tenta via ping do sistema
+    # Try using system ping
     cmd = _build_ping_cmd(host, timeout)
     try:
         out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, text=True, timeout=float(timeout or 2.0))
+    except subprocess.CalledProcessError:
+        # ping returned non-zero exit status; try TCP fallback
+        logger.debug("get_network_latency: ping returned non-zero exit status")
+    except (subprocess.SubprocessError, OSError) as exc:
+        # any other error (timeout, missing binary etc.) -> fallback
+        logger.debug("get_network_latency: ping failed: %s", exc, exc_info=True)
+    else:
         parsed = _parse_ping_output_for_ms(out)
         if parsed is not None:
             _last_latency_estimated = False
             return parsed
-    except subprocess.CalledProcessError:
-        # ping retornou com código !=0; tentar fallback TCP
-        logger.debug("get_network_latency: ping returned non-zero exit status")
-    except (subprocess.SubprocessError, OSError) as exc:
-        # qualquer outro erro (timeout, binário ausente etc.) -> fallback
-        logger.debug("get_network_latency: ping falhou: %s", exc, exc_info=True)
-        # continue to TCP fallback
+
+    # continue to TCP fallback
     return _tcp_latency_fallback(host, port, timeout)
 
 
 def _tcp_latency_fallback(host: str, port: int, timeout: float) -> float | None:
-    """Tentar medir latência via conexão TCP; marca _last_latency_estimated.
+    """Attempt to measure latency via a TCP connection; marks _last_latency_estimated.
 
-    Retorna valor em ms ou None. Mantém a flag `_last_latency_estimated` como True
-    quando entrar no fallback, para indicar que a medida não veio do ping ICMP.
+    Returns the value in ms or None. Keeps the `_last_latency_estimated` flag True
+    when entering the fallback to indicate the measurement did not come from ICMP ping.
     """
     global _last_latency_estimated
     try:
@@ -549,24 +551,24 @@ def _tcp_latency_fallback(host: str, port: int, timeout: float) -> float | None:
         return None
 
 
-# Compatibility wrappers: manter API antiga e fornecer conveniência
+# Compatibility wrappers: keep old API and provide convenience
 def get_latency(host: str = "8.8.8.8", port: int = 53, timeout: float = 2.0) -> float | None:
-    """Alias para `get_network_latency` (compatibilidade)."""
+    """Alias for `get_network_latency` (compatibility)."""
     return get_network_latency(host=host, port=port, timeout=timeout)
 
 
 def get_memory_info() -> tuple[int | None, int | None]:
-    """Retorna (used_bytes, total_bytes) da memória física ou (None, None)."""
+    """Return (used_bytes, total_bytes) of physical memory or (None, None)."""
     try:
         vm = psutil.virtual_memory()
         return int(getattr(vm, "used", 0)), int(getattr(vm, "total", 0))
     except (OSError, RuntimeError, AttributeError) as exc:
-        logger.debug("get_memory_info falhou: %s", exc, exc_info=True)
+        logger.debug("get_memory_info failed: %s", exc, exc_info=True)
         return None, None
 
 
 def get_disk_usage_info(path: str | None = None) -> tuple[int | None, int | None]:
-    """Retorna (used_bytes, total_bytes) do disco para `path` ou (None, None)."""
+    """Return (used_bytes, total_bytes) of the disk for `path` or (None, None)."""
     try:
         candidates: list[object] = []
         if path:
@@ -574,7 +576,7 @@ def get_disk_usage_info(path: str | None = None) -> tuple[int | None, int | None
         try:
             candidates.extend(_disk_candidate_paths())
         except Exception as exc:
-            logger.debug("building disk candidates falhou: %s", exc, exc_info=True)
+            logger.debug("building disk candidates failed: %s", exc, exc_info=True)
         for p in candidates:
             try:
                 du = psutil.disk_usage(str(p))
@@ -585,10 +587,10 @@ def get_disk_usage_info(path: str | None = None) -> tuple[int | None, int | None
             du = psutil.disk_usage(str(candidates[0]))
             return int(getattr(du, "used", 0)), int(getattr(du, "total", 0))
         except OSError as exc:
-            logger.debug("get_disk_usage_info: psutil.disk_usage falhou: %s", exc, exc_info=True)
+            logger.debug("get_disk_usage_info: psutil.disk_usage failed: %s", exc, exc_info=True)
             return None, None
     except OSError as exc:
-        logger.debug("get_disk_usage_info falhou: %s", exc, exc_info=True)
+        logger.debug("get_disk_usage_info failed: %s", exc, exc_info=True)
         return None, None
 
 

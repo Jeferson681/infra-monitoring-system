@@ -1,6 +1,8 @@
-"""Helpers de manutenção (rotações, compressão, remoção segura e agregação horária).
+"""Maintenance helpers: rotation, compression, safe removal and hourly aggregation.
 
-Extraído de `core` para centralizar rotinas periódicas e permitir testes isolados.
+Centralized periodic routines extracted from the orchestration layer to
+enable isolated testing and reuse. Exposes functions to read configured
+intervals and run scheduled maintenance tasks.
 """
 
 from __future__ import annotations
@@ -13,11 +15,10 @@ from ..monitoring.averages import aggregate_last_seconds, write_average_log
 
 
 def _read_maintenance_intervals() -> tuple[int, int, int, int]:
-    """Lê intervalos de manutenção a partir do ambiente com defaults.
+    """Read maintenance intervals from environment with sensible defaults.
 
-    Retorna (rotate_interval, compress_interval, safe_remove_interval, hourly_interval)
-    em segundos. Valores inválidos nas variáveis de ambiente são tratados com
-    defaults seguros.
+    Returns (rotate_interval, compress_interval, safe_remove_interval, hourly_interval)
+    in seconds. Invalid environment values are handled using safe defaults.
     """
     import os
 
@@ -41,58 +42,59 @@ def _read_maintenance_intervals() -> tuple[int, int, int, int]:
 
 
 def _maintenance_rotate(now: float, last_rotate: float, rotate_interval: int) -> float:
-    """Execute rotação de logs quando o intervalo for atingido.
+    """Run log rotation when the configured interval is reached.
 
-    Retorna o novo timestamp de `last_rotate` (usado para agendamento).
+    Returns the new `last_rotate` timestamp (used for scheduling).
     """
     if now - last_rotate >= rotate_interval:
         try:
             rotate_logs()
         except OSError as exc:
-            logging.getLogger(__name__).warning("Falha ao rotacionar logs: %s", exc)
+            logging.getLogger(__name__).warning("Failed to rotate logs: %s", exc)
         except Exception as exc:
-            logging.getLogger(__name__).debug("rotate_logs: erro inesperado: %s", exc, exc_info=True)
+            logging.getLogger(__name__).debug("rotate_logs: unexpected error: %s", exc, exc_info=True)
         return now
     return last_rotate
 
 
 def _maintenance_compress(now: float, last_compress: float, compress_interval: int) -> float:
-    """Execute compressão de logs quando o intervalo for atingido.
+    """Run log compression when the configured interval is reached.
 
-    Retorna o novo timestamp de `last_compress`.
+    Returns the new `last_compress` timestamp.
     """
     if now - last_compress >= compress_interval:
         try:
             compress_old_logs()
         except OSError as exc:
-            logging.getLogger(__name__).warning("Falha ao comprimir logs: %s", exc)
+            logging.getLogger(__name__).warning("Failed to compress logs: %s", exc)
         except Exception as exc:
-            logging.getLogger(__name__).debug("compress_old_logs: erro inesperado: %s", exc, exc_info=True)
+            logging.getLogger(__name__).debug("compress_old_logs: unexpected error: %s", exc, exc_info=True)
         return now
     return last_compress
 
 
 def _maintenance_safe_remove(now: float, last_safe_remove: float, safe_remove_interval: int) -> float:
-    """Execute remoção segura (safe remove) quando o intervalo for atingido.
+    """Run safe removal of old files when the configured interval is reached.
 
-    Retorna o novo timestamp de `last_safe_remove`.
+    Returns the new `last_safe_remove` timestamp.
     """
     if now - last_safe_remove >= safe_remove_interval:
         try:
             safe_remove()
         except OSError as exc:
-            logging.getLogger(__name__).warning("Falha ao remover ficheiros antigos: %s", exc)
+            logging.getLogger(__name__).warning("Failed to remove old files: %s", exc)
         except Exception as exc:
-            logging.getLogger(__name__).debug("safe_remove: erro inesperado: %s", exc, exc_info=True)
+            logging.getLogger(__name__).debug("safe_remove: unexpected error: %s", exc, exc_info=True)
         return now
     return last_safe_remove
 
 
 def _maintenance_hourly(now: float, last_hourly: float, hourly_interval: int) -> float:
-    """Agende e execute tarefa horária de agregação de métricas.
+    """Schedule and run the hourly aggregation task.
 
-    Tenta agregar os últimos `hourly_interval` segundos de logs e gravá-los.
-    Retorna o novo timestamp de `last_hourly` em sucesso, senão retorna o valor antigo.
+    Attempts to aggregate the last `hourly_interval` seconds of logs and
+    persist them. Returns the new `last_hourly` timestamp on success, else
+    returns the previous value.
     """
     try:
         if now - last_hourly >= hourly_interval:
@@ -107,10 +109,10 @@ def _maintenance_hourly(now: float, last_hourly: float, hourly_interval: int) ->
                     except Exception as exc:
                         logging.getLogger(__name__).debug("write_average_log failed: %s", exc, exc_info=True)
             except Exception as exc:
-                logging.getLogger(__name__).debug("Falha na agregação horária: %s", exc, exc_info=True)
+                logging.getLogger(__name__).debug("Hourly aggregation failed: %s", exc, exc_info=True)
             return now
     except Exception as exc:
-        logging.getLogger(__name__).debug("Erro ao agendar agregação horária: %s", exc, exc_info=True)
+        logging.getLogger(__name__).debug("Error scheduling hourly aggregation: %s", exc, exc_info=True)
     return last_hourly
 
 
@@ -122,10 +124,10 @@ def _run_maintenance(
     last_hourly: float,
     intervals: tuple[int, int, int, int],
 ) -> tuple[float, float, float, float]:
-    """Executa tarefas de manutenção periódicas.
+    """Run periodic maintenance tasks.
 
-    Recebe os timestamps de referência e os intervalos e retorna os timestamps
-    potencialmente atualizados após executar as tarefas necessárias.
+    Accepts reference timestamps and intervals and returns potentially
+    updated timestamps after executing maintenance tasks.
     """
     rotate_interval, compress_interval, safe_remove_interval, hourly_interval = intervals
 

@@ -1,10 +1,9 @@
-"""Gerenciamento do estado do sistema.
+"""System state evaluation and snapshot representation.
 
-Implementação mínima e clara das APIs públicas usadas pelos testes. Mantém o
-worker de pós-tratamento em modo best-effort e pequeno para facilitar
-importação e testes. Define constantes de estado, funções para computar
-estados por métrica e utilitários de persistência para histórico de
-pós-tratamento.
+Provides `SystemState` and helpers to evaluate collected metrics against
+configured thresholds and to produce the snapshot structures consumed by the
+emission subsystem. The module includes minimal persistence helpers used by
+post-treatment routines.
 """
 
 import time
@@ -17,13 +16,13 @@ import os
 from ..config.settings import load_settings
 from .formatters import normalize_for_display as _normalize_for_display
 
-# Constantes de estado
+# State constants
 STATE_STABLE = "STABLE"
 STATE_WARNING = "WARNING"
 STATE_CRITICAL = "CRITICAL"
 STATE_POST_TREATMENT = "post_treatment"
 
-# Arquivos usados para persistência de pós-tratamento
+# Files used for post-treatment persistence
 _CACHE_DIRNAME = ".cache"
 _POST_TREATMENT_FILENAME = "post_treatment_history.jsonl"
 
@@ -57,19 +56,22 @@ def _compute_metric_states(metrics: dict, thresholds: dict, ignore_metrics: Opti
         except Exception:
             out[key] = None
 
-    # Validar estados calculados
+    # Validate computed states
     valid_states = {STATE_STABLE, STATE_WARNING, STATE_CRITICAL, None}
     for key, state_val in out.items():
         if state_val not in valid_states:
-            logging.getLogger(__name__).warning("_compute_metric_states: estado inválido para %s: %s", key, state_val)
+            logging.getLogger(__name__).warning("_compute_metric_states: invalid state for %s: %s", key, state_val)
             out[key] = None
 
     return out
 
 
 def compute_metric_states(metrics: dict, thresholds: dict) -> dict:
-    """Public wrapper for per-metric state calculation, ignorando métricas informativas/duplicadas sem tratamento."""
-    # Métricas a ignorar: informativas, duplicadas ou sem tratamento
+    """Public wrapper for per-metric state calculation.
+
+    Ignores informational or duplicate metrics that are not actionable.
+    """
+    # Metrics to ignore: informational, duplicated or without treatment
     ignore_metrics = [
         "memory_total_bytes",
         "disk_used_bytes",
@@ -85,12 +87,12 @@ def compute_metric_states(metrics: dict, thresholds: dict) -> dict:
 
 
 class SystemState:
-    """Gerencia snapshots de métricas e executa o worker de pós-tratamento em background.
+    """Manage metric snapshots and run the post-treatment worker in the background.
 
-    - thresholds: Limites por métrica para avaliação de estado.
-    - critical_duration: Tempo de persistência em estado crítico antes do tratamento.
-    - post_treatment_wait_seconds: Espera antes do pós-tratamento.
-    - critic_since: Controle de tempo para persistência de estado crítico.
+    - `thresholds`: per-metric limits used for state evaluation.
+    - `critical_duration`: time a metric must remain critical before treatment.
+    - `post_treatment_wait_seconds`: wait time before post-treatment actions.
+    - `critic_since`: timestamps tracking when metrics entered critical.
     """
 
     critic_since: dict[str, float]
@@ -98,12 +100,17 @@ class SystemState:
     def __init__(
         self, thresholds: dict[str, Any], *, critical_duration: int | None = None, post_treatment_wait_seconds: int = 10
     ):
-        """Inicializa o gerenciador de estado do sistema.
+        """Initialize the system state manager.
 
-        Parâmetros relevantes:
-        - thresholds: mapeamento de limites por métrica.
-        - critical_duration: override para duração crítica (segundos).
-        - post_treatment_wait_seconds: tempo de espera antes do post-treatment.
+        Parameters
+        ----------
+        thresholds : dict[str, Any]
+            Mapping of per-metric limits used for state evaluation.
+        critical_duration : int | None, optional
+            Override for the critical duration in seconds.
+        post_treatment_wait_seconds : int, optional
+            Wait time before post-treatment actions, in seconds.
+
         """
         self.thresholds = thresholds or {}
         try:
@@ -129,11 +136,11 @@ class SystemState:
         self._lock = Lock()
 
     def evaluate_metrics(self, metrics: dict[str, Any]) -> str:
-        """Avalie `metrics` contra thresholds e atualize snapshots internos.
+        """Evaluate `metrics` against thresholds and update internal snapshots.
 
-        Retorna a string de estado calculada (ex.: 'STABLE', 'WARNING', 'CRITICAL').
+        Returns the calculated state string (e.g. 'STABLE', 'WARNING', 'CRITICAL').
         """
-        # Atualiza thresholds dinâmicos de rede com valor aprendido
+        # Update dynamic network thresholds using learned limits
         try:
             from src.system.network_learning import NetworkUsageLearningHandler
 
@@ -144,7 +151,7 @@ class SystemState:
             if "bytes_recv" in self.thresholds:
                 self.thresholds["bytes_recv"]["critical"] = limit
         except Exception as exc:
-            logging.warning(f"Falha ao definir limite crítico: {exc}")
+            logging.warning(f"Failed to set critical limit: {exc}")
         state = self._evaluate_against_thresholds(metrics or {})
         self._update_snapshots(state, metrics or {})
         return state
@@ -297,7 +304,7 @@ class SystemState:
                 with (cache_dir / _POST_TREATMENT_FILENAME).open("a", encoding="utf-8") as fh:
                     fh.write(_json.dumps(snap, ensure_ascii=False) + "\n")
             except Exception as exc:
-                logging.warning(f"Falha ao gravar snapshot: {exc}")
+                logging.warning(f"Failed to write snapshot: {exc}")
 
     def _post_treatment_worker(self, metrics_snapshot: dict[str, Any]) -> None:
         """Worker logic for post-treatment; kept best-effort and resilient."""
@@ -316,11 +323,11 @@ class SystemState:
             # Record and write snapshot using a small helper to keep this worker concise
             self._record_and_write_snapshot(snap)
 
-            # Log timing se demorou muito
+            # Log timing if it took too long
             elapsed = time.monotonic() - start_time
             if elapsed > 0.5:
                 logging.getLogger(__name__).info(
-                    "post_treatment_worker levou %.2fs (sleep=%.2fs)", elapsed, self.post_treatment_wait_seconds
+                    "post_treatment_worker took %.2fs (sleep=%.2fs)", elapsed, self.post_treatment_wait_seconds
                 )
 
         except Exception as _exc:
@@ -402,10 +409,10 @@ class SystemState:
 
     def _persist_post_treatment_snapshot(self, snap: dict[str, Any]) -> None:
         try:
-            # import get_log_paths removido, não é mais necessário
+            # import get_log_paths removed; no longer necessary
             from ..system.log_helpers import write_json  # type: ignore
 
-            # get_log_paths() removido, não é mais necessário
+            # get_log_paths() removed; no longer necessary
             # Corrige para sempre criar .cache na raiz do projeto
             from pathlib import Path
 
@@ -452,7 +459,7 @@ class SystemState:
         return out
 
 
-## Instância global de thresholds lida a partir de configurações
+## Global instance of thresholds loaded from configuration
 try:
     thresholds = (load_settings() or {}).get("thresholds", {})
 except Exception:

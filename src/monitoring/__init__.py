@@ -1,4 +1,5 @@
-"""Pacote monitoring: coleta e processamento de métricas do sistema.
+"""Monitoring package: metric collection and processing helpers.
 
-Contém coletores, cálculos de médias e registro de eventos.
+Provides collectors, aggregation helpers and event handlers used by the
+monitoring loop to produce snapshots and maintain rolling state.
 """

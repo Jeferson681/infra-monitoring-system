@@ -1,21 +1,12 @@
-"""Parser de argumentos (console vs UI).
+"""Argument parsing utilities for the monitoring CLI.
 
-Docstrings e mensagens em português.
-
-Este módulo fornece um parser simples que expõe:
-- intervalo entre coletas (-i / --interval)
-- número de ciclos (-c / --cycles), 0 = infinito
-- verbosidade (-v)
-- opções de logging (nivel e caminho raiz)
-
-As funções retornam objetos compatíveis com argparse.Namespace para
-serem consumidos por `src.main`.
-
-Nota: Ajusta sys.path automaticamente se necessário para evitar erros de importação
-quando o programa é executado como script ou módulo.
+Provides a configured ArgumentParser and helpers to parse and validate
+runtime options such as collection interval, number of cycles and
+logging configuration. Environment variable overrides are applied only
+when the corresponding CLI argument is not provided.
 """
 
-# Ajuste automático do sys.path para execução direta ou via -m
+# Auto-adjust sys.path for direct execution or when run with -m
 import sys
 from pathlib import Path
 
@@ -27,17 +18,13 @@ if __name__ == "__main__" or (hasattr(sys, "_getframe") and sys._getframe(1).f_g
 import argparse
 from typing import Sequence
 
-# ========================
-# 0. Configuração do parser e argumentos padrão
-# ========================
 
-
-# Função principal do módulo; cria e retorna o ArgumentParser configurado
+# Main function in the module; create and return a configured ArgumentParser
 def configure_argparser() -> argparse.ArgumentParser:
-    """Cria e retorna ArgumentParser configurado para o monitoramento."""
+    """Create and return an ArgumentParser configured for the monitoring CLI."""
     parser = argparse.ArgumentParser(
         prog="monitoring",
-        description="Programa de monitoramento: coletas, logs e tratamentos automáticos",
+        description="Monitoring program: collections, logging and automated treatments",
     )
 
     parser.add_argument(
@@ -45,59 +32,54 @@ def configure_argparser() -> argparse.ArgumentParser:
         "--interval",
         type=float,
         default=3.0,
-        help="Intervalo em segundos entre coletas (float). Valor mínimo recomendado: 0.1",
+        help="Interval in seconds between collections (float). Minimum recommended: 0.1",
     )
     parser.add_argument(
         "-c",
         "--cycles",
         type=int,
         default=1,
-        help="Número de ciclos a executar (0 = infinito) ou tempo total em minutos se --cycle-mode=time.",
+        help="Number of cycles to run (0 = infinite) or total time in minutes when --cycle-mode=time.",
     )
     parser.add_argument(
         "--cycle-mode",
         choices=["cycles", "time"],
         default="cycles",
-        help="Modo de execução: 'cycles' para número de ciclos, 'time' para tempo total em minutos.",
+        help="Execution mode: 'cycles' for number of cycles, 'time' for total minutes.",
     )
     parser.add_argument(
         "-v",
         "--verbose",
         action="count",
         default=0,
-        help="Aumenta a verbosidade (-v, -vv)",
+        help="Increase verbosity (-v, -vv)",
     )
     parser.add_argument(
         "--log-root",
         dest="log_root",
         type=str,
         default=None,
-        help="Caminho raiz para os logs (substitui MONITORING_LOG_ROOT)",
+        help="Root path for logs (overrides MONITORING_LOG_ROOT)",
     )
     parser.add_argument(
         "--log-level",
         dest="log_level",
         type=str,
         default=None,
-        help="Nível de logging (DEBUG/INFO/WARNING/ERROR). Se ausente, definido por -v",
+        help="Logging level (DEBUG/INFO/WARNING/ERROR). If absent, determined by -v",
     )
 
     return parser
 
 
-# ========================
-# 1. Funções auxiliares para análise e validação de argumentos
-# ========================
-
-
-# Auxilia src.main; criado para analisar argv e validar argumentos
+# Assists src.main; created to parse argv and validate arguments
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    """Analisa argv e retorna Namespace validado para uso no programa."""
+    """Parse argv and return a validated Namespace for program use."""
     import os
 
     parser = configure_argparser()
     ns = parser.parse_args(argv)
-    # Mapeamento de argumentos para variáveis de ambiente
+    # Mapping of arguments to environment variables
     env_map = {
         "interval": "MONITORING_INTERVAL_SEC",
         "cycles": "MONITORING_CYCLES",
@@ -108,20 +90,20 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     }
     import logging
 
-    # Aplicar overrides via variáveis de ambiente SOMENTE quando o argumento
-    # não foi fornecido pela linha de comando (CLI tem precedência).
+    # Apply overrides via environment variables ONLY when the argument
+    # was not provided on the command line (CLI takes precedence).
     for arg, env_var in env_map.items():
         env_val = os.getenv(env_var)
         if env_val is None:
             continue
-        # se o usuário passou o argumento via CLI, não sobrescrever
+        # if the user provided the argument via CLI, do not overwrite
         try:
             default_val = parser.get_default(arg)
         except Exception:
             default_val = None
         current_val = getattr(ns, arg, None)
         if current_val is not None and current_val != default_val:
-            # valor vindo da CLI tem prioridade
+            # CLI-provided value takes precedence
             continue
         try:
             if arg == "interval":
@@ -131,8 +113,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             else:
                 setattr(ns, arg, env_val)
         except Exception as exc:
-            logging.getLogger(__name__).warning(f"{env_var} inválido ('{env_val}'): {exc}. Usando valor do argumento.")
-    # Se modo time, permite override via env específico
+            logging.getLogger(__name__).warning(f"{env_var} invalid ('{env_val}'): {exc}. Using CLI/default value.")
+    # If in time mode, allow override via a specific env var
     if getattr(ns, "cycle_mode", "cycles") == "time":
         env_time = os.getenv("MONITORING_CYCLE_TIME_MIN")
         if env_time is not None:
@@ -140,41 +122,35 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
                 ns.cycles = int(env_time)
             except Exception as exc:
                 logging.getLogger(__name__).warning(
-                    f"MONITORING_CYCLE_TIME_MIN inválido ('{env_time}'): {exc}. Usando valor do argumento."
+                    f"MONITORING_CYCLE_TIME_MIN invalid ('{env_time}'): {exc}. Using CLI/default value."
                 )
     validate_args(ns)
     return ns
 
 
-# Auxilia parse_args; criado para garantir valores corretos e seguros
+# Helper for parse_args; created to ensure correct and safe values
 def validate_args(args: argparse.Namespace) -> None:
-    """Valida e normaliza argumentos do programa de monitoramento."""
+    """Validate and normalize arguments for the monitoring program."""
     if getattr(args, "interval", 1.0) is None:
         args.interval = 1.0
     try:
         args.interval = float(args.interval)
     except (TypeError, ValueError) as exc:
-        # Mensagem para usuário em PT; mantém o nome técnico 'interval' em inglês
-        raise ValueError("intervalo deve ser um número") from exc
+        raise ValueError("interval must be a number") from exc
     if args.interval < 0.0:
-        raise ValueError("intervalo deve ser >= 0.0")
+        raise ValueError("interval must be >= 0.0")
 
     try:
         args.cycles = int(args.cycles)
     except (TypeError, ValueError) as exc:
-        raise ValueError("cycles/time deve ser um inteiro >= 0") from exc
+        raise ValueError("cycles/time must be an integer >= 0") from exc
     if args.cycles < 0:
-        raise ValueError("cycles/time deve ser >= 0")
+        raise ValueError("cycles/time must be >= 0")
 
 
-# ========================
-# 2. Função auxiliar para configuração de logging
-# ========================
-
-
-# Auxilia src.main; criado para extrair configuração de logging dos argumentos
+# Assists src.main; created to extract logging configuration from arguments
 def get_log_config(args: argparse.Namespace) -> dict:
-    """Retorna dict com configuração de logging ('level' e 'root') para o monitoramento."""
+    """Return a dict with logging configuration ('level' and 'root') for monitoring."""
     if getattr(args, "log_level", None):
         level = str(args.log_level).upper()
     else:

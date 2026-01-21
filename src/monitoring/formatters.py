@@ -1,6 +1,8 @@
-"""Formatação de métricas para exibição humana.
+"""Format metrics for human consumption.
 
-Normaliza métricas brutas e gera resumos curtos e detalhados para console.
+Normalize raw metrics and produce short and detailed summaries suitable for
+console output. This module provides the public `normalize_for_display`
+API used by the emission helpers.
 """
 
 from typing import Dict, Any
@@ -8,15 +10,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# ========================
-# 0. Função principal de normalização (API pública)
-# ========================
-
 
 def normalize_for_display(metrics: Dict[str, Any]) -> Dict[str, Any]:
-    """Normaliza métricas brutas em estrutura pronta para exibição.
+    """Normalize raw metrics into a structure ready for display.
 
-    Retorna dict com 'summary_short', 'summary_long' e 'metrics_raw'.
+    Returns a dict containing `summary_short`, `summary_long` and
+    `metrics_raw`.
     """
     summary_short = _build_short_from_metrics(metrics)
     long_lines = _build_long_from_metrics(metrics)
@@ -28,17 +27,12 @@ def normalize_for_display(metrics: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-# ========================
-# 1. Resumos (summaries) — construção de summaries curtos/detalhados
-# ========================
-
-
-# Auxilia: normalize_for_display — constrói resumo curto (-v)
+# Helper for normalize_for_display — build short summary (-v)
 def _build_short_from_metrics(metrics: Dict[str, Any]) -> str:
-    """Gere um resumo curto das métricas principais.
+    """Build a concise, human-readable short summary from metrics.
 
-    Inclui CPU, RAM, Ping e Disco quando disponíveis. Retorna 'Sem dados' quando
-    nada estiver disponível.
+    Includes CPU, RAM, ping and disk when available. Returns a no-data
+    placeholder when no metrics are present.
     """
     cpu = metrics.get("cpu_percent")
     mem_percent = metrics.get("memory_percent")
@@ -61,16 +55,16 @@ def _build_short_from_metrics(metrics: Dict[str, Any]) -> str:
     if ping is not None:
         parts.append(f"Ping {int(round(ping))} ms")
     if disk_percent is not None:
-        parts.append(f"Disco {int(round(disk_percent))}%")
-    return " | ".join(parts) if parts else "Sem dados"
+        parts.append(f"Disk {int(round(disk_percent))}%")
+    return " | ".join(parts) if parts else "No data"
 
 
-# Auxilia: normalize_for_display — constrói linhas detalhadas (-vv)
+# Helper for normalize_for_display — build detailed lines (-vv)
 def _build_long_from_metrics(metrics: Dict[str, Any]) -> list[str]:
-    r"""Gere as linhas detalhadas das métricas para exibição completa.
+    r"""Generate detailed metric lines for full display.
 
-    Mostra CPU, RAM, Disco, Ping, Latência, Temperatura, tráfego e timestamp.
-    Retorna uma lista de strings pronta para ser juntada com '\n'.
+    Shows CPU, RAM, Disk, Ping, Latency, Temperature, traffic and timestamp.
+    Returns a list of strings ready to be joined with '\n'.
     """
     cpu = metrics.get("cpu_percent")
     mem_used = metrics.get("memory_used_bytes")
@@ -93,27 +87,27 @@ def _build_long_from_metrics(metrics: Dict[str, Any]) -> list[str]:
         else:
             long_lines.append(f"CPU: {int(round(cpu))}%")
     else:
-        long_lines.append("CPU: Indisponivel")
+        long_lines.append("CPU: Unavailable")
     mem_line = _fmt_bytes_gb(mem_used, mem_total)
     long_lines.append(f"RAM: {mem_line}")
     disk_line = _fmt_bytes_gb(disk_used, disk_total)
-    long_lines.append(f"Disco: {disk_line}")
-    long_lines.append(f"Ping: {ping:.1f} ms" if ping is not None else "Ping: Indisponivel")
+    long_lines.append(f"Disk: {disk_line}")
+    long_lines.append(f"Ping: {ping:.1f} ms" if ping is not None else "Ping: Unavailable")
 
     if latency is not None:
-        # Sempre exibir em ms para evitar conversão para segundos que pode
-        # mascarar que o valor é um timeout/estimativa (ex.: 10000 ms -> 10.0 s).
-        long_lines.append(f"Latência: {latency:.1f} ms")
+        # Always show latency in ms to avoid converting to seconds which may
+        # hide that the value is a timeout/estimate (e.g. 10000 ms -> 10.0 s).
+        long_lines.append(f"Latency: {latency:.1f} ms")
     else:
-        long_lines.append("Latência: Indisponivel")
+        long_lines.append("Latency: Unavailable")
 
     temp = metrics.get("temperature_celsius")
-    long_lines.append(f"Temperatura: {temp} C" if temp is not None else "Temperatura: Indisponivel")
+    long_lines.append(f"Temperature: {temp} C" if temp is not None else "Temperature: Unavailable")
 
     bytes_sent = metrics.get("bytes_sent")
     bytes_recv = metrics.get("bytes_recv")
-    long_lines.append(f"Bytes enviados: {_fmt_bytes_human(bytes_sent)}")
-    long_lines.append(f"Bytes recebidos: {_fmt_bytes_human(bytes_recv)}")
+    long_lines.append(f"Bytes sent: {_fmt_bytes_human(bytes_sent)}")
+    long_lines.append(f"Bytes received: {_fmt_bytes_human(bytes_recv)}")
 
     # Append timestamp line using helper to keep complexity low
     long_lines.append(_format_timestamp_line(metrics.get("timestamp")))
@@ -122,14 +116,13 @@ def _build_long_from_metrics(metrics: Dict[str, Any]) -> list[str]:
 
 
 def _format_timestamp_line(ts_val) -> str:
-    """Formatar o campo timestamp para uma linha legível.
+    """Format the timestamp field into a human-readable line.
 
-    Retorna 'Data/hora: Indisponivel' quando não houver timestamp, ou a
-    representação formatada quando possível. Em caso de parse inválido,
-    retorna a representação crua.
+    Returns 'Date/time: Unavailable' when no timestamp is present, or a
+    formatted representation when possible. On parse errors returns the raw value.
     """
     if ts_val is None:
-        return "Data/hora: Indisponivel"
+        return "Date/time: Unavailable"
     try:
         # Delegate parsing to centralized time helper which accepts multiple formats
         from ..system.time_helpers import _parse_epoch_from_value  # type: ignore
@@ -138,27 +131,22 @@ def _format_timestamp_line(ts_val) -> str:
         parsed = _parse_epoch_from_value(ts_val)
         if parsed is None:
             # fallback to raw representation when unable to parse
-            return f"Data/hora: {ts_val}"
+            return f"Date/time: {ts_val}"
         dt = datetime.datetime.fromtimestamp(float(parsed), tz=datetime.timezone.utc)
-        return f"Data/hora: {dt.strftime('%Y-%m-%d %H:%M:%S')}"
+        return f"Date/time: {dt.strftime('%Y-%m-%d %H:%M:%S')}"
     except Exception as exc:
-        logger.debug("timestamp inválido ao formatar Data/hora: %s", exc, exc_info=True)
-        return f"Data/hora: {ts_val}"
+        logger.debug("invalid timestamp when formatting date/time: %s", exc, exc_info=True)
+        return f"Date/time: {ts_val}"
 
 
-# ========================
-# 2. Helpers de formatação (funções auxiliares do módulo)
-# ========================
-
-
-# Auxilia: _build_long_from_metrics — converte bytes para GB/percentual
+# Helper for _build_long_from_metrics — convert bytes to GB/percent
 def _fmt_bytes_gb(used: int | None, total: int | None) -> str:
-    """Formata o uso de bytes em GB e mostra o percentual.
+    """Format byte usage in GB and show percentage.
 
-    Retorna 'Indisponivel' quando os dados forem insuficientes.
+    Returns 'Unavailable' when data is insufficient.
     """
     if used is None or total is None or total == 0:
-        return "Indisponivel"
+        return "Unavailable"
     try:
         used_gb = used / (1024**3)
         total_gb = total / (1024**3)
@@ -166,18 +154,18 @@ def _fmt_bytes_gb(used: int | None, total: int | None) -> str:
         return f"{used_gb:.1f} / {total_gb:.0f} GB • {percent}%"
     except (TypeError, ValueError, ZeroDivisionError) as exc:
         logger = logging.getLogger(__name__)
-        logger.debug("erro ao formatar bytes para GB: %s", exc, exc_info=True)
-        return "Indisponivel"
+        logger.debug("error formatting bytes to GB: %s", exc, exc_info=True)
+        return "Unavailable"
 
 
-# Auxilia: _build_long_from_metrics — formata tráfego em MB/GB
+# Helper: _build_long_from_metrics — format traffic in MB/GB
 def _fmt_bytes_human(n: int | None) -> str:
-    """Formata bytes em MB/GB para legibilidade humana.
+    """Format bytes into MB/GB for human readability.
 
-    Retorna 'Indisponivel' quando o valor for None ou inválido.
+    Returns 'Unavailable' when the value is None or invalid.
     """
     if n is None:
-        return "Indisponivel"
+        return "Unavailable"
     try:
         mb = n / (1024**2)
         gb = n / (1024**3)
@@ -188,15 +176,15 @@ def _fmt_bytes_human(n: int | None) -> str:
         return f"{mb:.2f} MB"
     except (TypeError, ValueError) as exc:
         logger = logging.getLogger(__name__)
-        logger.debug("erro ao formatar bytes humanamente: %s", exc, exc_info=True)
-        return "Indisponivel"
+        logger.debug("error formatting bytes for human readable output: %s", exc, exc_info=True)
+        return "Unavailable"
 
 
 def format_duration(seconds: float) -> str:
-    """Retorna a duração formatada como H:MM:SS.
+    """Return duration formatted as H:MM:SS.
 
-    Formata a duração em segundos para a representação H:MM:SS.
-    Retorna '0:00:00' em caso de erro de parsing.
+    Formats a duration given in seconds into H:MM:SS representation.
+    Returns '0:00:00' on parse errors.
     """
     try:
         secs = int(round(float(seconds)))
@@ -208,12 +196,12 @@ def format_duration(seconds: float) -> str:
 
 
 def format_used_files_lines(used: dict) -> list[str]:
-    """Retorna lista formatada de linhas com arquivos usados.
+    """Return a formatted list of lines describing used files.
 
-    Formata o dicionário path->(min_line, max_line) em linhas legíveis para
-    exibição, preservando o comportamento anterior de `averages._format_used_files_lines`.
+    Format the path->(min_line, max_line) dict into readable lines for
+    display, preserving previous behavior of `averages._format_used_files_lines`.
     """
-    out: list[str] = ["", "Linhas usadas:"]
+    out: list[str] = ["", "Used lines:"]
     from pathlib import Path
 
     for k in sorted(used.keys()):
@@ -229,9 +217,9 @@ def format_used_files_lines(used: dict) -> list[str]:
         except Exception:
             fname = str(k)
         if a == b:
-            out.append(f"{fname} linha {a}")
+            out.append(f"{fname} line {a}")
         else:
-            out.append(f"{fname} linhas {a} a {b}")
+            out.append(f"{fname} lines {a} to {b}")
     return out
 
 

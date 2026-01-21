@@ -1,8 +1,10 @@
-"""Emissor de snapshots extraído de `core`.
+"""Snapshot emission helpers extracted from ``core``.
 
-Contém a formatação da mensagem humana, impressão curta/longa e a rotina
-de escrita/emitção para o subsistema de logs. Mantido em módulo separado
-para reduzir responsabilidades do `core` e facilitar testes.
+This module centralizes the responsibilities for formatting human-friendly
+messages, printing short/long summaries to stdout and emitting canonical
+JSON snapshots to the logging/ingestion subsystem. Keeping emission
+logic separate reduces the responsibilities of the orchestration code and
+improves testability of formatting and output behavior.
 """
 
 import logging
@@ -11,14 +13,15 @@ import logging
 from ..monitoring.formatters import normalize_for_display, format_snapshot_human
 from ..system.logs import write_log
 
-_NO_DATA_STR = "Sem dados"
+_NO_DATA_STR = "No data"
 
 
 def _format_human_msg(snapshot: dict | None, result: dict) -> str:  # noqa: D401
-    """Formate uma mensagem legível por humanos a partir do snapshot/result.
+    """Return a human-readable message for the provided snapshot and result.
 
-    Delegará para o formatador centralizado quando possível e, em caso de
-    erro, retorna uma representação mínima.
+    Delegates to the centralized formatter when available. On unexpected
+    formatting errors the function falls back to a minimal representation so
+    the emission flow remains robust and does not raise.
     """
     try:
         return format_snapshot_human(snapshot, result)
@@ -27,9 +30,11 @@ def _format_human_msg(snapshot: dict | None, result: dict) -> str:  # noqa: D401
 
 
 def _print_snapshot_short(snap: dict | None) -> None:  # noqa: D401
-    """Imprima um resumo curto do snapshot no stdout.
+    """Print a short, single-line snapshot summary to stdout.
 
-    Imprime uma mensagem padrão quando o snapshot não estiver disponível.
+    When an explicit short summary is not present the function attempts to
+    derive a compact representation via the display normalizer. This helper
+    is best-effort and must not raise for malformed input.
     """
     if not isinstance(snap, dict):
         print(_NO_DATA_STR)
@@ -50,12 +55,15 @@ def _print_snapshot_short(snap: dict | None) -> None:  # noqa: D401
 
 
 def _print_snapshot_long(snap: dict | None) -> None:  # noqa: D401
-    """Imprima um snapshot longo multilinha no stdout.
+    """Print a multi-line, detailed snapshot summary to stdout.
 
-    Em falta de sumário explícito, tenta derivar um resumo longo a partir das métricas.
+    If an explicit long summary is not present the function attempts to
+    derive a readable multi-line representation from normalized metrics.
+    The implementation prefers explicit summaries when available because
+    they may contain richer, human-authored context.
     """
     if not isinstance(snap, dict):
-        print("SNAPSHOT: Sem dados")
+        print("SNAPSHOT: No data")
         return
 
     summary_long = snap.get("summary_long")
@@ -77,22 +85,28 @@ def _print_snapshot_long(snap: dict | None) -> None:  # noqa: D401
 
 
 def emit_snapshot(snapshot: dict | None, result: dict, verbose_level: int) -> None:  # noqa: D401
-    """Emita um snapshot para o subsistema de logs e opcionalmente para stdout.
+    """Emit the canonical snapshot and optionally print human output.
 
-    - escreve o feed JSON canônico para ingestão
-    - se verbose_level > 0, imprime saída humana (curta/longa)
+    Side effects:
+    - write the canonical JSON feed for ingestion (via ``write_log``)
+    - optionally print a human-friendly short or long summary to stdout
+
+    The function must be resilient: failures when formatting or writing the
+    canonical feed are logged but do not raise. Human output is controlled
+    by ``verbose_level`` to avoid noisy output in automated environments.
     """
     logger = logging.getLogger(__name__)
 
     try:
         human_msg = _format_human_msg(snapshot, result)
         try:
-            # Escreve apenas JSON para o feed canônico de monitoring.
+            # Write the canonical JSON feed used for monitoring ingestion.
+            # Disable any additional human formatting for the ingestion path.
             write_log("monitoring", "INFO", human_msg, extra=snapshot, human_enable=False, json_enable=True)
         except Exception as exc:
-            logger.info("Falha ao escrever log via write_log: %s", exc)
+            logger.info("Failed to write log via write_log: %s", exc)
     except Exception:
-        logger.info("Falha ao construir/emitir snapshot", exc_info=True)
+        logger.info("Failed to build/emit snapshot", exc_info=True)
 
     if not verbose_level:
         return

@@ -1,8 +1,8 @@
-"""Pacote system: funções de suporte, tratamentos automáticos e logs.
+"""System package: support functions, automated treatments, and logging.
 
-Inclui helpers de sistema, rotação/compressão de logs e ações automáticas.
+Includes system helpers, log rotation/compression and automated actions.
 
-Re-exports úteis para compatibilidade com imports antigos.
+Provides a small set of re-exports for compatibility with older imports.
 """
 
 from .log_helpers import build_human_line, write_text, write_json

@@ -1,14 +1,9 @@
-"""Módulo de integração com Promtail para envio de logs ao Loki via HTTP.
+"""Promtail integration: send logs to Loki via HTTP.
 
-Funções principais:
-- send_log_to_loki: envia um log para o endpoint do Loki
-- configure_promtail: configura parâmetros de envio (endpoint, labels, etc)
-
-Uso:
-- Importe e utilize send_log_to_loki para enviar logs formatados
-- Configure via variáveis de ambiente ou argumentos.
-
-Nota: Não exporta métricas do sistema; apenas o encaminhamento de logs é realizado aqui.
+Provides ``send_log_to_loki`` to post log lines to a Loki-compatible HTTP
+endpoint. Labels may be provided as a string or dict and are normalized for
+the Loki API. The module is focused solely on log forwarding and does not
+expose system metrics.
 """
 
 import os
@@ -19,26 +14,26 @@ LOKI_LABELS = os.getenv("LOKI_LABELS", "job=monitoring")
 
 
 def _parse_labels(labels):
-    """Converta rótulos em formato string 'k=v,k2=v2' ou dict para dict com valores string.
+    """Convert labels in 'k=v,k2=v2' string form or dict into a dict of strings.
 
-    Aceita também strings já no formato '{k="v"}' — retorna um dict {k: v}.
+    Also accepts strings in the '{k="v"}' form — returns a {k: v} dict.
     """
     if labels is None:
         return {}
     if isinstance(labels, dict):
         return {str(k): str(v) for k, v in labels.items()}
     s = str(labels).strip()
-    # Caso seja a forma '{k="v"}' -> remove chaves e aspas
+    # If in the form '{k="v"}' -> remove braces and quotes
     if s.startswith("{") and s.endswith("}"):
         s = s[1:-1].strip()
-    # agora esperamos algo como k=v,k2=v2 ou k="v",...; normaliza
+    # now expect something like k=v,k2=v2 or k="v",...; normalize
     parts = [p.strip() for p in s.split(",") if p.strip()]
     out = {}
     for p in parts:
         if "=" in p:
             k, v = p.split("=", 1)
             v = v.strip()
-            # remove aspas se existirem
+            # remove quotes if present
             if (v.startswith('"') and v.endswith('"')) or (v.startswith("'") and v.endswith("'")):
                 v = v[1:-1]
             out[k.strip()] = v
@@ -46,20 +41,14 @@ def _parse_labels(labels):
 
 
 def send_log_to_loki(message, labels=None, timestamp=None):
-    """Envia uma mensagem de log para o Loki.
+    """Send a log message to Loki.
 
-    Garante que o payload siga o formato JSON aceito pelo endpoint
-    `/loki/api/v1/push`:
+    Ensure the payload matches the JSON format accepted by
+    `/loki/api/v1/push`.
 
-    {
-      "streams": [
-        {"stream": {"k":"v"}, "values": [["<unix_nano>", "log line"]]}
-      ]
-    }
-
-    - message: string do log
-    - labels: string 'k=v,k2=v2' ou dict (opcional)
-    - timestamp: epoch em nanos como string/inteiro (opcional)
+    - `message`: log string
+    - `labels`: 'k=v,k2=v2' string or dict (optional)
+    - `timestamp`: epoch in nanoseconds as string/int (optional)
     """
     import time
     import logging
@@ -82,8 +71,8 @@ def send_log_to_loki(message, labels=None, timestamp=None):
         resp.raise_for_status()
         return True
     except requests.RequestException as exc:
-        logging.getLogger(__name__).warning("Falha ao enviar log para Loki: %s", exc)
+        logging.getLogger(__name__).warning("Failed to send log to Loki: %s", exc)
         return False
     except Exception as exc:
-        logging.getLogger(__name__).warning("Erro inesperado ao enviar log para Loki: %s", exc)
+        logging.getLogger(__name__).warning("Unexpected error sending log to Loki: %s", exc)
         return False

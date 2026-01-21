@@ -1,11 +1,8 @@
-# vulture: ignore
-"""Helpers de baixo nível para o subsistema de logging.
+"""Low-level helpers for the logging subsystem.
 
-Fornece compressão, verificação de idade de ficheiros,
-movimentações atômicas e escrita durável em disco.
-
-Todas as docstrings e comentários neste módulo devem estar em português
-para manter consistência com o restante do projeto.
+Provides compression, file-age checks, atomic moves and durable disk
+writing helpers used by the higher-level logging subsystem. Implementations
+favor robustness and best-effort behavior for I/O operations.
 """
 
 from pathlib import Path
@@ -20,14 +17,15 @@ import re
 
 try:
     import portalocker  # type: ignore
-except ImportError:  # dependência opcional
+except ImportError:
+    # optional dependency
     portalocker = None
 
 logger = logging.getLogger(__name__)
 
 ROTATING_SUFFIX = ".rotating"
 
-# Durabilidade controlada via settings ou variável de ambiente
+# Durability controlled via settings or environment variable
 try:
     from config.settings import LOGS_DURABLE_WRITES  # type: ignore
 
@@ -37,14 +35,14 @@ except (ImportError, AttributeError):
 
 
 # -----------------------
-# Escrita segura
+# Safe writing
 # -----------------------
 def write_text(path: Path, text: str) -> bool:
-    """Anexe texto a `path` de forma segura, usando lock e fsync quando possível.
+    """Append text to `path` safely, using a lock and fsync when available.
 
-    Esta função tenta criar o diretório pai e aplica um lock exclusivo quando
-    a biblioteca `portalocker` estiver disponível. Em caso de falha grava
-    uma mensagem de warning e segue em modo best-effort.
+    This function attempts to create the parent directory and applies an
+    exclusive lock when the `portalocker` library is available. On failure
+    it logs a warning and proceeds in a best-effort mode.
     """
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -56,7 +54,7 @@ def write_text(path: Path, text: str) -> bool:
                         portalocker.lock(fh, portalocker.LOCK_EX)
                         locked = True
                     except Exception as exc:
-                        logger.debug("write_text: portalocker.lock falhou em %s: %s", path, exc)
+                        logger.debug("write_text: portalocker.lock failed on %s: %s", path, exc)
 
                 fh.write(text)
                 fh.flush()
@@ -65,52 +63,52 @@ def write_text(path: Path, text: str) -> bool:
                     try:
                         os.fsync(fh.fileno())
                     except Exception as exc:
-                        logger.debug("write_text: fsync falhou em %s: %s", path, exc)
+                        logger.debug("write_text: fsync failed on %s: %s", path, exc)
             finally:
                 if locked and portalocker and hasattr(portalocker, "unlock"):
                     try:
                         portalocker.unlock(fh)
                     except Exception as exc:
-                        logger.debug("write_text: portalocker.unlock falhou em %s: %s", path, exc)
+                        logger.debug("write_text: portalocker.unlock failed on %s: %s", path, exc)
         return True
     except PermissionError as exc:
-        # Problemas de permissão não são fatais para o loop principal; registra
-        # como WARNING para visibilidade, sem marcar o serviço como falho.
+        # Permission issues are non-fatal for the main loop; warn for
+        # visibility without marking the service as failed.
         logger.warning("write_text: permission denied writing to %s: %s", path, exc, exc_info=True)
         return False
     except OSError as exc:
-        logger.error("write_text: falhou em %s: %s", path, exc, exc_info=True)
+        logger.error("write_text: failed on %s: %s", path, exc, exc_info=True)
         return False
 
 
 def write_json(path: Path, obj: dict) -> bool:
-    """Serialize um objeto como JSONL e anexe ao ficheiro `path`.
+    """Serialize an object as JSONL and append to `path`.
 
-    Em caso de objetos não serializáveis por padrão, usa `default=str` como
-    fallback e emite um warning.
+    If objects are not serializable by default, uses `default=str` as a
+    fallback and emits a warning.
     """
     try:
         line = _json.dumps(obj, ensure_ascii=False) + "\n"
     except (TypeError, ValueError) as exc:
         try:
             line = _json.dumps(obj, ensure_ascii=False, default=str) + "\n"
-            # Usa WARNING para serialização de fallback; é recuperável mas
-            # indica que tipos não eram estritamente serializáveis.
-            logger.warning("write_json: fallback default=str usado em %s: %s", path, exc, exc_info=True)
+            # Emit a WARNING for fallback serialization; recoverable but
+            # indicates non-strictly-serializable types.
+            logger.warning("write_json: fallback default=str used on %s: %s", path, exc, exc_info=True)
         except Exception as exc2:
-            logger.error("write_json: falhou em %s: %s; %s", path, exc, exc2, exc_info=True)
+            logger.error("write_json: failed on %s: %s; %s", path, exc, exc2, exc_info=True)
             return False
     return write_text(path, line)
 
 
 # -----------------------
-# Normalização e formatação
+# Normalization and formatting
 # -----------------------
 def sanitize_log_name(raw_name: str, fallback: str = "debug_log") -> str:
-    """Sanitiza o nome base de um ficheiro de log para uso seguro no sistema de ficheiros.
+    """Sanitize a base log filename for safe filesystem use.
 
-    Remove caracteres potencialmente perigosos e limita o comprimento.
-    Retorna um nome seguro adequado para uso como ficheiro.
+    Removes potentially dangerous characters and limits length. Returns a
+    safe name suitable for use as a filename.
     """
     rn = Path(raw_name or fallback).name.lstrip(".")
     name = re.sub(r"[^A-Za-z0-9._-]+", "_", rn)
@@ -122,9 +120,9 @@ def sanitize_log_name(raw_name: str, fallback: str = "debug_log") -> str:
 
 
 def normalize_message_for_human(msg, max_len: int | None = 10000) -> str:
-    """Normaliza uma mensagem para apresentação humana, removendo quebras de linha.
+    """Normalize a message for human presentation by removing newlines.
 
-    Corta a mensagem para `max_len` quando definido.
+    Truncates the message to `max_len` when set.
     """
     try:
         s = "" if msg is None else str(msg)
@@ -135,9 +133,9 @@ def normalize_message_for_human(msg, max_len: int | None = 10000) -> str:
 
 
 def build_json_entry(ts: str, level: str, msg, extra: dict | None = None) -> dict:
-    """Construa um dicionário pronto para ser serializado em JSONL.
+    """Build a dictionary ready to be serialized as JSONL.
 
-    Insere campos `ts`, `level`, `msg` e mescla `extra` quando fornecido.
+    Inserts `ts`, `level`, `msg` and merges `extra` when provided.
     """
     entry = {"ts": ts, "level": level, "msg": msg}
     if extra and isinstance(extra, dict):
@@ -149,45 +147,45 @@ def build_json_entry(ts: str, level: str, msg, extra: dict | None = None) -> dic
 
 
 def build_human_line(ts: str, level: str, msg_str: str, extras: dict | None = None) -> str:
-    r"""Compõe linha legível por humanos.
+    r"""Compose a human-readable log line.
 
-    Por compatibilidade com consumidores existentes, o formato legado é uma
-    única linha com timestamp, nível, extras e a mensagem flattenada. O novo
-    formato multilinha (header + body) pode ser ativado via
-    variável de ambiente `MONITORING_HUMAN_MULTILINE=1`.
+    For compatibility with existing consumers the legacy format is a single
+    line with timestamp, level, extras and a flattened message. A newer
+    multiline format (header + body) can be enabled via the
+    environment variable `MONITORING_HUMAN_MULTILINE=1`.
 
-    Legado (padrão):
-      <ts> [LEVEL] [extras...] <msg_str>\n
-    Multilinha (opcional):
-      <ts> [LEVEL] [extras...]\n
-      <msg_str>\n\n
+    Legacy (default):
+        <ts> [LEVEL] [extras...] <msg_str>\n
+    Multiline (optional):
+        <ts> [LEVEL] [extras...]\n
+        <msg_str>\n\n
     """
-    # decide se deve usar o formato multilinha
+    # decide whether to use the multiline format
     use_multiline = _should_use_multiline(msg_str)
 
     extras_part = _format_extras_for_human(extras)
 
-    # Garante que msg_str é uma string
+    # Ensure msg_str is a string
     try:
         body = "" if msg_str is None else str(msg_str)
     except Exception:
         body = "<unrepr>"
 
     if use_multiline:
-        # Multiline: preserva quebras internas, remove novas linhas finais e mantém separador em branco
+        # Multiline: preserve internal newlines, strip trailing newlines and keep a blank separator
         body = body.rstrip("\r\n")
         header = f"{ts} [{level}]{extras_part}\n"
         return header + body + "\n\n"
     else:
-        # Formato legado: flatten de quebras de linha para espaços
+        # Legacy format: flatten newline characters into spaces
         single = body.replace("\n", " ").replace("\r", " ").strip()
         return f"{ts} [{level}]{extras_part} {single}\n"
 
 
 def _format_extras_for_human(extras: dict | None) -> str:
-    """Formata o dicionário `extras` numa única string para logs humanos.
+    """Format the `extras` dict into a single string for human logs.
 
-    Extraída de `build_human_line` para reduzir a complexidade desta função.
+    Extracted from `build_human_line` to reduce complexity.
     """
     extras_part = ""
     if extras and isinstance(extras, dict):
@@ -202,10 +200,10 @@ def _format_extras_for_human(extras: dict | None) -> str:
 
 
 def _should_use_multiline(msg_str: object) -> bool:
-    """Decide se devemos usar o formato multilinha para mensagens humanas.
+    """Decide whether to use the multiline format for human messages.
 
-    Prefere multilinha quando a variável de ambiente indicar ou quando a
-    mensagem contém quebras de linha internas.
+    Prefer multiline when the environment variable indicates or when the
+    message contains internal newline characters.
     """
     try:
         use_multiline_env = os.environ.get("MONITORING_HUMAN_MULTILINE", "0") in ("1", "true", "yes")
@@ -223,7 +221,7 @@ def _should_use_multiline(msg_str: object) -> bool:
 
 
 def format_date_for_log(dt=None) -> str:
-    """Retorna data no formato YYYY-MM-DD (segura para nomes)."""
+    """Return a YYYY-MM-DD date suitable for filenames."""
     try:
         if dt is None:
             return date.today().isoformat()
@@ -239,32 +237,32 @@ def format_date_for_log(dt=None) -> str:
 
 
 # -----------------------
-# Verificação de idade
+# Age checks
 # -----------------------
 def is_older_than(p: Path, seconds: int) -> bool:
-    """Return True se o ficheiro tiver mtime mais antigo que `seconds`."""
+    """Return True if the file's mtime is older than `seconds`."""
     try:
         st = p.stat()
     except OSError as exc:
-        logger.error("is_older_than: falha ao acessar %s: %s", p, exc, exc_info=True)
+        logger.error("is_older_than: failed accessing %s: %s", p, exc, exc_info=True)
         return False
     now_ts = datetime.now(timezone.utc).timestamp()
     return st.st_mtime <= (now_ts - int(seconds))
 
 
 def archive_file_is_old(p: Path, now_ts: float, retention_days: int) -> bool:
-    """Return True se o ficheiro em archive for mais antigo que `retention_days`."""
+    """Return True if the archive file is older than `retention_days`."""
     try:
         st = p.stat()
     except OSError as exc:
-        logger.error("archive_file_is_old: falha ao acessar %s: %s", p, exc, exc_info=True)
+        logger.error("archive_file_is_old: failed accessing %s: %s", p, exc, exc_info=True)
         return False
     cutoff = now_ts - retention_days * 86400
     return st.st_mtime < cutoff
 
 
 # -----------------------
-# Rotação / Compressão
+# Rotation / Compression
 # -----------------------
 def _attempt_rename(s: Path, d: Path) -> bool:
     try:
@@ -303,7 +301,7 @@ def _copy_replace_fallback(s: Path, d: Path) -> bool:
 
 
 def atomic_move_to_archive(src: Path, dst_rotating: Path) -> bool:
-    """Move `src` para `dst_rotating` de forma atômica, com backoff e fallbacks."""
+    """Move `src` to `dst_rotating` atomically, with backoff and fallbacks."""
     attempts = 5
     base_delay = 0.05
     for i in range(attempts):
@@ -324,7 +322,7 @@ def atomic_move_to_archive(src: Path, dst_rotating: Path) -> bool:
 
 
 def compress_file(src: Path, dst_gz: Path) -> bool:
-    """Comprime `src` em gzip `dst_gz`. Usa escrita temporária + replace atômico."""
+    """Compress `src` into gzip `dst_gz`. Uses temporary write + atomic replace."""
     dst_gz.parent.mkdir(parents=True, exist_ok=True)
     tmp = dst_gz.with_suffix(dst_gz.suffix + ".tmp")
     try:
@@ -333,13 +331,13 @@ def compress_file(src: Path, dst_gz: Path) -> bool:
         os.replace(str(tmp), str(dst_gz))
         return True
     except OSError as exc:
-        logger.error("compress_file: falha %s -> %s: %s", src, dst_gz, exc, exc_info=True)
+        logger.error("compress_file: failed %s -> %s: %s", src, dst_gz, exc, exc_info=True)
         tmp.unlink(missing_ok=True)
         return False
 
 
 def try_rotate_file(p: Path, archive_dir: Path, gz_suffix: str, day_secs: int, week_secs: int) -> None:
-    """Move e comprime ficheiro de log para archive, respeitando safe-retention."""
+    """Move and compress a log file into archive, respecting safe-retention."""
     threshold = week_secs if "_safe" in p.name else day_secs
     if not is_older_than(p, threshold):
         return
@@ -352,7 +350,7 @@ def try_rotate_file(p: Path, archive_dir: Path, gz_suffix: str, day_secs: int, w
 
 
 def try_compress_rotating(rotating: Path, archive_dir: Path, day_secs: int, week_secs: int) -> None:
-    """Tenta comprimir um ficheiro `.rotating` já movido para archive."""
+    """Try to compress a `.rotating` file that was moved to archive."""
     threshold = week_secs if "_safe" in rotating.name else day_secs
     if not is_older_than(rotating, threshold):
         return
@@ -362,10 +360,10 @@ def try_compress_rotating(rotating: Path, archive_dir: Path, day_secs: int, week
 
 
 # -----------------------
-# Limpeza temporária
+# Temporary cleanup
 # -----------------------
 def all_children_old(d: Path, max_age: int) -> bool:
-    """Retorna True se todos os filhos de `d` tiverem idade maior que `max_age`."""
+    """Return True if all children of `d` have ages greater than `max_age`."""
     try:
         return all(is_older_than(c, max_age) for c in d.iterdir())
     except OSError:
@@ -373,23 +371,23 @@ def all_children_old(d: Path, max_age: int) -> bool:
 
 
 def process_temp_item(item: Path, max_age: int) -> None:
-    """Remove ficheiros ou diretórios temporários antigos."""
+    """Remove old temporary files or directories."""
     try:
         if item.is_file() and is_older_than(item, max_age):
             item.unlink(missing_ok=True)
-            logger.info("Removido %s", item)
+            logger.info("Removed %s", item)
         elif item.is_dir() and all_children_old(item, max_age) and is_older_than(item, max_age):
             shutil.rmtree(item, ignore_errors=True)
-            logger.info("Removido diretório %s", item)
+            logger.info("Removed directory %s", item)
     except OSError as exc:
-        logger.error("Falha processando %s: %s", item, exc, exc_info=True)
+        logger.error("Failed processing %s: %s", item, exc, exc_info=True)
 
 
 # -----------------------
-# Diretórios / permissões
+# Directories / permissions
 # -----------------------
 def ensure_dir_writable(p: Path) -> bool:
-    """Garante, em melhor esforço, que `p` existe e é gravável."""
+    """Ensure, in a best-effort manner, that `p` exists and is writable."""
     try:
         p.mkdir(parents=True, exist_ok=True)
         test = p / f".touch-{os.getpid()}"
@@ -411,8 +409,8 @@ def ensure_dir_writable(p: Path) -> bool:
                 if test.exists():
                     test.unlink()
             except Exception:
-                # Ignorar falhas de limpeza; operação em modo de melhor esforço
-                # nosec B110 - a limpeza não deve lançar exceção no caminho de melhor esforço
+                # Ignore cleanup failures; best-effort operation only.
+                # nosec B110 - cleanup should not raise during best-effort path
                 pass
         return True
     except PermissionError as exc:

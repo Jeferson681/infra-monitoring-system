@@ -1,5 +1,6 @@
-"""Pacote de configuração do projeto.
+"""Configuration package for the monitoring application.
 
-Centraliza helpers de carregamento de configuração e exposição de APIs
-relacionadas a settings. Pode ser mantido vazio se não houver exports.
+Provides helpers to load and expose runtime configuration and settings.
+Public APIs for retrieving validated thresholds and runtime options live
+in this package.
 """

@@ -1,17 +1,13 @@
-"""Leitores resilientes para arquivos JSONL (linha-delimitados).
+"""Resilient readers for JSONL (newline-delimited JSON) files.
 
-Fornece utilitários para iterar sobre arquivos JSONL, incluindo suporte a
-arquivos gzip e estratégias para lidar com gravações parciais (p.ex. quando
-um produtor ainda está escrevendo). O código evita lançar exceções em casos
-comuns (linhas vazias, JSON inválido) e permite um modo "tail -f" com
-retries/backoff leves.
+Utilities to iterate JSONL files with optional gzip support and strategies
+to handle partially-written records (for producers that append lines).
+The reader is resilient to empty lines and malformed JSON and supports a
+``follow`` mode similar to ``tail -f`` with lightweight retries/backoff.
 
-APIs públicas:
-- iter_jsonl(path, follow=False, max_retries=3, retry_delay=0.1)
-  -> gerador de dicts para cada linha JSON válida encontrada.
-
-O módulo é projetado para ser pequeno, bem testável e sem dependências
-externas.
+Public API:
+- ``iter_jsonl(path, follow=False, max_retries=3, retry_delay=0.1)``
+    -> yields decoded dict objects for each valid JSON line.
 """
 
 from __future__ import annotations
@@ -25,12 +21,12 @@ from typing import Generator
 
 
 def _open_maybe_gzip(path: Path):
-    """Abre um arquivo suportando gzip por extensão .gz.
+    """Open a file supporting gzip when extension is .gz.
 
-    Retorna um file-like em texto (str). Chamador deve fechar o objeto.
+    Returns a text-mode file-like object. Caller must close the object.
     """
     if str(path).endswith(".gz"):
-        # gzip.open produz bytes; abrir em modo texto para facilitar leitura de linhas
+        # gzip.open yields bytes; open in text mode to simplify line reading
         return gzip.open(path, mode="rt", encoding="utf-8", errors="replace")
     return open(path, mode="r", encoding="utf-8", errors="replace")
 
@@ -41,21 +37,21 @@ def iter_jsonl(
     max_retries: int = 3,
     retry_delay: float = 0.1,
 ) -> Generator[dict, None, None]:
-    """Itera sobre um arquivo JSONL e produz objetos Python.
+    """Iterate over a JSONL file and yield Python objects.
 
     Args:
-        path: caminho para arquivo .jsonl ou .jsonl.gz
-        follow: se True, fica aguardando novas linhas (similar a tail -f)
-        max_retries: tentativas antes de abandonar leitura em follow=False
-        retry_delay: intervalo entre tentativas (segundos)
+        path: path to a .jsonl or .jsonl.gz file
+        follow: if True, wait for new lines (similar to tail -f)
+        max_retries: attempts before giving up when follow=False
+        retry_delay: delay between attempts (seconds)
 
     Yields:
-        dicts decodificados de cada linha JSON válida.
+        dicts decoded from each valid JSON line.
 
-    Notas:
-        - Linhas vazias ou que não decodificam como JSON são ignoradas.
-        - Em arquivos sendo escritos, parte de uma linha pode aparecer; o
-          leitor irá aguardar pequenas janelas quando follow=True.
+    Notes:
+        - Empty lines or lines that do not decode as JSON are ignored.
+        - For files being written, a partial line may appear; the reader
+          will wait briefly when follow=True to allow completion.
 
     """
     p = Path(path)
@@ -67,9 +63,9 @@ def iter_jsonl(
         while True:
             line = fh.readline()
             if not line:
-                # EOF atingido
+                # EOF reached
                 if follow:
-                    # aguardar e tentar novamente
+                    # wait and retry
                     time.sleep(retry_delay)
                     retries = 0
                     continue
@@ -86,24 +82,23 @@ def iter_jsonl(
             try:
                 obj = json.loads(line)
             except json.JSONDecodeError:
-                # Linha possivelmente parcial; se estiver no modo follow,
-                # aguardar que o restante seja escrito. Caso contrário,
-                # ignorar a linha.
+                # Possibly a partial line; if in follow mode, wait for the
+                # rest to be written. Otherwise ignore the line.
                 if follow:
-                    # retroceder o cursor na linha atual para tentar ler
-                    # novamente após pequeno delay.
-                    # Nota: apenas possível quando o file object suporta seek().
+                    # rewind the cursor for the current line to attempt
+                    # reading again after a short delay. Note: only possible
+                    # when the file object supports seek().
                     try:
                         pos = fh.tell()
-                        # esperar um pouquinho para permitir escrita completa
+                        # wait a little to allow completion
                         time.sleep(retry_delay)
                         fh.seek(pos)
                         continue
                     except (OSError, io.UnsupportedOperation):
-                        # Se não suportar seek (ex.: stream), apenas aguardar
+                        # If seeking is unsupported (e.g. stream), just wait
                         time.sleep(retry_delay)
                         continue
-                # Fora do modo follow, ignorar linha inválida
+                # Outside follow mode, ignore the invalid line
                 continue
             yield obj
 

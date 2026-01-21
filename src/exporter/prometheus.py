@@ -1,8 +1,8 @@
-"""Utilitários para exportação de métricas no padrão Prometheus.
+"""Helpers for exporting metrics in Prometheus format.
 
-Exponha métricas para Prometheus como Gauges quando a biblioteca
-`prometheus_client` estiver disponível. Se a biblioteca não estiver
-instalada, as funções tornam-se no-ops e apenas logam advertências.
+Expose system and process metrics as Prometheus Gauges when
+``prometheus_client`` is available. When the optional dependency is
+unavailable the functions are no-ops and log debug information instead.
 """
 
 import json
@@ -24,17 +24,17 @@ try:
 
     _HAVE_PROM = True
 except Exception:  # pragma: no cover - optional dependency
-    # Falha ao importar prometheus_client: exportação Prometheus será desativada (opcional)
+    # Failed to import prometheus_client: Prometheus export will be disabled (optional)
     _HAVE_PROM = False
 
 
-# Cache para _sanitize_metric_name() para evitar reprocessamento de nomes iguais
+# Cache for _sanitize_metric_name() to avoid reprocessing identical names
 _sanitize_cache: Dict[str, str] = {}
 
 
 def _sanitize_metric_name(name: str) -> str:
-    """Sanitiza o nome da métrica para o padrão Prometheus, substituindo caracteres inválidos por underline."""
-    # Verifica cache primeiro
+    """Sanitize a metric name to the Prometheus format, replacing invalid characters with underscore."""
+    # Check cache first
     if name in _sanitize_cache:
         return _sanitize_cache[name]
 
@@ -57,16 +57,6 @@ def _sanitize_metric_name(name: str) -> str:
 
 
 def start_exporter(port: int | None = None, addr: str | None = None) -> None:
-    """Inicia o servidor HTTP do Prometheus Exporter no endereço e porta informados.
-
-    Comportamento:
-    - Mantém o comportamento atual quando nenhuma variável de ambiente é definida
-      (default addr = "127.0.0.1", port = 8000).
-    - Permite sobrescrever via variáveis de ambiente `MONITORING_EXPORTER_ADDR`
-      e `MONITORING_EXPORTER_PORT` quando os parâmetros `addr`/`port` forem None.
-
-    Se `prometheus_client` não estiver disponível, apenas loga e não faz nada.
-    """
     """Initialize exporter metrics without starting an HTTP server.
 
     NOTE: after refactor the HTTP server is provided by `main_http.run_http_server`.
@@ -74,19 +64,20 @@ def start_exporter(port: int | None = None, addr: str | None = None) -> None:
     performs a best-effort initial population of Gauges from JSONL. It does NOT
     start any HTTP server to avoid bind conflicts; the HTTP server is the
     responsibility of `main_http` (primary).
+
     """
     global _server_started
     if _server_started:
         logger.debug("exporter Prometheus already initialized")
         return
 
-    # Inicializa métricas a partir do JSONL (best-effort) para que a registry
-    # contenha valores iniciais quando `generate_latest()` for chamado.
+    # Initialize metrics from JSONL (best-effort) so the registry contains
+    # initial values when `generate_latest()` is called.
     try:
         jsonl_path = os.path.join(os.path.dirname(__file__), "..", "..", "logs", "json")
         expose_system_metrics_from_jsonl(jsonl_path)
     except Exception:
-        logger.debug("Falha ao popular métricas iniciais do JSONL", exc_info=True)
+        logger.debug("Failed to populate initial metrics from JSONL", exc_info=True)
 
     # Mark as initialized to avoid repeated work; this does NOT imply a server
     # was started.
@@ -95,10 +86,10 @@ def start_exporter(port: int | None = None, addr: str | None = None) -> None:
 
 
 def expose_metric(name: str, value: float, description: str = "") -> None:
-    """Expõe uma métrica numérica como Gauge do Prometheus.
+    """Expose a numeric metric as a Prometheus Gauge.
 
-    Cria o Gauge na primeira chamada e atualiza o valor nas próximas.
-    Se `prometheus_client` não estiver disponível, apenas loga e retorna.
+    Creates the Gauge on first call and updates the value on subsequent calls.
+    If `prometheus_client` is not available, logs and returns.
     """
     if not _HAVE_PROM:
         logger.debug("prometheus_client not available; expose_metric %s=%s ignored", name, value)
@@ -115,11 +106,11 @@ def expose_metric(name: str, value: float, description: str = "") -> None:
         g_cast = cast(Gauge, g)
         g_cast.set(float(value))
     except Exception as exc:
-        logger.debug("Falha ao expor métrica %s: %s", name, exc, exc_info=True)
+        logger.debug("Failed to expose metric %s: %s", name, exc, exc_info=True)
 
 
 def expose_system_metrics_from_jsonl(jsonl_path: str) -> None:
-    """Lê a última linha do JSONL e expõe métricas do sistema como Gauges."""
+    """Read the last line from JSONL and expose system metrics as Gauges."""
     if not _HAVE_PROM:
         return
     try:
@@ -146,45 +137,45 @@ def expose_system_metrics_from_jsonl(jsonl_path: str) -> None:
                 if isinstance(v, (int, float)):
                     expose_metric(f"monitoring_{k}", float(v), f"System metric {k} from JSONL")
     except Exception as exc:
-        logger.debug("Falha ao expor métricas do sistema do JSONL: %s", exc, exc_info=True)
+        logger.debug("Failed to expose system metrics from JSONL: %s", exc, exc_info=True)
 
 
 def expose_process_metrics() -> None:
-    """Expõe métricas do processo Python atual (CPU, RAM, uptime, threads) como Gauges do Prometheus."""
+    """Expose current Python process metrics (CPU, RAM, uptime, threads) as Prometheus Gauges."""
     if not _HAVE_PROM:
         return
     try:
         proc = psutil.Process()
-        # Coleta e exporta métricas do processo:
-        # - Porcentagem de CPU
+        # Collect and export process metrics:
+        # - CPU percent
         cpu = proc.cpu_percent(interval=0.0)
         expose_metric("process_cpu_percent", cpu, "CPU percent used by this process")
-        # - Porcentagem de memória
         mem = proc.memory_percent()
+        # - Memory percent
         expose_metric("process_memory_percent", mem, "Memory percent used by this process")
-        # - Memória RSS (resident set size)
         rss = getattr(proc.memory_info(), "rss", 0)
+        # - RSS memory (resident set size)
         expose_metric("process_memory_rss_bytes", rss, "Resident memory used by this process (bytes)")
-        # - Uptime do processo
         uptime = time.time() - proc.create_time()
+        # - Process uptime
         expose_metric("process_uptime_seconds", uptime, "Uptime of this process in seconds")
-        # - Número de threads
         threads = proc.num_threads()
+        # - Number of threads
         expose_metric("process_num_threads", threads, "Number of threads in this process")
-        # - Número de descritores de arquivos abertos (se disponível na plataforma)
-        # Usa getattr para evitar erro de análise estática do linter
+        # - Number of open file descriptors (if available on the platform)
+        # Use getattr to avoid static analysis/linter errors
         num_fds_fn = getattr(proc, "num_fds", None)
         if callable(num_fds_fn):
             try:
                 fds = num_fds_fn()
-                # Só expõe a métrica se fds for int
+                # Only expose the metric if fds is an int
                 if isinstance(fds, int):
                     expose_metric("process_num_fds", float(fds), "Number of open file descriptors")
             except Exception as exc:
-                # Pode ocorrer em plataformas sem suporte a num_fds; ignora silenciosamente
-                logger.debug("Falha ao obter número de descritores de arquivos: %s", exc, exc_info=True)
+                # May occur on platforms without num_fds support; ignore silently
+                logger.debug("Failed to obtain number of file descriptors: %s", exc, exc_info=True)
     except Exception as exc:
-        logger.debug("Falha ao expor métricas do processo: %s", exc, exc_info=True)
+        logger.debug("Failed to expose process metrics: %s", exc, exc_info=True)
 
 
 def get_metrics_bytes() -> bytes:
@@ -247,7 +238,7 @@ def get_metrics_bytes() -> bytes:
                             continue
                     lines.append(f"monitoring_{k} {out}")
     except Exception as exc:
-        logger.debug("Falha ao montar métricas do JSONL: %s", exc, exc_info=True)
+        logger.debug("Failed to build metrics from JSONL: %s", exc, exc_info=True)
 
     # Add process-level metrics
     try:
@@ -263,7 +254,7 @@ def get_metrics_bytes() -> bytes:
         threads = proc.num_threads()
         lines.append(f"process_num_threads {threads}")
     except Exception:
-        logger.debug("Falha ao coletar métricas do processo", exc_info=True)
+        logger.debug("Failed to collect process metrics", exc_info=True)
 
     # Load averages
     try:

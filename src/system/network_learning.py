@@ -1,36 +1,39 @@
+"""Network usage learning utilities.
+
+Provides a handler to record daily network usage and calculate adaptive
+weekly limits used by treatment policies. Data is persisted in a simple
+JSONL file under the cache directory.
+"""
+
 import json
 import datetime
 from pathlib import Path
 
 
 class NetworkUsageLearningHandler:
-    """Handler para aprendizagem e ajuste dinâmico do limite de consumo de rede."""
+    """Handler for learning and dynamic adjustment of network usage limits."""
 
     def __init__(self, date_func=None):
-        """Inicializa o handler de aprendizagem de rede.
+        """Initialize the network learning handler.
 
-        Parâmetros:
-            date_func: Função para obter a data atual (default: datetime.date.today).
+        Parameters
+        ----------
+        date_func : callable, optional
+            Function that returns the current date (default: datetime.date.today).
+
         """
         self.date_func = date_func or (lambda: datetime.date.today())
 
-    """Handler para aprendizagem e ajuste dinâmico do limite de consumo de rede.
-
-    Coleta consumo diário de bytes enviados/recebidos.
-    Calcula média mensal após 4 semanas.
-    Atualiza limite com margem (ex: 20%).
-    Persiste dados em arquivo.
-    """
     LEARNING_FILE = Path(".cache/network_usage_learning_safe.jsonl")
     LEARNING_WEEKS = 4
     DEFAULT_LIMIT = 20 * 1024**3  # 20GB
     MARGIN = 0.2  # 20%
 
     def record_daily_usage(self, bytes_sent: int, bytes_recv: int):
-        """Registra o consumo diário de bytes enviados e recebidos, persistindo em .jsonl.
+        """Record daily bytes sent/received and persist to a JSONL file.
 
-        Sempre sobrescreve a linha do dia atual, evitando duplicidade.
-        Adiciona campo timestamp preciso.
+        Always overwrite the current day's entry to avoid duplicates and add
+        a precise timestamp field.
         """
         today = self.date_func()
         now_dt = datetime.datetime.now().isoformat()
@@ -38,31 +41,27 @@ class NetworkUsageLearningHandler:
         from src.system.helpers import ensure_cache_dir_exists
 
         ensure_cache_dir_exists()
-        # Carrega todas as entradas existentes
+        # Load all existing entries
         from src.system.helpers import read_jsonl
 
         entries = read_jsonl(self.LEARNING_FILE)
-        # Remove qualquer entrada do mesmo dia
+        # Remove any entry from the same day
         entries = [e for e in entries if e.get("date") != today.isoformat()]
-        # Adiciona a entrada atual
+        # Append the current entry
         entries.append(entry)
-        # Salva todas as entradas, uma por linha
+        # Write all entries, one per line
         with self.LEARNING_FILE.open("w", encoding="utf-8") as f:
             for e in entries:
                 f.write(json.dumps(e) + "\n")
 
     def calculate_weekly_limit(self) -> int:
-        """Calcula o limite semanal adaptativo (+20%) baseado apenas na soma da última semana.
+        """Calculate an adaptive weekly limit (+20%) based on the last week's sum.
 
-        Returns
-        -------
-        int
-            Limite calculado em bytes.
-
+        Returns the calculated limit in bytes.
         """
-        # Soma sempre os últimos 7 dias completos
+        # Always sum the last 7 complete days
         data = self._load_data()
-        # Ordena por data decrescente
+        # Sort by date descending
         valid_entries = [e for e in data if "bytes_sent" in e and "bytes_recv" in e and "date" in e]
         valid_entries.sort(key=lambda e: e["date"], reverse=True)
         last_7 = valid_entries[:7]
@@ -80,7 +79,7 @@ class NetworkUsageLearningHandler:
         from src.system.helpers import read_jsonl
 
         entries = read_jsonl(self.LEARNING_FILE)
-        # Fallback: tentar ler do jsonl de monitoramento se não houver dados suficientes
+        # Fallback: try reading from the monitoring jsonl if not enough data
         if not entries or len(entries) < self.LEARNING_WEEKS * 7:
             monitor_path = Path("logs/json/monitoring-{}.jsonl".format(datetime.date.today().strftime("%Y-%m-%d")))
             entries += read_jsonl(monitor_path)
@@ -94,15 +93,15 @@ class NetworkUsageLearningHandler:
             json.dump(data, f)
 
     def get_current_limit(self) -> int:
-        """Retorna o limite semanal atual para consulta por tratamentos."""
+        """Return the current weekly limit for consultation by treatment routines."""
         return self.calculate_weekly_limit()
 
 
-# Exemplo de uso:
+# Example usage:
 # handler = NetworkUsageLearningHandler()
 # handler.record_daily_usage(bytes_sent, bytes_recv)
 # limit = handler.get_current_limit()
-# if consumo > limit: ...
+# if consumption > limit: ...
 
 
 # Prevent Vulture false-positive: reference the private method so static

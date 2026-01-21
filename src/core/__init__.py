@@ -1,8 +1,7 @@
-"""Pacote core: orquestração principal do programa.
+"""Core package: main orchestration for the monitoring application.
 
-Contém o loop principal, parsing de argumentos e integração com a UI.
-
-Re-exports para compatibilidade com importações históricas.
+Exposes the main monitoring loop and emission utilities. Re-exports are
+provided to preserve backwards-compatible imports.
 """
 
 from .emitter import emit_snapshot

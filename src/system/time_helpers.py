@@ -1,10 +1,10 @@
-"""Funções utilitárias para extrair timestamps de objetos de log.
+"""Utility functions to extract timestamps from log-like objects.
 
-Este módulo fornece helpers que tentam localizar e normalizar campos de
-data/tempo em estruturas JSON-like (dicts e listas). A principal função
-exportada é ``extract_epoch(obj)`` que tenta vários locais comuns e faz
-parsing de formatos numéricos e ISO, retornando um float (segundos desde
-epoch) ou ``None`` quando não encontrar um timestamp.
+Helpers that attempt to locate and normalize date/time fields in JSON-like
+structures (dicts and lists). The primary exported function is
+``extract_epoch(obj)`` which tries common locations and parses numeric and
+ISO formats, returning a float (seconds since epoch) or ``None`` if no
+timestamp is found.
 """
 
 from typing import Any, Optional, Iterator
@@ -28,10 +28,10 @@ def _epoch_from_numeric(v) -> Optional[float]:
 
 
 def _parse_date_string(s: str) -> Optional[float]:
-    """Tente parsear uma string de data/tempo para epoch em segundos.
+    """Try to parse a date/time string into epoch seconds.
 
-    Suporta formatos ISO, timestamps numéricos em string e alguns formatos
-    comuns sem timezone. Retorna None se não for possível parsear.
+    Supports ISO formats, numeric timestamps expressed as strings, and a
+    few common timezone-less formats. Returns ``None`` if parsing fails.
     """
     if not isinstance(s, str):
         return None
@@ -71,10 +71,10 @@ def _parse_date_string(s: str) -> Optional[float]:
 
 
 def _parse_epoch_from_value(v) -> Optional[float]:
-    """Normalize um valor arbitrário para epoch float quando possível.
+    """Normalize an arbitrary value into an epoch float when possible.
 
-    Aceita números (int/float/str numérico) e strings de data; retorna None
-    quando não puder extrair um timestamp.
+    Accepts numbers (int/float/numeric str) and date strings; returns
+    ``None`` when a timestamp cannot be extracted.
     """
     if v is None:
         return None
@@ -238,16 +238,16 @@ def _scan_subtree_for_timestamp(subtree: Any, depth: int) -> Optional[float]:
 
 
 def extract_epoch(obj: dict) -> Optional[float]:
-    """Extraia um timestamp epoch (segundos float desde epoch) de um objeto tipo log.
+    """Extract an epoch timestamp (seconds since epoch) from a log-like object.
 
-    A função tenta várias localizações em ordem de prioridade:
-      1. metrics_raw.timestamp
-      2. campos top-level 'ts'/'timestamp'
-      3. chaves localizadas tipo 'Data/hora'
-      4. subtrees comuns como 'meta'/'events'
-      5. varredura DFS que tenta localizar chaves/valores semelhantes
+    The function tries several locations in order of priority:
+      1. ``metrics_raw.timestamp``
+      2. top-level fields ``ts`` / ``timestamp``
+      3. localized keys such as ``Data/hora``
+      4. common subtrees like ``meta`` / ``events``
+      5. a DFS scan that searches for timestamp-like keys/values
 
-    Retorna None quando não encontrar nada parseável.
+    Returns ``None`` when nothing parseable is found.
     """
     n = _extract_from_metrics_raw(obj)
     if n is not None:
