@@ -47,6 +47,16 @@ Obrigado por considerar contribuir com este projeto! Este arquivo traz um checkl
   ```powershell
   docker run --rm -v ${PWD}:/repo -w /repo zricethezav/gitleaks:latest detect --source /repo
   ```
+
+## Hadolint / Docker local
+
+O `hadolint` é executado no CI durante os scans de imagem. Para executar `hadolint` localmente, você pode usar a imagem oficial:
+
+```powershell
+docker run --rm -v ${PWD}:/data -w /data hadolint/hadolint:latest hadolint Dockerfile
+```
+
+Ou instale `hadolint` nativamente e execute `hadolint Dockerfile`.
 - Conferir Smoke import test:
   ```powershell
   python -c "import importlib; importlib.import_module('src'); print('import ok')"

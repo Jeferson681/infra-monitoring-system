@@ -9,7 +9,6 @@ services:
     environment:
       # Control program execution and exposition behavior via MONITORING_* envs
       - MONITORING_HTTP_ENABLE=0
-      - MONITORING_HTTP_ADDR=0.0.0.0
       - MONITORING_HTTP_PORT=8000
       - MONITORING_PROMTAIL_ENABLE=1
       - MONITORING_CYCLES=0
@@ -38,7 +37,7 @@ services:
     # depends_on removido pois o serviço de métricas foi excluído
 
   main_http:
-    image: python:3.11-slim
+    build: .
     container_name: infra-monitoring-main-http
     command: python -u -m src.exporter.main_http
     environment:
@@ -50,6 +49,11 @@ services:
     restart: unless-stopped
     depends_on:
       - infra-monitoring-system
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   grafana:
     image: grafana/grafana:latest

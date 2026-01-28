@@ -49,3 +49,8 @@ Documentação técnica:
 - 🧠 Decisões técnicas: [docs/DECISIONS.md](docs/DECISIONS.md)
 - ⚙️ Como executar: [docs/RUN.md](docs/RUN.md)
 - 🖼️ Evidências visuais: [docs/prints/README.md](docs/prints/README.md)
+
+Developer setup (local checks)
+
+- **Pre-commit & linters:** run `pre-commit run --all-files` to execute formatters, linters and security hooks. `hadolint` is executed in CI during image scans; to run it locally use the `hadolint/hadolint` Docker image or install `hadolint` natively.
+- **Docker (optional):** Docker is only required for the Docker Compose local stack or for running some security tools locally (hadolint via Docker, gitleaks). CI runners will execute image scans (Trivy) and hadolint with container images, so installing Docker locally is optional but recommended for full parity with CI.

@@ -5,6 +5,8 @@ Objetivo: instruções concisas para iniciar o projeto localmente (venv) e com D
 ## Pré-requisitos
 - Python 3.8+ instalado
 - `docker` e `docker-compose` (opcional, para fluxo com containers)
+ - `pre-commit` (recomendado) — para executar hooks de qualidade e segurança
+ - `hadolint` (opcional) — `hadolint` is executed in CI during image scans. To run it locally use the `hadolint/hadolint` Docker image or install `hadolint` natively.
 
 ## Execução local (resumo)
 
@@ -32,7 +34,7 @@ python -m pip install -r requirements.txt
 3) Exemplos de execução
 
 Observações:
-- O arquivo `./.env` presente na raiz contém defaults (ex.: `MONITORING_EXPORTER_ADDR=127.0.0.1`). Ele não é aplicado automaticamente ao processo Python: carregue-o no seu shell ou defina as variáveis manualmente.
+- O arquivo `./.env` presente na raiz contém defaults (ex.: `MONITORING_EXPORTER_ADDR=127.0.0.1`). O entrypoint `src.main` tenta ler esse arquivo automaticamente e só define variáveis que não estejam presentes no ambiente do processo (conveniência para desenvolvimento local). Se preferir controlar o ambiente externamente, carregue o `.env` no shell antes de executar.
 
 PowerShell — carregar `.env` e executar (útil para testes locais):
 
@@ -83,6 +85,8 @@ Endpoints comuns quando portas são publicadas:
 - Loki → http://localhost:3100
 - Exporter → http://localhost:8000/metrics (somente se `ports:` estiver configurado)
 
+Nota sobre compose: o `docker-compose.yml` inclui um serviço `main_http` que executa `src.exporter.main_http`; por isso o `observability/prometheus.yml` é configurado para raspar `main_http:8000`. O serviço da aplicação (`infra-monitoring-system`) pode iniciar o servidor HTTP de métricas quando `MONITORING_HTTP_ENABLE=1`, mas no compose padrão o servidor de métricas é servido por `main_http` para separar responsabilidades.
+
 ## Verificações rápidas
 
 - Verificar endpoint metrics:
@@ -97,6 +101,24 @@ curl -s http://127.0.0.1:8000/metrics | head
 ```bash
 pytest -q
 ```
+
+### Pre-commit
+
+Rodar todos os hooks locais:
+
+```powershell
+python -m pip install --upgrade pip
+python -m pip install pre-commit
+pre-commit run --all-files
+```
+
+Nota: `hadolint` é executado no CI durante os scans de imagem. Para executá-lo localmente sem instalá-lo, execute:
+
+```powershell
+docker run --rm -v "${PWD}":/data -w /data hadolint/hadolint:latest hadolint Dockerfile
+```
+
+Ou instale `hadolint` nativamente e rode `hadolint Dockerfile`.
 
 ## Variáveis de ambiente (exposição de métricas e runtime)
 
@@ -116,6 +138,8 @@ Boas práticas e recomendações:
 - Mantenha default do app em `127.0.0.1` para execuções locais.
 - Em `docker-compose`, use `MONITORING_HTTP_ADDR=0.0.0.0` **sem** publicar portas (`ports:`) para limitar exposição ao escopo do compose (outros containers), não ao host.
 - Só publique portas no `docker-compose.yml` se precisar acessar `/metrics` a partir do host; se publicar, proteja com firewall/proxy/TLS se necessário.
+- Para evitar diferenças de runtime entre serviços, padronize a imagem base Python usada em `docker-compose` (ex.: `python:3.13-slim`).
+- Para CI: adicione checks de segurança (Trivy) e linting de Dockerfile (hadolint) para detectar regressões de segurança e estilo.
 - Para testes que precisam que o post-treatment seja síncrono, use `POST_TREATMENT_SYNC=1`.
 
 ## Troubleshooting breve

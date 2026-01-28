@@ -39,3 +39,6 @@ repos:
         pass_filenames: false
         always_run: false
         stages: [manual]
+
+  - repo: local
+    hooks: []

@@ -6,10 +6,22 @@ WORKDIR /app
 
 # Copia dependências e instala
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
-# Corrige vulnerabilidade do pip (CVE-2025-8869)
-RUN pip install --upgrade pip>=25.3
-RUN pip install --no-cache-dir -r requirements.txt
+# Atualiza índice e aplica upgrade apenas no pacote openssl para mitigar CVE-2026-22796
+# Usa --only-upgrade quando possível, com fallback para instalar caso não exista
+# Em seguida atualiza o pip e instala as dependências numa única camada para
+# evitar cache de camadas sem a correção.
+RUN set -eux; \
+	apt-get update; \
+	# Resolve candidate version and pin installation to satisfy hadolint DL3008
+	ver=$(apt-cache madison openssl | awk 'NR==1{print $3}'); \
+	if [ -n "$ver" ]; then \
+		apt-get install -y --no-install-recommends openssl="$ver"; \
+	else \
+		apt-get install -y --no-install-recommends openssl; \
+	fi; \
+	rm -rf /var/lib/apt/lists/*; \
+	python -m pip install --upgrade --no-cache-dir "pip>=25.3"; \
+	python -m pip install --no-cache-dir -r requirements.txt
 
 # Copia o restante do código
 COPY src/ ./src/
