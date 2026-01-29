@@ -17,6 +17,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from .helpers import get_project_root
+
 from .log_helpers import (
     ROTATING_SUFFIX,
     archive_file_is_old,
@@ -86,8 +88,7 @@ def get_log_paths(root: str | Path | None = None) -> LogPaths:
         log_root = Path(candidate)
     except Exception as exc:
         logger.debug("get_log_paths: failed to resolve root: %s", exc, exc_info=True)
-        project_root = Path(__file__).resolve().parents[2]
-        log_root = project_root / "logs"
+        log_root = get_project_root() / "logs"
 
     # ensure_dir_writable returns bool; call for side-effects and keep Path values
     ensure_dir_writable(log_root)
@@ -238,7 +239,7 @@ def _hourly_allows_write(
     try:
         key = sanitize_log_name(name, name)
         if project_root is None:
-            project_root = Path(__file__).resolve().parents[2]
+            project_root = get_project_root()
         cache_dir = project_root / ".cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
         ts_path = cache_dir / f".last_human_{key}.ts"
@@ -290,8 +291,7 @@ def _perform_human_write(
             logger.warning("_perform_human_write: failed to write human log %s", plain_path)
         if hourly and ok:
             try:
-                project_root = Path(__file__).resolve().parents[2]
-                cache_dir = project_root / ".cache"
+                cache_dir = get_project_root() / ".cache"
                 cache_dir.mkdir(parents=True, exist_ok=True)
                 ts_file = cache_dir / (f".last_human_{sanitize_log_name(name, name)}.ts")
                 with open(ts_file, "w", encoding="utf-8") as f:

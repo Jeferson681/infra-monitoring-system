@@ -269,11 +269,10 @@ class SystemState:
     def _write_post_treatment_primary(self, snap: dict[str, Any]) -> None:
         """Primary path: use .cache in project root and helper write_json."""
         from ..system.log_helpers import write_json
-        from pathlib import Path
+        from ..system.helpers import get_project_root
         import time as _time
 
-        project_root = Path(__file__).resolve().parents[2]
-        cache_dir = project_root / _CACHE_DIRNAME
+        cache_dir = get_project_root() / _CACHE_DIRNAME
         cache_dir.mkdir(parents=True, exist_ok=True)
         write_json(cache_dir / _POST_TREATMENT_FILENAME, snap)
 
@@ -289,11 +288,10 @@ class SystemState:
 
     def _write_post_treatment_fallback(self, snap: dict[str, Any]) -> None:
         """Fallback path: write only to .cache in project root."""
-        from pathlib import Path
+        from ..system.helpers import get_project_root
         import json as _json
 
-        project_root = Path(__file__).resolve().parents[2]
-        cache_dir = project_root / _CACHE_DIRNAME
+        cache_dir = get_project_root() / _CACHE_DIRNAME
         cache_dir.mkdir(parents=True, exist_ok=True)
         try:
             from ..system.log_helpers import write_json as _write_json
@@ -414,10 +412,9 @@ class SystemState:
 
             # get_log_paths() removed; no longer necessary
             # Corrige para sempre criar .cache na raiz do projeto
-            from pathlib import Path
+            from ..system.helpers import get_project_root
 
-            project_root = Path(__file__).resolve().parents[2]
-            hist_path = project_root / _CACHE_DIRNAME / _POST_TREATMENT_FILENAME
+            hist_path = get_project_root() / _CACHE_DIRNAME / _POST_TREATMENT_FILENAME
             hist_path.parent.mkdir(parents=True, exist_ok=True)
             try:
                 write_json(hist_path, snap)

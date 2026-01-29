@@ -34,10 +34,9 @@ def main(argv: list[str] | None = None) -> None:
     # process environment variables; this is a best-effort convenience for
     # local development and tests.
     try:
-        from src.system.helpers import read_env_file
+        from src.system.helpers import read_env_file, get_project_root
 
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-        env_path = os.path.join(project_root, ".env")
+        env_path = get_project_root() / ".env"
         env_items = read_env_file(env_path)
         for k, v in env_items.items():
             if os.getenv(k) is None:

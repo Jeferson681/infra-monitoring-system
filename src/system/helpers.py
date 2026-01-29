@@ -16,6 +16,15 @@ from typing import List, Tuple
 from pathlib import Path
 
 
+def get_project_root() -> Path:
+    """Return the project root directory.
+
+    This repository is structured as `<root>/src/...`; this helper returns
+    `<root>` by walking up from this module's location.
+    """
+    return Path(__file__).resolve().parents[2]
+
+
 def update_network_usage_learning(bytes_sent: int, bytes_recv: int) -> bool:
     """Update network usage learning and check if the learned limit is exceeded."""
     # Delegate to the canonical implementation in `src.system.treatments`.

@@ -523,8 +523,9 @@ def get_last_ts_file(name: str = "last_ts") -> Path:
     lives under the same `logs_root` used by `get_log_paths()`.
     """
     # Create the file inside .cache at the project root
-    project_root = Path(__file__).resolve().parent.parent.parent
-    cache_dir = project_root / ".cache"
+    from ..system.helpers import get_project_root
+
+    cache_dir = get_project_root() / ".cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir / f"{name}.json"
 

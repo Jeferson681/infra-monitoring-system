@@ -105,7 +105,10 @@ def _maintenance_hourly(now: float, last_hourly: float, hourly_interval: int) ->
 
                 if agg:
                     try:
-                        write_average_log(agg, hourly=True, hourly_window_seconds=hourly_interval)
+                        # Maintenance scheduling already enforces the hourly interval;
+                        # avoid suppressing the write again via the logging subsystem's
+                        # per-log hourly window mechanism.
+                        write_average_log(agg, hourly=False, hourly_window_seconds=hourly_interval)
                     except Exception as exc:
                         logging.getLogger(__name__).debug("write_average_log failed: %s", exc, exc_info=True)
             except Exception as exc:
