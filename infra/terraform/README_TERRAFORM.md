@@ -1,17 +1,17 @@
-# Exemplos de Terraform — Uso Educacional e Demonstrativo
+# Terraform Examples — Educational / Demonstrative Use
 
-Esta pasta contém arquivos de exemplo de Terraform que demonstram conceitos de Infraestrutura como Código (IaC) aplicados ao projeto.
-Os arquivos podem ser utilizados livremente para estudo, testes locais ou provisionamento controlado de ambientes simples.
+This folder contains Terraform example files that demonstrate Infrastructure as Code (IaC) concepts in the context of this project.
+These files can be used freely for study, local tests, or controlled provisioning of simple environments.
 
-## Considerações Importantes
+## Important notes
 
-Os exemplos são mínimos e ilustrativos, voltados à compreensão de blocos, variáveis e fluxos de provisionamento.
+The examples are minimal and illustrative, focused on understanding blocks, variables, and provisioning flows.
 
-Antes de aplicar em qualquer ambiente real, revise e adapte conforme suas necessidades (rede, segurança, políticas IAM, backend remoto etc.).
+Before applying to any real environment, review and adapt to your needs (networking, security, IAM policies, remote backend, etc.).
 
-Não há integração de estado remoto (remote state) ou bloqueios de concorrência configurados por padrão.
+Remote state and concurrency locking are not configured by default.
 
-### Para validação local da sintaxe:
+### Local syntax validation
 
 ```sh
 cd infra/terraform
@@ -19,21 +19,21 @@ terraform init -backend=false
 terraform validate
 ```
 
-### Para execução segura em ambiente de testes:
+### Safe execution in a test environment
 
 ```sh
 terraform plan
 terraform apply
 ```
 
-Recomendação: utilize uma conta ou workspace isolado para evitar modificações não intencionais em ambientes críticos.
+Recommendation: use an isolated account or workspace to avoid unintended changes to critical environments.
 
 ---
 
-Para detalhes sobre limites de coleta (`psutil`), persistência (JSONL) e ativação do exporter, consulte `docs/DECISIONS.md`. Instruções de execução e exemplos estão em `docs/RUN.md`.
+For details on collection limits (`psutil`), persistence (JSONL), and exporter activation, see `docs/DECISIONS.md`. Run instructions and examples are in `docs/RUN.md`.
 
 ---
-## Em resumo
+## Summary
 
-O uso de Terraform neste projeto é plenamente funcional e opcional.
-Ele serve como base didática e também pode ser adaptado para implantações reais, considerando as diferenças entre métricas de host físico e métricas do ambiente provisionado.
+Terraform usage in this project is fully optional.
+It serves as a didactic base and can be adapted for real deployments, considering the differences between physical host metrics and metrics from the provisioned environment.

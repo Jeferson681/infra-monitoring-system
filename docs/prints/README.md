@@ -1,8 +1,8 @@
- # Galeria de Prints / Artefatos
+ # Prints / Artifacts Gallery
 
-Esta pasta contém capturas de tela e diagramas selecionados que servem como evidência do trabalho de observabilidade e das pipelines CI do projeto. As imagens são apresentadas de forma compacta com legendas; clique na miniatura para ver o arquivo em tamanho real.
+This folder contains selected screenshots and diagrams that serve as evidence of the project’s observability work and CI pipelines. Images are displayed compactly with captions; click a thumbnail to open the full-size file.
 
-> Apresentação pensada para avaliadores e recrutadores: minimalista, profissional e de leitura rápida.
+> This presentation is designed for reviewers and recruiters: minimal, professional, and quick to scan.
 ---
 
 <table>
@@ -67,4 +67,4 @@ Esta pasta contém capturas de tela e diagramas selecionados que servem como evi
 
 ---
 
-Cada imagem é um instantâneo gerado durante testes locais e execuções de CI. Use estes artefatos para preparar uma demo curta ou para inclusão no portfólio; estão intencionalmente compactos para manter a apresentação limpa.
+Each image is a snapshot generated during local tests and CI runs. Use these artifacts for a short demo or portfolio inclusion; they are intentionally compact to keep the presentation clean.

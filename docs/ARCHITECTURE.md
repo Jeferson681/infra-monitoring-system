@@ -1,15 +1,16 @@
-# Arquitetura
+# Architecture
 
-Visão: este projeto é um exportador de monitoramento focado em observability-first — um coletor leve que transforma sinais locais em métricas e registros consumíveis por Prometheus/Grafana/Loki. O componente principal roda em processos Python (`src/`) e pode operar em fluxo local (venv) ou com `docker-compose` para experimentação end-to-end.
+Vision: this project is an observability-first monitoring exporter — a lightweight collector that turns local signals into metrics and logs consumable by Prometheus/Grafana/Loki. The core runs as Python processes under `src/` and can run locally (venv) or via Docker Compose for end-to-end experimentation.
 
-Limites: o exportador coleta métricas host-aware (via `psutil`) e consome/gera JSONL em `logs/json/` como forma de persistência e replay; ele não pretende ser um agente remoto universal. Integrações mais complexas (federation, long-term storage) ficam fora do escopo inicial e podem ser delegadas a infra externa (Prometheus remotos, object storage, etc.).
+Scope/limits: the exporter collects host-aware metrics (via `psutil`) and writes/reads JSONL under `logs/json/` for persistence and replay. It is not intended to be a universal remote agent. More complex integrations (federation, long-term storage, remote collection) are out of scope and can be delegated to external infra (remote Prometheus, object storage, etc.).
 
-Componentes principais:
-- Exporter (src): coleta e expõe métricas HTTP quando habilitado por ambiente.
-- Persistência JSONL: `logs/json/` serve como fonte de ingestão/teste e como arquivo de transferência.
-- Observability stack: Prometheus para scraping, Grafana para visualização e Loki para logs.
-- Infra (opcional): `infra/terraform` contém exemplos educacionais de IaC para demonstração de deploy.
+Main components:
 
-Evolução prevista: modularizar coletores (adicionar plugins), suportar autenticação e TLS, oferecer backend opcional para retenção longa, e adicionar testes de carga/integração. Ao mover/renomear artefatos visuais, mantenha arquivos em `prints/` e atualize links relativos.
+- Exporter (`src/`): collects metrics and exposes HTTP endpoints when enabled by environment.
+- JSONL persistence: `logs/json/` acts as an ingest/test source and a handoff file format.
+- Observability stack: Prometheus for scraping, Grafana for visualization, Loki for logs.
+- Infra (optional): `infra/terraform` contains educational IaC examples.
 
-Diagrama: veja `prints/architecture.png` para uma representação visual dos limites e fluxos.
+Planned evolution: modular collectors (plugins), authentication/TLS, optional long-term retention backend, and more integration/load testing. If you move/rename visual artifacts, keep them under `prints/` and update relative links.
+
+Diagram: see `prints/architecture.png` for a visual representation of limits and flows.

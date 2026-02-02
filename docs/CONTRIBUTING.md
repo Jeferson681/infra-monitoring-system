@@ -1,94 +1,96 @@
-# Contato
-Contato para dúvidas, sugestões ou reporte de vulnerabilidades: jefersonoliveiradesousa681@gmail.com
-
 # Contributing
 
-Obrigado por considerar contribuir com este projeto! Este arquivo traz um checklist simples para revisores e contribuidores.
+Contact for questions, suggestions, or vulnerability reports: jefersonoliveiradesousa681@gmail.com
 
-## Guia rápido para revisores
+This document provides a simple checklist for reviewers and contributors.
 
-- Rodar testes locais (smoke / unit):
+## Quick reviewer guide
+
+- Run local tests (smoke / unit):
   ```powershell
   pytest -q
   ```
-- Rodar linters/formatadores:
+- Run linters/formatters:
   ```powershell
   ruff src/ tests/
   flake8 src/ tests/
   black --check src/ tests/
   ```
-- Rodar pre-commit hooks (opcional):
+- Run pre-commit hooks (optional):
   ```powershell
   pre-commit run --all-files
   ```
-- Rodar Gitleaks local antes do push (ver `SECURITY.md`):
+- Run TruffleHog locally before pushing (see `SECURITY.md`):
   ```powershell
-  docker run --rm -v ${PWD}:/repo -w /repo zricethezav/gitleaks:latest detect --source /repo
+  docker run --rm -v ${PWD}:/repo -w /repo trufflesecurity/trufflehog:latest filesystem /repo
   ```
 
-## Checklist PR (revisor):
+## PR review checklist
 
-1. CI está verde (Actions: `CI / build-ubuntu`).
-2. Cobertura (Codecov) revisada para alterações críticas.
-3. Não há segredos detectados (Gitleaks).
-4. Mensagem de commit/descritivo do PR clara.
-5. Pelo menos 1 aprovador fez revisão.
+1. CI is green (Actions: `CI / build-ubuntu`).
+2. Coverage is reviewed for critical changes.
+3. No secrets detected (TruffleHog).
+4. Commit message and PR description are clear.
+5. At least one approver reviewed the change.
 
-## Pre-push checklist (execute antes de commitar/push)
+## Pre-push checklist (run before commit/push)
 
-- Rodar testes rápidos e linters:
+- Run fast tests and linters:
   ```powershell
   pytest -q
   ruff src/ tests/
   flake8 src/ tests/
   pre-commit run --all-files
   ```
-- Rodar Gitleaks local para detectar segredos:
+- Run TruffleHog locally to detect secrets:
   ```powershell
-  docker run --rm -v ${PWD}:/repo -w /repo zricethezav/gitleaks:latest detect --source /repo
+  docker run --rm -v ${PWD}:/repo -w /repo trufflesecurity/trufflehog:latest filesystem /repo
   ```
 
-## Hadolint / Docker local
+## Hadolint (local)
 
-O `hadolint` é executado no CI durante os scans de imagem. Para executar `hadolint` localmente, você pode usar a imagem oficial:
+`hadolint` runs in CI during image scans. To run it locally, you can use the official image:
 
 ```powershell
 docker run --rm -v ${PWD}:/data -w /data hadolint/hadolint:latest hadolint Dockerfile
 ```
 
-Ou instale `hadolint` nativamente e execute `hadolint Dockerfile`.
-- Conferir Smoke import test:
-  ```powershell
-  python -c "import importlib; importlib.import_module('src'); print('import ok')"
-  ```
+Or install `hadolint` natively and run `hadolint Dockerfile`.
 
-## Webhook Discord e Tokens
-O webhook do Discord é obtido automaticamente dos segredos do GitHub, igual ao workflow de CD. Não é necessário configurar manualmente. Todos os tokens e segredos já estão definidos via GitHub Secrets.
+Smoke import test:
+
+```powershell
+python -c "import importlib; importlib.import_module('src'); print('import ok')"
+```
+
+## Discord webhook & tokens
+
+The Discord webhook is managed via GitHub Actions Secrets (same idea as the CD workflow). Do not configure it manually and never commit tokens.
 
 ## Terraform
-O Terraform permanece como placeholder didático e não será usado para provisionamento real. Credenciais AWS não são necessárias nem utilizadas neste projeto.
 
-Adicione essas etapas ao fluxo de revisão para evitar falhas visíveis no CI e vazamento de segredos.
+Terraform is a didactic placeholder in this repository and is not used for real provisioning. AWS credentials are not required.
 
-## Como rodar o projeto localmente (try-it quick)
+## How to run locally (try-it quick)
 
-1. Criar e ativar ambiente virtual:
+1. Create and activate a virtual environment:
    ```powershell
    python -m venv .venv
    .\.venv\Scripts\Activate.ps1
    pip install -r requirements.txt
    ```
-2. Rodar testes:
+2. Run tests:
    ```powershell
    pytest -q
    ```
-3. Rodar via Docker Compose (alternativa):
-   ```powershell
-   docker-compose up --build
-   # em outro terminal:
-   curl http://localhost:8000/metrics
-   ```
+3. Run via Docker Compose (alternative):
+  ```powershell
+ docker compose up --build
+ # in another terminal:
+ # Only reachable from the host if `ports:` is configured in docker-compose.yml; see docs/RUN.md
+ curl http://localhost:8000/metrics
+  ```
 
 ---
 
-Se quiser sugerir melhorias no processo de revisão, abra um issue com a tag `meta`.
+If you want to suggest improvements to the review process, open an issue with the `meta` tag.

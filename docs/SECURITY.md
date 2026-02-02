@@ -1,19 +1,17 @@
 
-# Segurança
+# Security
 
-Em caso de vulnerabilidade ou possível vazamento de credenciais neste repositório, seguir as orientações abaixo:
+If you find a vulnerability or a possible credential leak in this repository, follow the guidelines below:
 
-1. Não divulgue detalhes da vulnerabilidade publicamente.
-2. Abra um issue privado (se disponível) ou envie um e-mail para jefersonoliveiradesousa681@gmail.com com o máximo de detalhes possível (passos para reproduzir, impacto, sugestões de correção).
+1. Do not disclose details publicly.
+2. Open a private report (if available) or email jefersonoliveiradesousa681@gmail.com with as much detail as possible (repro steps, impact, suggested fixes).
 
-Avisos importantes:
+Important notes:
 
-- Nunca faça commit/versionamento de segredos (tokens, chaves privadas, senhas). Caso encontre um segredo, remova-o do histórico e gere novas credenciais imediatamente.
-- Antes de realizar push, execute o Gitleaks local para detectar segredos:
+- Never commit/version secrets (tokens, private keys, passwords). If you find a secret, remove it from history and rotate credentials immediately.
+- Before pushing, run TruffleHog locally to detect secrets:
   ```powershell
-  docker run --rm -v ${PWD}:/repo -w /repo zricethezav/gitleaks:latest detect --source /repo
+  docker run --rm -v ${PWD}:/repo -w /repo trufflesecurity/trufflehog:latest filesystem /repo
   ```
 
-O escopo de cobertura é o código-fonte deste repositório. Para reportar problemas em dependências externas, utilize os canais oficiais dos projetos afetados.
-
-Esta abordagem contribui para a segurança do projeto.
+This policy covers the source code in this repository. For issues in third-party dependencies, use the official channels of the affected projects.

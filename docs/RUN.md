@@ -1,16 +1,17 @@
-# Como Rodar (resumo)
+# How to Run (quick guide)
 
-Objetivo: instruções concisas para iniciar o projeto localmente (venv) e com Docker, além de verificações rápidas.
+Goal: concise instructions to run the project locally (venv) and with Docker, plus quick checks.
 
-## Pré-requisitos
-- Python 3.8+ instalado
-- `docker` e `docker-compose` (opcional, para fluxo com containers)
- - `pre-commit` (recomendado) — para executar hooks de qualidade e segurança
- - `hadolint` (opcional) — `hadolint` is executed in CI during image scans. To run it locally use the `hadolint/hadolint` Docker image or install `hadolint` natively.
+## Prerequisites
 
-## Execução local (resumo)
+- Python 3.8+
+- `docker` and Docker Compose (optional, for the container flow)
+- `pre-commit` (recommended) — runs quality and security hooks
+- `hadolint` (optional) — `hadolint` is executed in CI during image scans. To run it locally use the `hadolint/hadolint` Docker image or install `hadolint` natively.
 
-1) Criar e ativar virtualenv
+## Local run (summary)
+
+1) Create and activate a virtualenv
 
 ```powershell
 python -m venv .venv
@@ -18,25 +19,26 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1
 ```
 
-ou (Unix)
+or (Unix)
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 ```
 
-2) Instalar dependências
+2) Install dependencies
 
 ```bash
 python -m pip install -r requirements.txt
 ```
 
-3) Exemplos de execução
+3) Run examples
 
-Observações:
-- O arquivo `./.env` presente na raiz contém defaults (ex.: `MONITORING_EXPORTER_ADDR=127.0.0.1`). O entrypoint `src.main` tenta ler esse arquivo automaticamente e só define variáveis que não estejam presentes no ambiente do processo (conveniência para desenvolvimento local). Se preferir controlar o ambiente externamente, carregue o `.env` no shell antes de executar.
+Notes:
 
-PowerShell — carregar `.env` e executar (útil para testes locais):
+- The `./.env` file in the repository root contains defaults (e.g., `MONITORING_EXPORTER_ADDR=127.0.0.1`). The `src.main` entrypoint tries to read it automatically and only sets variables that are not already present in the process environment (local-dev convenience). If you prefer controlling the environment externally, load `.env` in your shell before running.
+
+PowerShell — load `.env` and run (useful for local tests):
 
 ```powershell
 Get-Content .env | ForEach-Object {
@@ -48,7 +50,7 @@ Get-Content .env | ForEach-Object {
 & .\.venv\Scripts\python.exe -u -m src.main -c 0 -i 1 -vv
 ```
 
-Exemplo mínimo (ligar exporter e servidor HTTP apenas localmente):
+Minimal example (enable exporter + fallback HTTP server locally):
 
 ```powershell
 $env:MONITORING_EXPORTER_ENABLE = '1'
@@ -57,46 +59,46 @@ $env:MONITORING_HTTP_ENABLE = '1'
 & .\.venv\Scripts\python.exe -u -m src.main -c 0 -i 1 -vv
 ```
 
-Expor em todas as interfaces do host (cuidado — exposição externa):
+Bind to all host interfaces (careful — external exposure):
 
 ```powershell
 $env:MONITORING_EXPORTER_ENABLE = '1'
 $env:MONITORING_HTTP_ENABLE = '1'
-$env:MONITORING_HTTP_ADDR = '0.0.0.0'  # Risco: permite acesso externo se porta for publicada
+$env:MONITORING_HTTP_ADDR = '0.0.0.0'  # Risk: allows external access if the port is published
 & .\.venv\Scripts\python.exe -u -m src.main -c 0 -i 1 -vv
 ```
 
-## Execução com Docker / docker-compose
+## Docker / Docker Compose
 
-O `docker-compose.yml` já contém serviços para `prometheus`, `grafana`, `loki`, `promtail` e o serviço da aplicação. Por padrão o compose define `MONITORING_HTTP_ADDR=0.0.0.0` no serviço da aplicação, mas **não publica portas para o host** — isto significa:
+`docker-compose.yml` already includes services for `prometheus`, `grafana`, `loki`, `promtail`, and the app service. By default, compose sets `MONITORING_HTTP_ADDR=0.0.0.0` on the app service, but **does not publish ports to the host** — which means:
 
-- Prometheus (no mesmo compose) consegue raspá‑lo via rede do compose: `http://infra-monitoring-system_app:8000/metrics`.
-- O serviço NÃO estará acessível do host/externo a menos que você adicione um `ports:` mapping (ex.: `"8000:8000"`).
+- Prometheus (inside the same compose network) can scrape it via: `http://infra-monitoring-system_app:8000/metrics`.
+- The service will NOT be reachable from the host/external networks unless you add a `ports:` mapping (e.g., `"8000:8000"`).
 
-Iniciar compose (na raiz do projeto):
+Start compose (from the project root):
 
 ```bash
 docker compose up --build -d
 ```
 
-Endpoints comuns quando portas são publicadas:
+Common endpoints when ports are published:
 - Prometheus → http://localhost:9090
 - Grafana → http://localhost:3000
 - Loki → http://localhost:3100
-- Exporter → http://localhost:8000/metrics (somente se `ports:` estiver configurado)
+- Exporter → http://localhost:8000/metrics (only if `ports:` is configured)
 
-Nota sobre compose: o `docker-compose.yml` inclui um serviço `main_http` que executa `src.exporter.main_http`; por isso o `observability/prometheus.yml` é configurado para raspar `main_http:8000`. O serviço da aplicação (`infra-monitoring-system`) pode iniciar o servidor HTTP de métricas quando `MONITORING_HTTP_ENABLE=1`, mas no compose padrão o servidor de métricas é servido por `main_http` para separar responsabilidades.
+Compose note: `docker-compose.yml` includes a `main_http` service that runs `src.exporter.main_http`; that’s why `observability/prometheus.yml` is configured to scrape `main_http:8000`. The main app service (`infra-monitoring-system`) can also start a fallback HTTP metrics server when `MONITORING_HTTP_ENABLE=1`, but in the default compose the metrics server is served by `main_http` to separate responsibilities.
 
-## Verificações rápidas
+## Quick checks
 
-- Verificar endpoint metrics:
+- Check `/metrics`:
 
 ```bash
 curl -s http://127.0.0.1:8000/metrics | head
 ```
 
-- Verificar arquivos JSONL (persistência): `logs/json/` (ex.: `logs/json/monitoring-YYYY-MM-DD.jsonl`).
-- Executar testes:
+- Check JSONL persistence files: `logs/json/` (e.g., `logs/json/monitoring-YYYY-MM-DD.jsonl`).
+- Run tests:
 
 ```bash
 pytest -q
@@ -104,7 +106,7 @@ pytest -q
 
 ### Pre-commit
 
-Rodar todos os hooks locais:
+Run all local hooks:
 
 ```powershell
 python -m pip install --upgrade pip
@@ -112,42 +114,44 @@ python -m pip install pre-commit
 pre-commit run --all-files
 ```
 
-Nota: `hadolint` é executado no CI durante os scans de imagem. Para executá-lo localmente sem instalá-lo, execute:
+Note: `hadolint` runs in CI during image scans. To run it locally without installing it, run:
 
 ```powershell
 docker run --rm -v "${PWD}":/data -w /data hadolint/hadolint:latest hadolint Dockerfile
 ```
 
-Ou instale `hadolint` nativamente e rode `hadolint Dockerfile`.
+Or install `hadolint` natively and run `hadolint Dockerfile`.
 
-## Variáveis de ambiente (exposição de métricas e runtime)
+## Environment variables (metrics exposure and runtime)
 
-Principais variáveis que afetam exposição e execução:
+Main variables that affect exposure and execution:
 
-- `MONITORING_EXPORTER_ENABLE` (0|1) — inicializa/registrador das métricas (chama `start_exporter()`); *não* inicia um servidor HTTP por si só após o refactor.
-- `MONITORING_EXPORTER_ADDR`, `MONITORING_EXPORTER_PORT` — defaults e metadata (ex.: `.env` define `127.0.0.1`/8000).
-- `MONITORING_HTTP_ENABLE` (0|1) — inicia o fallback HTTP server que expõe `/metrics` e `/health` (controlado em `src/exporter/main_http.py`).
+- `MONITORING_EXPORTER_ENABLE` (0|1) — initializes/registers metrics (calls `start_exporter()`); does not automatically start an HTTP server by itself.
+- `MONITORING_EXPORTER_ADDR`, `MONITORING_EXPORTER_PORT` — defaults and metadata (e.g., `.env` sets `127.0.0.1`/8000).
+- `MONITORING_HTTP_ENABLE` (0|1) — starts the fallback HTTP server that exposes `/metrics` and `/health` (implemented in `src/exporter/main_http.py`).
 
-	Observação: o entrypoint principal (`src/main.py`) verifica a variável de ambiente `MONITORING_HTTP_ENABLE` em tempo de execução e, quando definida para `1`, inicia o servidor HTTP de fallback chamando o handler em `src.exporter.main_http`.
-- `MONITORING_HTTP_ADDR`, `MONITORING_HTTP_PORT` — bind do fallback HTTP server. Default local: `127.0.0.1`. Orquestradores podem usar `0.0.0.0` dentro de containers para permitir raspagem por outros serviços.
-- `MONITORING_PROMTAIL_ENABLE` (0|1) — inicia o worker interno que envia heartbeats diretamente ao Loki (complementar ao serviço `promtail` do compose).
-- `MONITORING_INTERVAL_SEC`, `MONITORING_CYCLES` — controle de intervalo e tempo de execução; também podem ser definidos via CLI (`-i`, `-c`) — CLI tem precedência sobre env.
 
-Boas práticas e recomendações:
+	Note: the main entrypoint (`src/main.py`) checks `MONITORING_HTTP_ENABLE` at runtime and, when set to `1`, starts the fallback HTTP server by calling the handler in `src.exporter.main_http`.
+- `MONITORING_HTTP_ADDR`, `MONITORING_HTTP_PORT` — bind for the fallback HTTP server. Local default: `127.0.0.1`. Orchestrators may use `0.0.0.0` inside containers to allow scraping by other services.
+- `MONITORING_PROMTAIL_ENABLE` (0|1) — starts the internal worker that sends heartbeats directly to Loki (complements the `promtail` service in compose).
+- `MONITORING_INTERVAL_SEC`, `MONITORING_CYCLES` — interval and runtime controls; can also be set via CLI (`-i`, `-c`) — CLI takes precedence over env.
 
-- Mantenha default do app em `127.0.0.1` para execuções locais.
-- Em `docker-compose`, use `MONITORING_HTTP_ADDR=0.0.0.0` **sem** publicar portas (`ports:`) para limitar exposição ao escopo do compose (outros containers), não ao host.
-- Só publique portas no `docker-compose.yml` se precisar acessar `/metrics` a partir do host; se publicar, proteja com firewall/proxy/TLS se necessário.
-- Para evitar diferenças de runtime entre serviços, padronize a imagem base Python usada em `docker-compose` (ex.: `python:3.13-slim`).
-- Para CI: adicione checks de segurança (Trivy) e linting de Dockerfile (hadolint) para detectar regressões de segurança e estilo.
-- Para testes que precisam que o post-treatment seja síncrono, use `POST_TREATMENT_SYNC=1`.
+Best practices and recommendations:
 
-## Troubleshooting breve
+- Keep the app default as `127.0.0.1` for local runs.
+- In Docker Compose, use `MONITORING_HTTP_ADDR=0.0.0.0` **without** publishing ports (`ports:`) to limit exposure to the compose network (other containers), not the host.
+- Only publish ports in `docker-compose.yml` if you need to access `/metrics` from the host; if you publish, protect it with firewall/proxy/TLS as needed.
+- To reduce runtime differences across services, standardize the Python base image used in your compose services (e.g., `python:3.13-slim`).
+- For CI: keep security checks (Trivy) and Dockerfile linting (hadolint) to catch regressions.
+- For tests that require synchronous post-treatment, use `POST_TREATMENT_SYNC=1`.
 
-- Se `/metrics` não aparecer: verificar `MONITORING_EXPORTER_ENABLE` e `MONITORING_EXPORTER_PORT`.
-- Permissões de rede/portas podem bloquear o binding; escolha `127.0.0.1` para testes locais.
-- Em containers, `psutil` coleta o contexto do container — use `node_exporter` para métricas do host.
+## Troubleshooting
 
-## Notas
-- Paths importantes: `logs/json/`, `docs/prints/` (artefatos visuais).
-- Windows vs Unix: comandos de export/definição de variáveis diferem (veja exemplos acima).
+- If `/metrics` does not show up: check `MONITORING_EXPORTER_ENABLE` and `MONITORING_EXPORTER_PORT`.
+- Network/port permissions may block binding; use `127.0.0.1` for local tests.
+- In containers, `psutil` collects the container context — use `node_exporter` for host-level metrics.
+
+## Notes
+
+- Important paths: `logs/json/`, `docs/prints/` (visual artifacts).
+- Windows vs Unix: environment variable commands differ (see examples above).

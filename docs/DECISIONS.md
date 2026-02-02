@@ -1,57 +1,57 @@
-# Decisões Técnicas
+# Technical Decisions
 
-Este documento consolida as principais decisões técnicas e arquiteturais do projeto (dependências, formatos de dados e escolhas de integração).
-As decisões estavam anteriormente distribuídas em múltiplos arquivos (`DOCS.md`, `README.md`, `infra/terraform/README_TERRAFORM.md`) e foram reunidas aqui para **facilitar revisão, manutenção e discussão técnica**. As referências originais permanecem listadas ao final.
-
----
-
-## Decisões arquiteturais
-
-- **Coleta host-aware com psutil**
-	O projeto utiliza `psutil` para obter métricas do host (CPU, memória, disco e interfaces).
-	**Racional:** coleta local direta, baixa dependência de agentes externos e compatibilidade multiplataforma.
-
-- **Formato JSONL para exportação e arquivamento**
-	O exportador gera e consome arquivos JSONL para persistência e replay de métricas/logs.
-	**Racional:** suporte a streaming incremental, fácil ingestão por pipelines e boa aderência a testes de integração.
-
-- **Ativação do exportador via variável de ambiente**
-	A exposição de métricas é controlada por `MONITORING_EXPORTER_ENABLE=1`.
-	**Racional:** habilitação explícita conforme ambiente (local, CI), evitando exposição acidental.
-
-- **Persistência e replay de dados**
-	Os dados persistidos ficam em `logs/json/` (ex.: `logs/json/monitoring-YYYY-MM-DD.jsonl`), sendo reutilizados pelo exportador para exposição de métricas.
-	**Racional:** possibilita replay determinístico e validação em testes e pipelines.
+This document consolidates the project’s main technical and architectural decisions (dependencies, data formats, and integration choices).
+Previously, these decisions were spread across multiple files (`docs/DOCS.md`, `README.md`, `infra/terraform/README_TERRAFORM.md`) and were centralized here to make review, maintenance, and technical discussion easier.
 
 ---
 
-## Decisões de integração
+## Architecture decisions
 
-- **Arquitetura orientada à observabilidade (observability-first)**
-	Integração planejada para exportador → Prometheus → Grafana, com Loki para logs.
-	**Racional:** permite experimentação local via `docker-compose` e integração com stacks reais de observabilidade.
+- **Host-aware collection with psutil**
+	The project uses `psutil` to collect host metrics (CPU, memory, disk, and interfaces).
+	**Rationale:** direct local collection, low dependency on external agents, and cross-platform compatibility.
 
-- **Terraform como demonstração de IaC**
-	A pasta `infra/terraform` contém exemplos educacionais de infraestrutura.
-	**Racional:** demonstrar conceitos de IaC sem tornar o Terraform parte do core do sistema ou da coleta de métricas.
+- **JSONL format for export and archiving**
+	The exporter writes and reads JSONL files for persistence and replay of metrics/logs.
+	**Rationale:** incremental streaming-friendly format, easy pipeline ingestion, and good fit for integration tests.
+
+- **Exporter activation via environment variable**
+	Metrics exposure is controlled by `MONITORING_EXPORTER_ENABLE=1`.
+	**Rationale:** explicit enablement by environment (local, CI), avoiding accidental exposure.
+
+- **Persistence and replay**
+	Persisted data lives under `logs/json/` (e.g., `logs/json/monitoring-YYYY-MM-DD.jsonl`) and can be reused by the exporter when exposing metrics.
+	**Rationale:** deterministic replay and easier validation in tests and pipelines.
 
 ---
 
-## Critérios para mudanças futuras
+## Integration decisions
 
-- Qualquer mudança estrutural relevante (ex.: mover ou renomear arquivos de documentação) deve:
-	1. Preservar backup em `docs/originals/`
-	2. Atualizar links relativos afetados
-	3. Executar verificação rápida (`pytest -q`) e checar endpoints do exportador
+- **Observability-first architecture**
+	Planned integration flow: exporter → Prometheus → Grafana, with Loki for logs.
+	**Rationale:** enables local experimentation via Docker Compose and integration with real observability stacks.
+
+- **Terraform as an IaC demonstration**
+	The `infra/terraform` folder contains educational infra examples.
+	**Rationale:** demonstrate IaC concepts without making Terraform part of the core runtime or the local metrics collection.
 
 ---
 
-## Referências
+## Criteria for future changes
 
-- `DOCS.md`
+- Any relevant structural change (e.g., moving/renaming documentation files) should:
+	1. Preserve a backup under `docs/originals/`
+	2. Update impacted relative links
+	3. Run a quick check (`pytest -q`) and verify exporter endpoints
+
+---
+
+## References
+
+- `docs/DOCS.md`
 - `README.md`
-- `README_TERRAFORM.md` (quando aplicável)
- - `docs/diagrams/`
- - `prints/`
+- `infra/terraform/README_TERRAFORM.md` (when applicable)
+- `docs/diagrams/`
+- `prints/`
 
-**Nota:** mantenha backups dos arquivos originais em `docs/originals/` antes de mover/renomear qualquer documento.
+Note: keep backups of original documents under `docs/originals/` before moving/renaming any documentation.
