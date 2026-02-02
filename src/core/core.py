@@ -6,6 +6,10 @@ keeps runtime orchestration concise to ease testing and reuse.
 """
 
 import logging
+import uuid
+import time as _time
+
+from ..exporter.prometheus import expose_metric as _expose_metric
 
 from .emitter import emit_snapshot as _emit_snapshot
 
@@ -17,6 +21,13 @@ from ..monitoring.metrics import collect_metrics as _collect_metrics
 from ..monitoring.averages import ensure_last_ts_exists
 
 _NO_DATA_STR = "No data"
+
+# Lightweight app-level observability (minimal, in-memory counters exposed
+# via exporter.expose_metric). Intended as small, portfolio-friendly signals.
+_RUN_ID = str(uuid.uuid4())
+_CYCLE = 0
+_APP_LOOP_ITERATIONS = 0
+_APP_COLLECT_ERRORS = 0
 
 # Maintenance helpers are provided by `src.system.maintenance` (imported above).
 
@@ -124,10 +135,22 @@ def _collect_and_emit(state: SystemState, verbose_level: int) -> dict:
     falls back to an empty mapping on failure. Post-evaluation treatments are
     triggered for metrics that exceed configured thresholds.
     """
+    global _CYCLE, _APP_LOOP_ITERATIONS, _APP_COLLECT_ERRORS
+
+    # increment cycle counter for this run
+    _CYCLE += 1
+    _APP_LOOP_ITERATIONS += 1
     try:
         metrics = _collect_metrics()
     except Exception:
         metrics = {}
+
+        # record a collection error metric
+        _APP_COLLECT_ERRORS += 1
+        try:
+            _expose_metric("app_collect_errors_total", float(_APP_COLLECT_ERRORS), "Number of collection errors")
+        except Exception:
+            logging.getLogger(__name__).debug("Failed to expose collect error metric", exc_info=True)
 
         # Daily network-usage learning: attempt to record bytes sent/received
         # for the learning model when collection fails partially. This is
@@ -162,7 +185,23 @@ def _collect_and_emit(state: SystemState, verbose_level: int) -> dict:
             attempt_treatment(state, metric_name, {"value": value, "threshold": crit})
     result = {"state": state_name, "metrics": metrics}
     snapshot = getattr(state, "current_snapshot", None)
-    _emit_snapshot(snapshot if isinstance(snapshot, dict) else None, result, verbose_level)
+    # Enrich snapshot with run context (run_id, cycle) for logs/ingestion
+    snap_to_emit = snapshot.copy() if isinstance(snapshot, dict) else {}
+    snap_to_emit["run_id"] = _RUN_ID
+    snap_to_emit["cycle"] = _CYCLE
+
+    # Expose lightweight app metrics (iterations, last success time, loop duration)
+    try:
+        _expose_metric("app_loop_iterations_total", float(_APP_LOOP_ITERATIONS), "Loop iterations counter (approx)")
+    except Exception:
+        logging.getLogger(__name__).debug("Failed to expose loop iterations metric", exc_info=True)
+
+    try:
+        _expose_metric("app_last_success_timestamp_seconds", float(_time.time()), "Last successful loop timestamp")
+    except Exception:
+        logging.getLogger(__name__).debug("Failed to expose last success timestamp metric", exc_info=True)
+
+    _emit_snapshot(snap_to_emit if isinstance(snap_to_emit, dict) else None, result, verbose_level)
 
     # Log de ciclo completo em modo verbose
     if verbose_level >= 2:
