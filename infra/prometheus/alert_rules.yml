@@ -1,4 +1,33 @@
 groups:
+  - name: infra-monitoring-alerts
+    rules:
+      - alert: ExporterStale
+        expr: time() - app_last_success_timestamp_seconds > 120
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Exporter appears stale"
+          description: "No successful collection for > 2 minutes."
+
+      - alert: LoopSlowP95
+        expr: histogram_quantile(0.95, rate(app_loop_duration_seconds_bucket[5m])) > 1
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Main loop p95 latency high"
+          description: "The monitoring loop p95 exceeds 1s over the last 5 minutes."
+
+      - alert: CollectErrorsIncrease
+        expr: increase(app_collect_errors_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: info
+        annotations:
+          summary: "Collection errors detected"
+          description: "One or more collection errors were observed in the last 5 minutes."
+groups:
 - name: system-alerts
   rules:
   - alert: HighCPUUsage
