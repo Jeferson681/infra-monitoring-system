@@ -8,14 +8,14 @@ improves testability of formatting and output behavior.
 """
 
 import logging
-from ..exporter.prometheus import expose_metric as _expose_metric
-
-# Lightweight counter for snapshot emits
-_APP_SNAPSHOT_EMITS = 0
 
 # ruff: noqa: D401
 from ..monitoring.formatters import normalize_for_display, format_snapshot_human
 from ..system.logs import write_log
+from ..exporter.prometheus import expose_metric as _expose_metric
+
+# Lightweight counter for snapshot emits
+_APP_SNAPSHOT_EMITS = 0
 
 _NO_DATA_STR = "No data"
 
