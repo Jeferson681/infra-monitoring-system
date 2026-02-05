@@ -2,11 +2,11 @@
 
 [![CI](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/ci.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/ci.yml) [![CD](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/cd.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/cd.yml) [![Coverage](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/tests-coverage.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/tests-coverage.yml/badge.svg) [![Dependabot](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/dependabot/dependabot-updates/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/dependabot/dependabot-updates) [![TruffleHog Secrets Scan](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/trufflehog-scan.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/trufflehog-scan.yml) [![Snyk](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/snyk-scan.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/snyk-scan.yml) [![Trivy](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/trivy-scan.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/trivy-scan.yml) [![Terraform](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/terraform.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/terraform.yml)
 
-Application for local metrics collection and exposition, focused on observability and DevOps automation practices.
+Educational target: a small, host-aware Python program for learning observability, testing CI/CD flows, and exercising DevOps tools in a controlled environment. This repository is intended as a teaching/demo artifact and not as a production DevOps product.
 
-Problem it solves:
+Problem it solves (learning context):
 
-Provides a controlled target to test and validate CI/CD pipelines, dashboards, and IaC demonstrations locally, avoiding external dependencies and simplifying technical evaluations.
+Provides a controlled target to practice and validate CI/CD pipelines, dashboards, and IaC demonstrations locally, avoiding external dependencies and simplifying technical evaluations.
 
 Architecture (summary):
 

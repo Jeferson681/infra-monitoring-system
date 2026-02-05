@@ -1,10 +1,10 @@
 # Infra Monitoring System
 
-Aplicação para coleta e exposição de métricas locais, focada em observabilidade e automação de práticas DevOps.
+Alvo educacional: um pequeno programa Python host-aware para aprendizado em observabilidade, testes de pipelines CI/CD e exercícios de ferramentas DevOps em um ambiente controlado. Este repositório é destinado a ensino e demonstração, não a uso como produto DevOps de produção.
 
-Problema que resolve:
+Problema que resolve (contexto de aprendizagem):
 
-Fornece um alvo controlado para testar e validar pipelines CI/CD, dashboards e demonstrações de IaC em ambiente local, evitando dependências externas e simplificando avaliações técnicas.
+Fornece um alvo controlado para praticar e validar pipelines CI/CD, dashboards e demonstrações de IaC em ambiente local, evitando dependências externas e simplificando avaliações técnicas.
 
 Arquitetura (resumo):
 
