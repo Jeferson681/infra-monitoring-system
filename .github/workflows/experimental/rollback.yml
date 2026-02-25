@@ -10,15 +10,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Pull última imagem estável
+        if: ${{ secrets.DOCKER_USERNAME != '' }}
         run: |
-          docker pull ${{ secrets.DOCKERHUB_USERNAME }}/monitoring:stable
+          docker pull ${{ secrets.DOCKER_USERNAME }}/infra-monitoring-system:stable
       - name: Subir imagem estável
         run: |
-          docker-compose down
-          docker-compose up -d --force-recreate
+          docker compose -f docker/docker-compose.yml down
+          docker compose -f docker/docker-compose.yml up -d --force-recreate
       - name: Verificar status dos containers
         run: |
-          docker-compose ps
-          docker-compose logs
+          docker compose -f docker/docker-compose.yml ps
+          docker compose -f docker/docker-compose.yml logs
   # Moved to experimental for future use
   # This file is now located at: c:\Users\jefer\Documents\Python_project\monitoring\.github\workflows\experimental\rollback.yml

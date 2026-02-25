@@ -33,14 +33,14 @@ jobs:
           echo "Smoke tests are intentionally minimal. Run full tests locally or in CI build job."
 
       - name: Notify success on Discord (CI)
-        if: success()
+        if: ${{ success() && secrets.DISCORD_WEBHOOK_URL != '' }}
         run: |
           curl -H "Content-Type: application/json" \
             -d "{\"content\": \"✅ CI smoke passed: ${{ github.workflow }} on ${{ github.ref_name }} (run #${{ github.run_number }})\"}" \
             ${{ secrets.DISCORD_WEBHOOK_URL }}
 
       - name: Notify failure on Discord (CI)
-        if: failure()
+        if: ${{ failure() && secrets.DISCORD_WEBHOOK_URL != '' }}
         run: |
           curl -H "Content-Type: application/json" \
             -d "{\"content\": \"❌ CI smoke failed: ${{ github.workflow }} on ${{ github.ref_name }} (run #${{ github.run_number }}). See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \

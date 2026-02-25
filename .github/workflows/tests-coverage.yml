@@ -30,14 +30,14 @@ jobs:
           files: coverage.xml
 
       - name: Notify success on Discord (Tests & Coverage)
-        if: success()
+        if: ${{ success() && secrets.DISCORD_WEBHOOK_URL != '' }}
         run: |
           curl -H "Content-Type: application/json" \
             -d "{\"content\": \"✅ Tests & Coverage passed: ${{ github.workflow }} on ${{ github.ref_name }} (run #${{ github.run_number }})\"}" \
             ${{ secrets.DISCORD_WEBHOOK_URL }}
 
       - name: Notify failure on Discord (Tests & Coverage)
-        if: failure()
+        if: ${{ failure() && secrets.DISCORD_WEBHOOK_URL != '' }}
         run: |
           curl -H "Content-Type: application/json" \
             -d "{\"content\": \"❌ Tests & Coverage failed: ${{ github.workflow }} on ${{ github.ref_name }} (run #${{ github.run_number }}). See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
