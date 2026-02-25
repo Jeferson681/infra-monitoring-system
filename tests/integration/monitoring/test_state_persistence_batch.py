@@ -42,9 +42,9 @@ def test_write_post_treatment_fallback(monkeypatch, tmp_path):
     snap = {"state": "post_treatment", "metrics": {}}
     # call fallback; agora só cria em .cache na raiz do projeto
     ss._write_post_treatment_fallback(snap)
-    from pathlib import Path
+    from src.system.helpers import get_project_root
 
-    project_root = Path(__file__).resolve().parents[2]
+    project_root = get_project_root()
     cache_file = project_root / ".cache" / st._POST_TREATMENT_FILENAME
     assert cache_file.exists()
 

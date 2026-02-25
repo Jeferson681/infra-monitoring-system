@@ -98,7 +98,22 @@ def expose_metric(name: str, value: float, description: str = "") -> None:
     san = _sanitize_metric_name(name)
     try:
         if san not in _gauges:
-            g = Gauge(san, description or f"Gauge for {name}")
+            try:
+                g = Gauge(san, description or f"Gauge for {name}")
+            except ValueError:
+                # The metric may already be registered in the default registry.
+                # This can happen in tests that clear `_gauges` without resetting
+                # prometheus_client's global registry. Best-effort: reuse the
+                # existing collector when available.
+                try:
+                    from prometheus_client import REGISTRY  # type: ignore
+
+                    existing = getattr(REGISTRY, "_names_to_collectors", {}).get(san)
+                    if existing is None:
+                        raise
+                    g = existing
+                except Exception:
+                    raise
             _gauges[san] = g
         else:
             g = _gauges[san]
