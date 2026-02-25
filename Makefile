@@ -1,6 +1,6 @@
 # Makefile para automação de tarefas comuns
 
-.PHONY: lint test coverage build up down logs
+.PHONY: lint test coverage build up down logs run docker-up docker-down docker-logs
 
 lint:
 	poetry run ruff src/ tests/
@@ -24,3 +24,13 @@ down:
 
 logs:
 	docker-compose logs
+
+# Minimal, predictable developer commands (as per minimal restructure plan)
+run:
+	python -m src.main
+
+docker-up: up
+
+docker-down: down
+
+docker-logs: logs
