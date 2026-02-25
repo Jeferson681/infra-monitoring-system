@@ -56,3 +56,5 @@ print.txt
 # docs/originals/ (versionado agora para manter histórico de backups)
 
 ```
+protection_master.json
+protection_min.json
