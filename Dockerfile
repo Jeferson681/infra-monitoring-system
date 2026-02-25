@@ -19,6 +19,7 @@ RUN set -eux; \
 	else \
 		apt-get install -y --no-install-recommends openssl; \
 	fi; \
+	apt-get install -y --no-install-recommends curl; \
 	rm -rf /var/lib/apt/lists/*; \
 	python -m pip install --upgrade --no-cache-dir "pip>=25.3"; \
 	python -m pip install --no-cache-dir -r requirements.txt
@@ -27,6 +28,14 @@ RUN set -eux; \
 COPY src/ ./src/
 COPY pyproject.toml ./
 COPY .flake8 ./
+
+# Run as non-root (recommended by the minimal restructure plan)
+RUN set -eux; \
+	adduser --disabled-password --gecos "" appuser; \
+	mkdir -p /app/logs /app/reports /app/.cache; \
+	chown -R appuser:appuser /app
+
+USER appuser
 
 # Comando padrão
 CMD ["python", "-m", "src.main"]

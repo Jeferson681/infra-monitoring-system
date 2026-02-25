@@ -1,11 +1,10 @@
-
-
-version: '3.8'
 services:
   infra-monitoring-system:
     build: .
     container_name: infra-monitoring-system_app
     command: python -m src.main
+    env_file:
+      - .env
     environment:
       # Control program execution and exposition behavior via MONITORING_* envs
       - MONITORING_HTTP_ENABLE=0
@@ -40,6 +39,8 @@ services:
     build: .
     container_name: infra-monitoring-main-http
     command: python -u -m src.exporter.main_http
+    env_file:
+      - .env
     environment:
       - MONITORING_HTTP_ADDR=0.0.0.0
       - MONITORING_HTTP_PORT=8000
