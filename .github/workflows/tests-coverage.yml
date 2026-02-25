@@ -31,15 +31,23 @@ jobs:
           files: coverage.xml
 
       - name: Notify success on Discord (Tests & Coverage)
-        if: ${{ success() && secrets.DISCORD_WEBHOOK_URL != '' }}
+        if: ${{ success() }}
         run: |
-          curl -H "Content-Type: application/json" \
-            -d "{\"content\": \"✅ Tests & Coverage passed: ${{ github.workflow }} on ${{ github.ref_name }} (run #${{ github.run_number }})\"}" \
-            ${{ secrets.DISCORD_WEBHOOK_URL }}
+          if [ -n "${{ secrets.DISCORD_WEBHOOK_URL }}" ]; then
+            curl -H "Content-Type: application/json" \
+              -d "{\"content\": \"✅ Tests & Coverage passed: ${{ github.workflow }} on ${{ github.ref_name }} (run #${{ github.run_number }})\"}" \
+              ${{ secrets.DISCORD_WEBHOOK_URL }}
+          else
+            echo "DISCORD_WEBHOOK_URL not set; skipping notification."
+          fi
 
       - name: Notify failure on Discord (Tests & Coverage)
-        if: ${{ failure() && secrets.DISCORD_WEBHOOK_URL != '' }}
+        if: ${{ failure() }}
         run: |
-          curl -H "Content-Type: application/json" \
-            -d "{\"content\": \"❌ Tests & Coverage failed: ${{ github.workflow }} on ${{ github.ref_name }} (run #${{ github.run_number }}). See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
-            ${{ secrets.DISCORD_WEBHOOK_URL }}
+          if [ -n "${{ secrets.DISCORD_WEBHOOK_URL }}" ]; then
+            curl -H "Content-Type: application/json" \
+              -d "{\"content\": \"❌ Tests & Coverage failed: ${{ github.workflow }} on ${{ github.ref_name }} (run #${{ github.run_number }}). See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
+              ${{ secrets.DISCORD_WEBHOOK_URL }}
+          else
+            echo "DISCORD_WEBHOOK_URL not set; skipping notification."
+          fi

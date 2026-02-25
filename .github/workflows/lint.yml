@@ -35,15 +35,23 @@ jobs:
         run: bandit -r src/ --skip B404,B603,B104
 
       - name: Notify success on Discord (Lint)
-        if: ${{ success() && secrets.DISCORD_WEBHOOK_URL != '' }}
+        if: ${{ success() }}
         run: |
-          curl -H "Content-Type: application/json" \
-            -d "{\"content\": \"✅ Lint passed: ${{ github.workflow }} on ${{ github.ref_name }} (run #${{ github.run_number }})\"}" \
-            ${{ secrets.DISCORD_WEBHOOK_URL }}
+          if [ -n "${{ secrets.DISCORD_WEBHOOK_URL }}" ]; then
+            curl -H "Content-Type: application/json" \
+              -d "{\"content\": \"✅ Lint passed: ${{ github.workflow }} on ${{ github.ref_name }} (run #${{ github.run_number }})\"}" \
+              ${{ secrets.DISCORD_WEBHOOK_URL }}
+          else
+            echo "DISCORD_WEBHOOK_URL not set; skipping notification."
+          fi
 
       - name: Notify failure on Discord (Lint)
-        if: ${{ failure() && secrets.DISCORD_WEBHOOK_URL != '' }}
+        if: ${{ failure() }}
         run: |
-          curl -H "Content-Type: application/json" \
-            -d "{\"content\": \"❌ Lint failed: ${{ github.workflow }} on ${{ github.ref_name }} (run #${{ github.run_number }}). See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
-            ${{ secrets.DISCORD_WEBHOOK_URL }}
+          if [ -n "${{ secrets.DISCORD_WEBHOOK_URL }}" ]; then
+            curl -H "Content-Type: application/json" \
+              -d "{\"content\": \"❌ Lint failed: ${{ github.workflow }} on ${{ github.ref_name }} (run #${{ github.run_number }}). See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
+              ${{ secrets.DISCORD_WEBHOOK_URL }}
+          else
+            echo "DISCORD_WEBHOOK_URL not set; skipping notification."
+          fi

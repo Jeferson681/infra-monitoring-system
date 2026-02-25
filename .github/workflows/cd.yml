@@ -46,17 +46,25 @@ jobs:
           docker compose -f docker/docker-compose.yml pull || echo "Falha ao puxar imagens, verifique permissões e rede."
           docker compose -f docker/docker-compose.yml up -d --build || echo "Falha ao subir containers, verifique logs."
       - name: Notify success on Discord (staging)
-        if: ${{ success() && secrets.DISCORD_WEBHOOK_URL != '' }}
+        if: ${{ success() }}
         run: |
-          curl -H "Content-Type: application/json" \
-            -d '{"content": "✅ Deploy to STAGING succeeded: ${{ github.repository }} on ${{ github.ref_name }} (run #${{ github.run_number }})"}' \
-            ${{ secrets.DISCORD_WEBHOOK_URL }}
+          if [ -n "${{ secrets.DISCORD_WEBHOOK_URL }}" ]; then
+            curl -H "Content-Type: application/json" \
+              -d '{"content": "✅ Deploy to STAGING succeeded: ${{ github.repository }} on ${{ github.ref_name }} (run #${{ github.run_number }})"}' \
+              ${{ secrets.DISCORD_WEBHOOK_URL }}
+          else
+            echo "DISCORD_WEBHOOK_URL not set; skipping notification."
+          fi
       - name: Notify failure on Discord (staging)
-        if: ${{ failure() && secrets.DISCORD_WEBHOOK_URL != '' }}
+        if: ${{ failure() }}
         run: |
-          curl -H "Content-Type: application/json" \
-            -d '{"content": "❌ Deploy to STAGING failed: See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
-            ${{ secrets.DISCORD_WEBHOOK_URL }}
+          if [ -n "${{ secrets.DISCORD_WEBHOOK_URL }}" ]; then
+            curl -H "Content-Type: application/json" \
+              -d '{"content": "❌ Deploy to STAGING failed: See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
+              ${{ secrets.DISCORD_WEBHOOK_URL }}
+          else
+            echo "DISCORD_WEBHOOK_URL not set; skipping notification."
+          fi
 
   deploy-production:
     # Production deploy is manual for portfolio safety. Run via "Run workflow" in Actions
@@ -83,14 +91,22 @@ jobs:
         run: |
           echo "[DEMO] Esta etapa representa o deploy real em AWS ECS (prod). Para ativar, siga as instruções acima."
       - name: Notify success on Discord (prod)
-        if: ${{ success() && secrets.DISCORD_WEBHOOK_URL != '' }}
+        if: ${{ success() }}
         run: |
-          curl -H "Content-Type: application/json" \
-            -d '{"content": "✅ Deploy to PRODUCTION succeeded: ${{ github.repository }} on ${{ github.ref_name }} (run #${{ github.run_number }})"}' \
-            ${{ secrets.DISCORD_WEBHOOK_URL }}
+          if [ -n "${{ secrets.DISCORD_WEBHOOK_URL }}" ]; then
+            curl -H "Content-Type: application/json" \
+              -d '{"content": "✅ Deploy to PRODUCTION succeeded: ${{ github.repository }} on ${{ github.ref_name }} (run #${{ github.run_number }})"}' \
+              ${{ secrets.DISCORD_WEBHOOK_URL }}
+          else
+            echo "DISCORD_WEBHOOK_URL not set; skipping notification."
+          fi
       - name: Notify failure on Discord (prod)
-        if: ${{ failure() && secrets.DISCORD_WEBHOOK_URL != '' }}
+        if: ${{ failure() }}
         run: |
-          curl -H "Content-Type: application/json" \
-            -d '{"content": "❌ Deploy to PRODUCTION failed: See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
-            ${{ secrets.DISCORD_WEBHOOK_URL }}
+          if [ -n "${{ secrets.DISCORD_WEBHOOK_URL }}" ]; then
+            curl -H "Content-Type: application/json" \
+              -d '{"content": "❌ Deploy to PRODUCTION failed: See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
+              ${{ secrets.DISCORD_WEBHOOK_URL }}
+          else
+            echo "DISCORD_WEBHOOK_URL not set; skipping notification."
+          fi
