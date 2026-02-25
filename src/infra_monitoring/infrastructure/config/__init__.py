@@ -1,1 +1,0 @@
-"""Legacy config package (temporary)."""
