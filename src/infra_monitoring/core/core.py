@@ -29,7 +29,7 @@ _CYCLE = 0
 _APP_LOOP_ITERATIONS = 0
 _APP_COLLECT_ERRORS = 0
 
-# Maintenance helpers are provided by `src.system.maintenance` (imported above).
+# Maintenance helpers are provided by `infra_monitoring.infra.system.maintenance` (imported above).
 
 
 # ---------------------------------------------------------------------------

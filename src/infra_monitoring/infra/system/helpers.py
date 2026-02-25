@@ -27,7 +27,7 @@ def get_project_root() -> Path:
 
 def update_network_usage_learning(bytes_sent: int, bytes_recv: int) -> bool:
     """Update network usage learning and check if the learned limit is exceeded."""
-    # Delegate to the canonical implementation in `src.system.treatments`.
+    # Delegate to the canonical implementation in `infra_monitoring.infra.system.treatments`.
     # Keep this wrapper for API compatibility and to avoid duplicating logic.
     try:
         from .treatments import update_network_usage_learning as _impl
