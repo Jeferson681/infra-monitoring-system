@@ -1,6 +1,6 @@
 import pytest
 
-from src.system import time_helpers as th
+from infra_monitoring.infra.system import time_helpers as th
 
 
 def test_dfs_scan_and_localized_keys():

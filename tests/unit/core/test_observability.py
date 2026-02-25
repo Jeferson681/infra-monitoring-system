@@ -1,4 +1,4 @@
-import src.core.core as core
+import infra_monitoring.core.core as core
 
 
 def test_snapshot_contains_run_id_and_cycle(monkeypatch):

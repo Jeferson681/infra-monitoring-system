@@ -1,7 +1,7 @@
 import os
 import tempfile
 import json
-from src.exporter import prometheus
+from infra_monitoring.api.exporter import prometheus
 
 
 def make_fake_jsonl_dir(metrics_dict):

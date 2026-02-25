@@ -7,7 +7,7 @@ few other small helpers. They are intentionally minimal and platform-safe.
 
 def test_read_env_file_nonexistent(tmp_path):
     """read_env_file retorna mapping vazio para ficheiro inexistente."""
-    from src.system.helpers import read_env_file
+    from infra_monitoring.infra.system.helpers import read_env_file
 
     p = tmp_path / "nope.env"
     assert not p.exists()
@@ -16,7 +16,7 @@ def test_read_env_file_nonexistent(tmp_path):
 
 def test_read_env_file_parsing(tmp_path):
     """read_env_file parses key/value pairs and ignores comments/bad lines."""
-    from src.system.helpers import read_env_file
+    from infra_monitoring.infra.system.helpers import read_env_file
 
     p = tmp_path / "test.env"
     p.write_text(
@@ -38,7 +38,7 @@ BADLINE
 
 def test_merge_env_items_precedence(tmp_path, monkeypatch):
     """merge_env_items sobrescreve valores do ficheiro com os do process_env."""
-    from src.system.helpers import merge_env_items
+    from infra_monitoring.infra.system.helpers import merge_env_items
 
     p = tmp_path / "envf.env"
     p.write_text("A=1\nB=fromfile\n", encoding="utf-8")
@@ -51,7 +51,7 @@ def test_merge_env_items_precedence(tmp_path, monkeypatch):
 
 def test_validate_host_port():
     """validate_host_port valida pares host:port razoáveis."""
-    from src.system.helpers import validate_host_port
+    from infra_monitoring.infra.system.helpers import validate_host_port
 
     assert validate_host_port("127.0.0.1", 80)
     assert not validate_host_port("not-an-ip", 80)
@@ -61,7 +61,7 @@ def test_validate_host_port():
 
 def test_disk_candidate_paths_smoke():
     """Smoke test para candidatos de disco (retorna lista com Path/str)."""
-    from src.system.helpers import _disk_candidate_paths
+    from infra_monitoring.infra.system.helpers import _disk_candidate_paths
 
     cand = _disk_candidate_paths()
     assert isinstance(cand, list)
@@ -74,7 +74,7 @@ def test_disk_candidate_paths_smoke():
 
 def test_reap_children_nonblocking_smoke():
     """Smoke test para reap_children_nonblocking (deve ser seguro em todas as plataformas)."""
-    from src.system.helpers import reap_children_nonblocking
+    from infra_monitoring.infra.system.helpers import reap_children_nonblocking
 
     # This is a smoke test: ensure the call is safe on all platforms and returns a list
     res = reap_children_nonblocking()
@@ -83,6 +83,6 @@ def test_reap_children_nonblocking_smoke():
 
 def test_import_helpers():
     """Importa o módulo de helpers do sistema sem erros."""
-    import src.system.helpers as helpers
+    import infra_monitoring.infra.system.helpers as helpers
 
     assert helpers is not None

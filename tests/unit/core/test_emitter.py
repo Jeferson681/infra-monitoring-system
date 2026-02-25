@@ -3,10 +3,12 @@ import importlib
 
 def test_format_human_fallback(monkeypatch):
     """If format_snapshot_human raises, fallback should return a minimal state string."""
-    fake = importlib.import_module("src.core.emitter")
+    fake = importlib.import_module("infra_monitoring.core.emitter")
 
     # monkeypatch format_snapshot_human to raise
-    monkeypatch.setattr("src.core.emitter.format_snapshot_human", lambda s, r: (_ for _ in ()).throw(Exception("boom")))
+    monkeypatch.setattr(
+        "infra_monitoring.core.emitter.format_snapshot_human", lambda s, r: (_ for _ in ()).throw(Exception("boom"))
+    )
 
     res = fake._format_human_msg(None, {"state": "CRITICAL"})
     assert "state=CRITICAL" in res
@@ -14,7 +16,7 @@ def test_format_human_fallback(monkeypatch):
 
 def test_emit_snapshot_writes_json(monkeypatch):
     """emit_snapshot should call write_log to persist JSON feed."""
-    mod = importlib.reload(importlib.import_module("src.core.emitter"))
+    mod = importlib.reload(importlib.import_module("infra_monitoring.core.emitter"))
     calls = {}
 
     def fake_write_log(name, level, message, **kwargs):
@@ -22,7 +24,7 @@ def test_emit_snapshot_writes_json(monkeypatch):
         calls["name"] = name
         calls["msg"] = message
 
-    monkeypatch.setattr("src.core.emitter.write_log", fake_write_log)
+    monkeypatch.setattr("infra_monitoring.core.emitter.write_log", fake_write_log)
 
     # should not raise
     mod.emit_snapshot({"state": "STABLE"}, {"state": "STABLE"}, verbose_level=0)
@@ -32,7 +34,7 @@ def test_emit_snapshot_writes_json(monkeypatch):
 
 def test_print_short_and_long(capsys):
     """Validates short and long snapshot printing to stdout."""
-    mod = importlib.reload(importlib.import_module("src.core.emitter"))
+    mod = importlib.reload(importlib.import_module("infra_monitoring.core.emitter"))
 
     # short: snapshot with summary_short
     snap = {"summary_short": "quick summary"}

@@ -1,4 +1,4 @@
-from src.monitoring import state as s
+from infra_monitoring.services.monitoring import state as s
 
 
 def test_compute_metric_states_empty():

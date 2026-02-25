@@ -1,6 +1,6 @@
 import datetime
 import pytest
-from src.system.network_learning import NetworkUsageLearningHandler
+from infra_monitoring.infra.system.network_learning import NetworkUsageLearningHandler
 
 
 def test_record_and_limit(tmp_path):

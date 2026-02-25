@@ -1,5 +1,5 @@
 def test_import_core():
     """Importa o core sem erros."""
-    import src.core.core as core
+    import infra_monitoring.core.core as core
 
     assert core is not None

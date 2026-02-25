@@ -1,6 +1,6 @@
 import os
 
-from src.system import log_helpers
+from infra_monitoring.infra.system import log_helpers
 
 
 def test_sanitize_and_normalize_and_builders():

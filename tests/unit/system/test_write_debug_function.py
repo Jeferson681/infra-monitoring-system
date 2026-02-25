@@ -8,7 +8,7 @@ def test_write_debug_function_creates_files(tmp_path, monkeypatch):
 
     # configure handlers
     from src.main import _setup_debug_file_handler
-    from src.system.logs import get_debug_file_path
+    from infra_monitoring.infra.system.logs import get_debug_file_path
 
     _setup_debug_file_handler()
 

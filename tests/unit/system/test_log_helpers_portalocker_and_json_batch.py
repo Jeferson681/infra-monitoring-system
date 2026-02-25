@@ -1,4 +1,4 @@
-from src.system import log_helpers as lh
+from infra_monitoring.infra.system import log_helpers as lh
 
 
 def test_write_text_with_portalocker(monkeypatch, tmp_path):

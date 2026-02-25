@@ -1,7 +1,7 @@
 import subprocess
 import psutil
 
-from src.monitoring import metrics
+from infra_monitoring.services.monitoring import metrics
 
 
 def test_safe_float_accepts_numbers_and_rejects_nan_inf():

@@ -1,6 +1,6 @@
 """Tests for core.emitter helpers: formatting and emitting snapshots."""
 
-from src.core import emitter
+from infra_monitoring.core import emitter
 
 
 def test_format_and_print_helpers(capsys):
@@ -14,7 +14,7 @@ def test_format_and_print_helpers(capsys):
 
 def test_emit_snapshot_writes_and_prints(monkeypatch, capsys):
     """emit_snapshot delegates to write_log and prints short/long outputs for verbose levels."""
-    monkeypatch.setattr("src.system.logs.write_log", lambda *a, **k: None)
+    monkeypatch.setattr("infra_monitoring.core.emitter.write_log", lambda *a, **k: None)
     snap = {"metrics": {"cpu_percent": 1}, "summary_short": "s"}
     result = {"state": "STABLE"}
     emitter.emit_snapshot(snap, result, verbose_level=1)

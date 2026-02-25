@@ -2,7 +2,7 @@ import time
 from pathlib import Path
 
 
-from src.system import logs as logs_mod
+from infra_monitoring.infra.system import logs as logs_mod
 
 
 def test_get_log_paths_and_dirs(tmp_path, monkeypatch):

@@ -1,6 +1,6 @@
 def test_start_exporter_initializes_without_starting_server(monkeypatch):
     """start_exporter deve inicializar métricas, mas não iniciar um servidor HTTP."""
-    import src.exporter.prometheus as prom
+    import infra_monitoring.api.exporter.prometheus as prom
 
     # Garantir estado limpo
     monkeypatch.setattr(prom, "_server_started", False)

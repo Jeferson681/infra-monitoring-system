@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 import psutil
 
-from src.monitoring import metrics
+from infra_monitoring.services.monitoring import metrics
 
 
 def test_now_and_is_stale_cache_behavior(monkeypatch):

@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from src.monitoring import metrics
+from infra_monitoring.services.monitoring import metrics
 import sys
 import pytest
 

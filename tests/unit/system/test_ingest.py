@@ -20,7 +20,7 @@ def test_iter_jsonl_plain(tmp_path):
     content = "{" + '"a": 1' + "}\n\ninvalid json\n{" + '"b": 2' + "}\n"
     _write_text(p, content)
 
-    from src.system.ingest import iter_jsonl
+    from infra_monitoring.infra.system.ingest import iter_jsonl
 
     items = list(iter_jsonl(p))
     assert items == [{"a": 1}, {"b": 2}]
@@ -32,7 +32,7 @@ def test_iter_jsonl_gzip(tmp_path):
     content = "{" + '"x": 10' + "}\n{" + '"y": 20' + "}\n"
     _write_gzip(p, content)
 
-    from src.system.ingest import iter_jsonl
+    from infra_monitoring.infra.system.ingest import iter_jsonl
 
     items = list(iter_jsonl(p))
     assert items == [{"x": 10}, {"y": 20}]
@@ -41,7 +41,7 @@ def test_iter_jsonl_gzip(tmp_path):
 def test_iter_jsonl_missing(tmp_path):
     """Missing file should raise FileNotFoundError immediately."""
     p = tmp_path / "does_not_exist.jsonl"
-    from src.system.ingest import iter_jsonl
+    from infra_monitoring.infra.system.ingest import iter_jsonl
 
     with pytest.raises(FileNotFoundError):
         next(iter_jsonl(p))

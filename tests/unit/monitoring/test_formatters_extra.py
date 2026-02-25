@@ -1,4 +1,4 @@
-import src.monitoring.formatters as formatters
+import infra_monitoring.services.monitoring.formatters as formatters
 
 
 def test_normalize_for_display_basic():

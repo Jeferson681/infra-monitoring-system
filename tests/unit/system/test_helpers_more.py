@@ -1,6 +1,6 @@
 import importlib
 
-mod = importlib.import_module("src.system.helpers")
+mod = importlib.import_module("infra_monitoring.infra.system.helpers")
 
 
 def test_validate_host_port():

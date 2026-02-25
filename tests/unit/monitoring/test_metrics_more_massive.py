@@ -1,7 +1,7 @@
 import subprocess
 import socket
 
-from src.monitoring import metrics as m
+from infra_monitoring.services.monitoring import metrics as m
 
 
 def test_safe_float_and_counter():

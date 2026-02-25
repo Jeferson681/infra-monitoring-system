@@ -4,7 +4,7 @@ import subprocess
 from pathlib import Path
 import tempfile
 
-from src.system import treatments as tr
+from infra_monitoring.infra.system import treatments as tr
 
 
 def test_platform_candidates():

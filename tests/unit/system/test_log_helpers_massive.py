@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from src.system import log_helpers as lh
+from infra_monitoring.infra.system import log_helpers as lh
 
 
 def test_sanitize_log_name_and_long_name():

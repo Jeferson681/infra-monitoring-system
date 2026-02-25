@@ -2,10 +2,10 @@ import json
 import time
 import pytest
 
-from src.system.log_helpers import build_human_line
-from src.system.logs import get_log_paths
-from src.config.settings import load_settings
-from src.monitoring.state import SystemState
+from infra_monitoring.infra.system.log_helpers import build_human_line
+from infra_monitoring.infra.system.logs import get_log_paths
+from infra_monitoring.infra.config.settings import load_settings
+from infra_monitoring.services.monitoring.state import SystemState
 
 
 def test_human_multiline_env(tmp_path, monkeypatch):

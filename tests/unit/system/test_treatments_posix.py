@@ -1,7 +1,7 @@
 import sys
 import types
 
-from src.system import treatments as tr
+from infra_monitoring.infra.system import treatments as tr
 
 
 def test_returns_false_when_not_posix(monkeypatch):

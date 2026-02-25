@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 import pytest
 
-from src.core import args as args_mod
+from infra_monitoring.core import args as args_mod
 
 
 def test_configure_argparser_defaults():

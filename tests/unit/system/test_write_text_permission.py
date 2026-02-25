@@ -12,7 +12,7 @@ def test_write_text_permission_error(monkeypatch, tmp_path):
 
     monkeypatch.setattr(pathlib.Path, "open", _open_raise, raising=True)
 
-    from src.system.log_helpers import write_text
+    from infra_monitoring.infra.system.log_helpers import write_text
 
     path = tmp_path / "log" / "f.log"
     ok = write_text(path, "teste")

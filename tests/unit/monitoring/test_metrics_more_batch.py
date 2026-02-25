@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from src.monitoring import metrics as m
+from infra_monitoring.services.monitoring import metrics as m
 
 
 def test_parse_first_float_from_text():

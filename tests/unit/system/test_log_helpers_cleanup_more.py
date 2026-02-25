@@ -2,7 +2,7 @@ import os
 import pytest
 from pathlib import Path
 
-from src.system import log_helpers as lh
+from infra_monitoring.infra.system import log_helpers as lh
 
 
 def test_atomic_move_cleanup_when_dst_exists(tmp_path, monkeypatch):

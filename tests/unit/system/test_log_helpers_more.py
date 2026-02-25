@@ -3,7 +3,7 @@ import gzip
 
 def test_write_json_fallback(tmp_path):
     """write_json should serialize non-serializable objects with fallback."""
-    from src.system.log_helpers import write_json
+    from infra_monitoring.infra.system.log_helpers import write_json
 
     p = tmp_path / "out.jsonl"
     # set is not JSON serializable by default
@@ -14,7 +14,7 @@ def test_write_json_fallback(tmp_path):
 
 def test_write_text_with_portalocker(monkeypatch, tmp_path):
     """write_text should attempt to use portalocker when available."""
-    import src.system.log_helpers as lh
+    import infra_monitoring.infra.system.log_helpers as lh
 
     class DummyLock:
         def __init__(self):
@@ -35,7 +35,7 @@ def test_write_text_with_portalocker(monkeypatch, tmp_path):
 
 def test_build_json_entry_and_format_extras():
     """build_json_entry and _format_extras_for_human produce expected outputs."""
-    from src.system.log_helpers import build_json_entry, _format_extras_for_human
+    from infra_monitoring.infra.system.log_helpers import build_json_entry, _format_extras_for_human
 
     e = build_json_entry("t", "INFO", "msg", extra={"k": "v"})
     assert e["ts"] == "t" and e["level"] == "INFO"
@@ -45,7 +45,7 @@ def test_build_json_entry_and_format_extras():
 
 def test_atomic_move_and_compress(tmp_path):
     """atomic_move_to_archive and compress_file should move and compress files."""
-    from src.system.log_helpers import atomic_move_to_archive, compress_file, ROTATING_SUFFIX
+    from infra_monitoring.infra.system.log_helpers import atomic_move_to_archive, compress_file, ROTATING_SUFFIX
 
     src = tmp_path / "log.txt"
     src.write_text("hello")

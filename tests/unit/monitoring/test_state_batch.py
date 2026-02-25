@@ -1,4 +1,4 @@
-from src.monitoring import state
+from infra_monitoring.services.monitoring import state
 
 
 def test_compute_metric_states_edge_cases():

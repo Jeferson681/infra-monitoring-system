@@ -1,6 +1,6 @@
 import importlib
 
-mod = importlib.import_module("src.monitoring.metrics")
+mod = importlib.import_module("infra_monitoring.services.monitoring.metrics")
 
 
 def test_safe_float_and_counter():

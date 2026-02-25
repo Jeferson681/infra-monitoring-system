@@ -1,7 +1,7 @@
 import time
 
-from src.system import logs as logs_mod
-from src.system import log_helpers as lh
+from infra_monitoring.infra.system import logs as logs_mod
+from infra_monitoring.infra.system import log_helpers as lh
 
 
 def test_get_log_paths_creates_dirs(tmp_path, monkeypatch):

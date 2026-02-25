@@ -1,5 +1,5 @@
 import datetime
-from src.system.network_learning import NetworkUsageLearningHandler
+from infra_monitoring.infra.system.network_learning import NetworkUsageLearningHandler
 
 
 def test_network_learning_real():

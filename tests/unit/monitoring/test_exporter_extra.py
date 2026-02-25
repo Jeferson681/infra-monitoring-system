@@ -1,4 +1,4 @@
-from src.exporter import prometheus
+from infra_monitoring.api.exporter import prometheus
 
 
 def test_sanitize_metric_name_and_no_prom(monkeypatch):

@@ -4,9 +4,9 @@ import time
 
 import pytest
 
-import src.monitoring.averages as averages
-import src.monitoring.formatters as formatters
-from src.system.time_helpers import extract_epoch
+import infra_monitoring.services.monitoring.averages as averages
+import infra_monitoring.services.monitoring.formatters as formatters
+from infra_monitoring.infra.system.time_helpers import extract_epoch
 
 
 def test__extract_epoch_numeric_and_iso():

@@ -1,4 +1,4 @@
-from src.monitoring import metrics as m
+from infra_monitoring.services.monitoring import metrics as m
 
 
 def test_cache_concurrent_returns_cached(monkeypatch):

@@ -1,4 +1,4 @@
-from src.system import time_helpers
+from infra_monitoring.infra.system import time_helpers
 
 
 def test_epoch_from_numeric_and_parse():

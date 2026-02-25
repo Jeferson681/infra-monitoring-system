@@ -2,7 +2,7 @@ import os
 import time
 import importlib
 
-mod = importlib.import_module("src.system.log_helpers")
+mod = importlib.import_module("infra_monitoring.infra.system.log_helpers")
 
 
 def test_sanitize_log_name_fallback():

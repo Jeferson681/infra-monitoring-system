@@ -6,7 +6,7 @@ from datetime import datetime
 
 def test_sanitize_and_normalize():
     """sanitize_log_name e normalize_message_for_human comportam-se como esperado."""
-    from src.system.log_helpers import sanitize_log_name, normalize_message_for_human
+    from infra_monitoring.infra.system.log_helpers import sanitize_log_name, normalize_message_for_human
 
     assert sanitize_log_name("../etc/passwd") != "../etc/passwd"
     assert sanitize_log_name("") == "debug_log"
@@ -19,7 +19,7 @@ def test_sanitize_and_normalize():
 
 def test_build_json_entry_and_human_line(monkeypatch):
     """build_json_entry cria dicionário e build_human_line alterna legacy/multiline."""
-    from src.system.log_helpers import build_json_entry, build_human_line
+    from infra_monitoring.infra.system.log_helpers import build_json_entry, build_human_line
 
     j = build_json_entry("ts", "INFO", "ok", {"a": 1, "msg": "shadow"})
     # existing keys should be preserved and collisions renamed
@@ -39,7 +39,7 @@ def test_build_json_entry_and_human_line(monkeypatch):
 
 def test_write_text_with_and_without_portalocker(tmp_path, monkeypatch):
     """write_text deve gravar com e sem portalocker."""
-    from src.system import log_helpers as lh
+    from infra_monitoring.infra.system import log_helpers as lh
 
     p = tmp_path / "t.log"
 
@@ -67,7 +67,7 @@ def test_write_text_with_and_without_portalocker(tmp_path, monkeypatch):
 
 def test_write_json_fallback(tmp_path):
     """write_json deve serializar com fallback para objetos não JSON-serializáveis."""
-    from src.system.log_helpers import write_json
+    from infra_monitoring.infra.system.log_helpers import write_json
 
     p = tmp_path / "j.jsonl"
     # sets are not JSON serializable; write_json should fallback using str
@@ -78,7 +78,7 @@ def test_write_json_fallback(tmp_path):
 
 def test_atomic_move_and_compress(tmp_path):
     """atomic_move_to_archive e compress_file devem mover e comprimir arquivos."""
-    from src.system.log_helpers import atomic_move_to_archive, compress_file, is_older_than
+    from infra_monitoring.infra.system.log_helpers import atomic_move_to_archive, compress_file, is_older_than
 
     src = tmp_path / "src.txt"
     src.write_text("payload")
@@ -110,7 +110,7 @@ def test_atomic_move_and_compress(tmp_path):
 
 def test_ensure_dir_writable(tmp_path):
     """ensure_dir_writable cria diretório e permite escrita."""
-    from src.system.log_helpers import ensure_dir_writable
+    from infra_monitoring.infra.system.log_helpers import ensure_dir_writable
 
     d = tmp_path / "subdir"
     assert ensure_dir_writable(d)
@@ -120,7 +120,7 @@ def test_ensure_dir_writable(tmp_path):
 
 def test_sanitize_log_name_basic():
     """sanitize_log_name deve limpar nomes perigosos."""
-    from src.system.log_helpers import sanitize_log_name
+    from infra_monitoring.infra.system.log_helpers import sanitize_log_name
 
     assert sanitize_log_name("normal-name.log") == "normal-name.log"
     # sanitize_log_name keeps only the basename and replaces unsafe chars
@@ -129,7 +129,7 @@ def test_sanitize_log_name_basic():
 
 def test_build_human_line_legacy_and_multiline(monkeypatch):
     """build_human_line deve alternar entre legacy e multiline."""
-    from src.system.log_helpers import build_human_line
+    from infra_monitoring.infra.system.log_helpers import build_human_line
 
     ts = "2025-10-15T12:00:00Z"
     # Legacy mode off: when message has no internal newlines, we expect single-line
@@ -150,7 +150,7 @@ def test_build_human_line_legacy_and_multiline(monkeypatch):
 
 def test_normalize_message_for_human_and_truncate():
     """normalize_message_for_human remove novas linhas e trunca."""
-    from src.system.log_helpers import normalize_message_for_human
+    from infra_monitoring.infra.system.log_helpers import normalize_message_for_human
 
     assert normalize_message_for_human(None) == ""
     assert normalize_message_for_human("long\nline").startswith("long")
@@ -158,7 +158,7 @@ def test_normalize_message_for_human_and_truncate():
 
 def test_format_date_for_log():
     """format_date_for_log deve formatar objetos date/datetime corretamente."""
-    from src.system.log_helpers import format_date_for_log
+    from infra_monitoring.infra.system.log_helpers import format_date_for_log
 
     d = datetime(2020, 1, 2)
     assert format_date_for_log(d) == "2020-01-02"
@@ -166,7 +166,7 @@ def test_format_date_for_log():
 
 def test_is_older_than_and_ensure_dir_writable(tmp_path):
     """ensure_dir_writable cria pastas e is_older_than mede corretamente."""
-    from src.system.log_helpers import is_older_than, ensure_dir_writable
+    from infra_monitoring.infra.system.log_helpers import is_older_than, ensure_dir_writable
 
     f = tmp_path / "t.txt"
     f.write_text("x")

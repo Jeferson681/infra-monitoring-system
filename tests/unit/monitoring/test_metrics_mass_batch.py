@@ -1,7 +1,7 @@
 import subprocess
 from types import SimpleNamespace
 
-from src.monitoring import metrics as m
+from infra_monitoring.services.monitoring import metrics as m
 
 
 def test_parse_ping_output_variants(monkeypatch):

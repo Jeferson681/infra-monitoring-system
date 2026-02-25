@@ -4,7 +4,7 @@ import importlib
 import pytest
 
 
-settings_mod = importlib.import_module("src.config.settings")
+settings_mod = importlib.import_module("infra_monitoring.infra.config.settings")
 
 
 def test_coerce_threshold_invalid_types():

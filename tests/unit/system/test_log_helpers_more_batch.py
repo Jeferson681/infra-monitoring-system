@@ -1,4 +1,4 @@
-from src.system import log_helpers as lh
+from infra_monitoring.infra.system import log_helpers as lh
 
 
 import os

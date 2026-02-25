@@ -1,7 +1,7 @@
 import sys
 
 
-from src.monitoring import metrics as m
+from infra_monitoring.services.monitoring import metrics as m
 
 
 def test_reset_cache_timestamps_and_is_stale():
@@ -51,7 +51,7 @@ def test_export_some_metrics_with_prom(monkeypatch):
 
     fake = FakeExp()
     # Insert fake module into sys.modules so import works inside function
-    sys.modules["src.exporter.prometheus"] = fake
+    sys.modules["infra_monitoring.api.exporter.prometheus"] = fake
 
     try:
         m._export_some_metrics(metrics)
@@ -60,7 +60,7 @@ def test_export_some_metrics_with_prom(monkeypatch):
         names = [c[0] for c in fake.calls]
         assert "monitoring_cpu_percent" in names
     finally:
-        del sys.modules["src.exporter.prometheus"]
+        del sys.modules["infra_monitoring.api.exporter.prometheus"]
 
 
 def test_export_some_metrics_no_prom(monkeypatch):
@@ -69,7 +69,7 @@ def test_export_some_metrics_no_prom(monkeypatch):
     # If exporter import fails, function should silently continue
     metrics = {"cpu_percent": None, "memory_percent": None, "disk_percent": None}
     # ensure no module present
-    if "src.exporter.prometheus" in sys.modules:
-        del sys.modules["src.exporter.prometheus"]
+    if "infra_monitoring.api.exporter.prometheus" in sys.modules:
+        del sys.modules["infra_monitoring.api.exporter.prometheus"]
     # Should not raise
     m._export_some_metrics(metrics)
