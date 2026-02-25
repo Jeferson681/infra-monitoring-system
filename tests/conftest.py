@@ -1,5 +1,5 @@
 """Test-scoped fixtures and hooks.
 
-Intentionally minimal: the repository-level `conftest.py` sets up the import
-path for the current project layout.
+Intentionally minimal: the import path is controlled via `pytest.ini`
+(`pythonpath = src`) for the current project layout.
 """
