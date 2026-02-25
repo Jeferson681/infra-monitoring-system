@@ -24,6 +24,10 @@ Terraform mirrors the same idea via two small modules under `infra/terraform/mod
 
 Note: this example does **not** provision the full observability stack from Compose (Prometheus/Grafana/Loki/Promtail). It stays intentionally minimal and didactic.
 
+Provider note:
+
+This example and its modules use the `kreuzwerker/docker` Terraform provider. Each module explicitly declares the provider source to ensure Terraform resolves the correct provider implementation during initialization. This keeps the example self-contained and avoids ambiguity with similarly named providers.
+
 ### Local syntax validation
 
 ```sh
