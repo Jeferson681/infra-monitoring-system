@@ -8,7 +8,7 @@ monitoring loop and treatment subsystems.
 
 import os
 from pathlib import Path
-from ..system.helpers import merge_env_items, read_env_file
+from infra_monitoring.infra.system.helpers import merge_env_items, read_env_file
 
 # Global constants and defaults
 STATE_STABLE = "STABLE"

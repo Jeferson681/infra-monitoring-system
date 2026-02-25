@@ -38,11 +38,11 @@ class NetworkUsageLearningHandler:
         today = self.date_func()
         now_dt = datetime.datetime.now().isoformat()
         entry = {"bytes_sent": bytes_sent, "bytes_recv": bytes_recv, "date": today.isoformat(), "timestamp": now_dt}
-        from src.system.helpers import ensure_cache_dir_exists
+        from infra_monitoring.infra.system.helpers import ensure_cache_dir_exists
 
         ensure_cache_dir_exists()
         # Load all existing entries
-        from src.system.helpers import read_jsonl
+        from infra_monitoring.infra.system.helpers import read_jsonl
 
         entries = read_jsonl(self.LEARNING_FILE)
         # Remove any entry from the same day
@@ -76,7 +76,7 @@ class NetworkUsageLearningHandler:
     # a CLI/management endpoint that invokes `_save_data({})`.
 
     def _load_data(self):
-        from src.system.helpers import read_jsonl
+        from infra_monitoring.infra.system.helpers import read_jsonl
 
         entries = read_jsonl(self.LEARNING_FILE)
         # Fallback: try reading from the monitoring jsonl if not enough data
@@ -86,7 +86,7 @@ class NetworkUsageLearningHandler:
         return entries
 
     def _save_data(self, data):
-        from src.system.helpers import ensure_cache_dir_exists
+        from infra_monitoring.infra.system.helpers import ensure_cache_dir_exists
 
         ensure_cache_dir_exists()
         with self.LEARNING_FILE.open("w", encoding="utf-8") as f:

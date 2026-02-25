@@ -12,7 +12,7 @@ import psutil
 import time  # Needed for uptime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
-from src.exporter.promtail import send_log_to_loki
+from infra_monitoring.api.exporter.promtail import send_log_to_loki
 
 
 # Default path to the system metrics JSONL directory
@@ -44,7 +44,7 @@ class HealthHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(status).encode("utf-8"))
         elif self.path == "/metrics":
             try:
-                from src.exporter.prometheus import get_metrics_bytes
+                from infra_monitoring.api.exporter.prometheus import get_metrics_bytes
 
                 payload = get_metrics_bytes()
                 self.send_response(200)

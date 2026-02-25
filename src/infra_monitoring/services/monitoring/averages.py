@@ -14,8 +14,8 @@ import logging
 import time
 from .formatters import _build_long_from_metrics, _fmt_bytes_human, format_used_files_lines, format_duration
 from .state import compute_metric_states
-from ..system.logs import write_log
-from ..system.time_helpers import extract_epoch
+from infra_monitoring.infra.system.logs import write_log
+from infra_monitoring.infra.system.time_helpers import extract_epoch
 
 # imports kept minimal; avoid unused imports that ruff flags
 
@@ -459,7 +459,7 @@ def _build_metrics_src_from_aggregate(aggregate: Dict[str, Any]) -> Dict[str, An
     if ts_iso:
         # Delegate parsing to centralized helper to support many timestamp formats
         try:
-            from ..system.time_helpers import extract_epoch as _extract_epoch  # local import
+            from infra_monitoring.infra.system.time_helpers import extract_epoch as _extract_epoch  # local import
 
             parsed = _extract_epoch({"time_to": ts_iso}) if not isinstance(ts_iso, (int, float)) else float(ts_iso)
             metrics_src["timestamp"] = parsed if parsed is not None else ts_iso
@@ -523,7 +523,7 @@ def get_last_ts_file(name: str = "last_ts") -> Path:
     lives under the same `logs_root` used by `get_log_paths()`.
     """
     # Create the file inside .cache at the project root
-    from ..system.helpers import get_project_root
+    from infra_monitoring.infra.system.helpers import get_project_root
 
     cache_dir = get_project_root() / ".cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -554,7 +554,7 @@ def persist_last_time(last_ts: Optional[float] = None, name: str = "last_ts") ->
         )
         # best-effort: try append via write_text as fallback
         try:
-            from ..system.log_helpers import write_text
+            from infra_monitoring.infra.system.log_helpers import write_text
 
             write_text(fpath, json.dumps(entry, ensure_ascii=False) + "\n")
         except Exception:

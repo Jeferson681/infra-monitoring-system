@@ -10,8 +10,8 @@ from __future__ import annotations
 import logging
 
 
-from ..system.logs import rotate_logs, compress_old_logs, safe_remove, get_log_paths
-from ..monitoring.averages import aggregate_last_seconds, write_average_log
+from infra_monitoring.infra.system.logs import rotate_logs, compress_old_logs, safe_remove, get_log_paths
+from infra_monitoring.services.monitoring.averages import aggregate_last_seconds, write_average_log
 
 
 def _read_maintenance_intervals() -> tuple[int, int, int, int]:

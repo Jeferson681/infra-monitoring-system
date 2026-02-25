@@ -125,7 +125,7 @@ def _format_timestamp_line(ts_val) -> str:
         return "Date/time: Unavailable"
     try:
         # Delegate parsing to centralized time helper which accepts multiple formats
-        from ..system.time_helpers import _parse_epoch_from_value  # type: ignore
+        from infra_monitoring.infra.system.time_helpers import _parse_epoch_from_value  # type: ignore
         import datetime
 
         parsed = _parse_epoch_from_value(ts_val)

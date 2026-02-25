@@ -9,16 +9,16 @@ import logging
 import uuid
 import time as _time
 
-from ..exporter.prometheus import expose_metric as _expose_metric
+from ..api.exporter.prometheus import expose_metric as _expose_metric
 
 from .emitter import emit_snapshot as _emit_snapshot
 
-from ..system.logs import ensure_log_dirs_exist
-from ..system.maintenance import _read_maintenance_intervals, _run_maintenance
-from ..monitoring.state import SystemState
-from ..config.settings import get_valid_thresholds
-from ..monitoring.metrics import collect_metrics as _collect_metrics
-from ..monitoring.averages import ensure_last_ts_exists
+from ..infra.system.logs import ensure_log_dirs_exist
+from ..infra.system.maintenance import _read_maintenance_intervals, _run_maintenance
+from ..services.monitoring.state import SystemState
+from ..infra.config.settings import get_valid_thresholds
+from ..services.monitoring.metrics import collect_metrics as _collect_metrics
+from ..services.monitoring.averages import ensure_last_ts_exists
 
 _NO_DATA_STR = "No data"
 
@@ -156,7 +156,7 @@ def _collect_and_emit(state: SystemState, verbose_level: int) -> dict:
         # for the learning model when collection fails partially. This is
         # best-effort and must not raise.
         try:
-            from src.monitoring.handlers import network_learning_handler
+            from infra_monitoring.services.monitoring.handlers import network_learning_handler
 
             bytes_sent = metrics.get("bytes_sent")
             bytes_recv = metrics.get("bytes_recv")
@@ -173,7 +173,7 @@ def _collect_and_emit(state: SystemState, verbose_level: int) -> dict:
 
     state_name = state.evaluate_metrics(metrics)
     # After evaluating metrics, check and attempt treatments for critical metrics
-    from src.monitoring.handlers import attempt_treatment
+    from infra_monitoring.services.monitoring.handlers import attempt_treatment
 
     thresholds = getattr(state, "thresholds", {})
     for metric_name, limits in thresholds.items():

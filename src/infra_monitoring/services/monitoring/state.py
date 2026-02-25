@@ -13,7 +13,7 @@ from typing import Any, Optional
 import logging
 import os
 
-from ..config.settings import load_settings
+from infra_monitoring.infra.config.settings import load_settings
 from .formatters import normalize_for_display as _normalize_for_display
 
 # State constants
@@ -142,7 +142,7 @@ class SystemState:
         """
         # Update dynamic network thresholds using learned limits
         try:
-            from src.system.network_learning import NetworkUsageLearningHandler
+            from infra_monitoring.infra.system.network_learning import NetworkUsageLearningHandler
 
             learning = NetworkUsageLearningHandler()
             limit = learning.get_current_limit()
@@ -268,8 +268,8 @@ class SystemState:
 
     def _write_post_treatment_primary(self, snap: dict[str, Any]) -> None:
         """Primary path: use .cache in project root and helper write_json."""
-        from ..system.log_helpers import write_json
-        from ..system.helpers import get_project_root
+        from infra_monitoring.infra.system.log_helpers import write_json
+        from infra_monitoring.infra.system.helpers import get_project_root
         import time as _time
 
         cache_dir = get_project_root() / _CACHE_DIRNAME
@@ -277,7 +277,7 @@ class SystemState:
         write_json(cache_dir / _POST_TREATMENT_FILENAME, snap)
 
         # Mantém registro em logs/json/monitoring-*.jsonl normalmente
-        from ..system.logs import get_log_paths
+        from infra_monitoring.infra.system.logs import get_log_paths
 
         lp = get_log_paths()
         entry = {"ts": datetime.now(timezone.utc).isoformat(), "level": "INFO", "msg": "post_treatment"}
@@ -288,13 +288,13 @@ class SystemState:
 
     def _write_post_treatment_fallback(self, snap: dict[str, Any]) -> None:
         """Fallback path: write only to .cache in project root."""
-        from ..system.helpers import get_project_root
+        from infra_monitoring.infra.system.helpers import get_project_root
         import json as _json
 
         cache_dir = get_project_root() / _CACHE_DIRNAME
         cache_dir.mkdir(parents=True, exist_ok=True)
         try:
-            from ..system.log_helpers import write_json as _write_json
+            from infra_monitoring.infra.system.log_helpers import write_json as _write_json
 
             _write_json(cache_dir / _POST_TREATMENT_FILENAME, snap)
         except Exception:
@@ -408,11 +408,11 @@ class SystemState:
     def _persist_post_treatment_snapshot(self, snap: dict[str, Any]) -> None:
         try:
             # import get_log_paths removed; no longer necessary
-            from ..system.log_helpers import write_json  # type: ignore
+            from infra_monitoring.infra.system.log_helpers import write_json  # type: ignore
 
             # get_log_paths() removed; no longer necessary
             # Corrige para sempre criar .cache na raiz do projeto
-            from ..system.helpers import get_project_root
+            from infra_monitoring.infra.system.helpers import get_project_root
 
             hist_path = get_project_root() / _CACHE_DIRNAME / _POST_TREATMENT_FILENAME
             hist_path.parent.mkdir(parents=True, exist_ok=True)
@@ -420,7 +420,7 @@ class SystemState:
                 write_json(hist_path, snap)
             except Exception:
                 try:
-                    from ..system.log_helpers import write_text as _write_text
+                    from infra_monitoring.infra.system.log_helpers import write_text as _write_text
                     import json as _json
 
                     _write_text(hist_path, _json.dumps(snap, ensure_ascii=False) + "\n")

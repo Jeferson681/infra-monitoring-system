@@ -9,9 +9,9 @@ import time
 import logging
 from typing import Any
 
-from src.system import treatments
-from src.system.network_learning import NetworkUsageLearningHandler
-from src.config import settings
+from infra_monitoring.infra.system import treatments
+from infra_monitoring.infra.system.network_learning import NetworkUsageLearningHandler
+from infra_monitoring.infra.config import settings
 
 network_learning_handler = NetworkUsageLearningHandler()
 

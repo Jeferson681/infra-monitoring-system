@@ -19,7 +19,7 @@ from typing import Any, Callable
 import psutil
 from pathlib import Path
 
-from ..system.helpers import validate_host_port, _disk_candidate_paths
+from infra_monitoring.infra.system.helpers import validate_host_port, _disk_candidate_paths
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +163,7 @@ def _export_some_metrics(metrics: dict[str, float | int | str | None]) -> None:
     This is a best-effort integration: failures are logged and ignored.
     """
     try:
-        from ..exporter.prometheus import expose_metric
+        from infra_monitoring.api.exporter.prometheus import expose_metric
 
         for key in ("cpu_percent", "memory_percent", "disk_percent"):
             try:
