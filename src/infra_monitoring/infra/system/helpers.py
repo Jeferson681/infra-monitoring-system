@@ -22,7 +22,9 @@ def get_project_root() -> Path:
     This repository is structured as `<root>/src/...`; this helper returns
     `<root>` by walking up from this module's location.
     """
-    return Path(__file__).resolve().parents[2]
+    # helpers.py lives at: <root>/src/infra_monitoring/infra/system/helpers.py
+    # Walk up four levels to reach the repository root ("<root>").
+    return Path(__file__).resolve().parents[4]
 
 
 def update_network_usage_learning(bytes_sent: int, bytes_recv: int) -> bool:
