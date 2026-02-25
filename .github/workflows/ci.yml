@@ -11,6 +11,8 @@ jobs:
   smoke:
     name: Smoke quick-check
     runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: src
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
