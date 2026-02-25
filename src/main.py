@@ -87,39 +87,22 @@ def main(argv: list[str] | None = None) -> None:
         # Only start the fallback HTTP server when explicitly enabled to avoid
         # starting two competing metric servers (prometheus_client vs fallback).
         if os.getenv("MONITORING_HTTP_ENABLE", "0") in ("1", "true", "yes"):
-            # If exporter already started a metrics server, skip to avoid bind conflicts.
-            try:
-                from infra_monitoring.api.exporter import prometheus as _prom
+            # The exporter initialization (`start_exporter`) registers metrics but does not
+            # start any HTTP server. When MONITORING_HTTP_ENABLE is set, always start the
+            # fallback HTTP server to expose /health and /metrics.
+            from infra_monitoring.api.exporter.main_http import run_http_server
+            import threading
 
-                if getattr(_prom, "_server_started", False):
-                    _logging.getLogger(__name__).info(
-                        "Metrics server already started by exporter; skipping fallback HTTP server"
-                    )
-                else:
-                    from infra_monitoring.api.exporter.main_http import run_http_server
-                    import threading
-
-                    port = int(os.getenv("MONITORING_HTTP_PORT", "8000"))
-                    # Allow explicit override from environment so orchestrators
-                    # (e.g., docker-compose) can request a different bind
-                    # address. Default to localhost to avoid accidental exposure
-                    # when the program is run directly by a user.
-                    addr = os.getenv("MONITORING_HTTP_ADDR")
-                    if not addr:
-                        addr = "127.0.0.1"
-                    http_thread = threading.Thread(
-                        target=run_http_server, kwargs={"addr": addr, "port": port}, daemon=True
-                    )
-                    http_thread.start()
-            except Exception:
-                # If we cannot import the exporter module, proceed to start the HTTP server.
-                from infra_monitoring.api.exporter.main_http import run_http_server
-                import threading
-
-                port = int(os.getenv("MONITORING_HTTP_PORT", "8000"))
-                addr = os.getenv("MONITORING_HTTP_ADDR", "127.0.0.1")
-                http_thread = threading.Thread(target=run_http_server, kwargs={"addr": addr, "port": port}, daemon=True)
-                http_thread.start()
+            port = int(os.getenv("MONITORING_HTTP_PORT", "8000"))
+            # Allow explicit override from environment so orchestrators
+            # (e.g., docker-compose) can request a different bind
+            # address. Default to localhost to avoid accidental exposure
+            # when the program is run directly by a user.
+            addr = os.getenv("MONITORING_HTTP_ADDR")
+            if not addr:
+                addr = "127.0.0.1"
+            http_thread = threading.Thread(target=run_http_server, kwargs={"addr": addr, "port": port}, daemon=True)
+            http_thread.start()
 
             # Optionally start a promtail/loki heartbeat worker if enabled via
             # MONITORING_PROMTAIL_ENABLE. This emits periodic heartbeats for

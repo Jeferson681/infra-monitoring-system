@@ -49,7 +49,7 @@ Delivery posture (high-level): CD is designed for controlled activation. Steps t
 ```shell
 git clone https://github.com/Jeferson681/infra-monitoring-system.git
 cd infra-monitoring-system
-docker compose up --build
+docker compose -f docker/docker-compose.yml up --build
 ```
 
 **Local services:**
@@ -83,8 +83,8 @@ infra-monitoring-system/
 ├── infra/                # Configurations (promtail, terraform, prometheus)
 │   └── terraform/        # IaC demo
 ├── .github/workflows/    # CI/CD pipelines
-├── Dockerfile            # Docker image
-├── docker-compose.yml    # Container orchestration
+├── docker/Dockerfile     # Docker image
+├── docker/docker-compose.yml  # Container orchestration
 └── README.md
 ```
 

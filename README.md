@@ -33,7 +33,7 @@ How to run (3 commands):
 ```bash
 git clone https://github.com/Jeferson681/infra-monitoring-system.git
 cd infra-monitoring-system
-docker compose up --build
+docker compose -f docker/docker-compose.yml up --build
 ```
 
 What this project demonstrates:

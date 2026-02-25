@@ -29,6 +29,10 @@ COPY src/ ./src/
 COPY pyproject.toml ./
 COPY .flake8 ./
 
+# Allow imports of the canonical package layout (src/infra_monitoring/*).
+# This repo uses a src/ layout without an install step in the image.
+ENV PYTHONPATH=/app/src
+
 # Run as non-root (recommended by the minimal restructure plan)
 RUN set -eux; \
 	adduser --disabled-password --gecos "" appuser; \

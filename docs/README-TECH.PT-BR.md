@@ -49,7 +49,7 @@ Postura de entrega (alto nível): o CD foi desenhado para ativação controlada.
 ```shell
 git clone https://github.com/Jeferson681/infra-monitoring-system.git
 cd infra-monitoring-system
-docker compose up --build
+docker compose -f docker/docker-compose.yml up --build
 ```
 
 **Serviços locais:**
@@ -83,8 +83,8 @@ infra-monitoring-system/
 ├── infra/                # Configurações (promtail, terraform, prometheus)
 │   └── terraform/        # Módulo IaC demonstrativo
 ├── .github/workflows/    # Pipelines de CI/CD
-├── Dockerfile            # Imagem Docker
-├── docker-compose.yml    # Orquestração de containers
+├── docker/Dockerfile     # Imagem Docker
+├── docker/docker-compose.yml  # Orquestração de containers
 └── README.md
 ```
 

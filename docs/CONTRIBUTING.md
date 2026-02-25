@@ -52,10 +52,10 @@ This document provides a simple checklist for reviewers and contributors.
 `hadolint` runs in CI during image scans. To run it locally, you can use the official image:
 
 ```powershell
-docker run --rm -v ${PWD}:/data -w /data hadolint/hadolint:latest hadolint Dockerfile
+docker run --rm -v ${PWD}:/data -w /data hadolint/hadolint:latest hadolint docker/Dockerfile
 ```
 
-Or install `hadolint` natively and run `hadolint Dockerfile`.
+Or install `hadolint` natively and run `hadolint docker/Dockerfile`.
 
 Smoke import test:
 
@@ -85,9 +85,9 @@ Terraform is a didactic placeholder in this repository and is not used for real 
    ```
 3. Run via Docker Compose (alternative):
   ```powershell
- docker compose up --build
+ docker compose -f docker/docker-compose.yml up --build
  # in another terminal:
- # Only reachable from the host if `ports:` is configured in docker-compose.yml; see docs/RUN.md
+ # Only reachable from the host if `ports:` is configured in docker/docker-compose.yml; see docs/RUN.md
  curl http://localhost:8000/metrics
   ```
 

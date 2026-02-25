@@ -31,7 +31,7 @@ Como rodar (3 comandos):
 ```bash
 git clone https://github.com/Jeferson681/infra-monitoring-system.git
 cd infra-monitoring-system
-docker compose up --build
+docker compose -f docker/docker-compose.yml up --build
 ```
 
 O que este projeto demonstra:

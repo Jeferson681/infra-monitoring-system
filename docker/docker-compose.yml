@@ -1,10 +1,12 @@
 services:
   infra-monitoring-system:
-    build: .
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     container_name: infra-monitoring-system_app
     command: python -m src.main
     env_file:
-      - .env
+      - ../.env
     environment:
       # Control program execution and exposition behavior via MONITORING_* envs
       - MONITORING_HTTP_ENABLE=0
@@ -12,9 +14,9 @@ services:
       - MONITORING_PROMTAIL_ENABLE=1
       - MONITORING_CYCLES=0
     volumes:
-      - ./logs:/app/logs
-      - ./reports:/app/reports
-      - ./.cache:/app/.cache
+      - ../logs:/app/logs
+      - ../reports:/app/reports
+      - ../.cache:/app/.cache
     restart: unless-stopped
     deploy:
       resources:
@@ -30,23 +32,25 @@ services:
     image: prom/prometheus:latest
     container_name: prometheus
     volumes:
-      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
       - "9090:9090"
     # depends_on removido pois o serviço de métricas foi excluído
 
   main_http:
-    build: .
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     container_name: infra-monitoring-main-http
-    command: python -u -m src.exporter.main_http
+    command: python -u -m infra_monitoring.api.exporter.main_http
     env_file:
-      - .env
+      - ../.env
     environment:
       - MONITORING_HTTP_ADDR=0.0.0.0
       - MONITORING_HTTP_PORT=8000
     volumes:
-      - ./logs:/app/logs:ro
-      - ./.cache:/app/.cache:ro
+      - ../logs:/app/logs:ro
+      - ../.cache:/app/.cache:ro
     restart: unless-stopped
     depends_on:
       - infra-monitoring-system
@@ -80,8 +84,8 @@ services:
     container_name: promtail
     command: -config.file=/etc/promtail/promtail-config.yml
     volumes:
-      - ./infra/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
-      - ./logs:/logs:ro
+      - ../infra/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - ../logs:/logs:ro
       - promtail-positions:/tmp
     depends_on:
       - loki

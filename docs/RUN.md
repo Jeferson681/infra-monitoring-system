@@ -4,7 +4,7 @@ Goal: concise instructions to run the project locally (venv) and with Docker, pl
 
 ## Prerequisites
 
-- Python 3.8+
+- Python 3.13+
 - `docker` and Docker Compose (optional, for the container flow)
 - `pre-commit` (recommended) — runs quality and security hooks
 - `hadolint` (optional) — `hadolint` is executed in CI during image scans. To run it locally use the `hadolint/hadolint` Docker image or install `hadolint` natively.
@@ -26,6 +26,12 @@ python -m venv .venv
 source .venv/bin/activate
 ```
 
+Note (Unix): this repo uses a `src/` layout; ensure `src/` is on `PYTHONPATH` when running directly from the repo:
+
+```bash
+export PYTHONPATH=src
+```
+
 2) Install dependencies
 
 ```bash
@@ -41,6 +47,7 @@ Notes:
 PowerShell — load `.env` and run (useful for local tests):
 
 ```powershell
+$env:PYTHONPATH = "$PWD\\src"
 Get-Content .env | ForEach-Object {
 	if ($_ -and $_ -notmatch '^\s*#') {
 		$p = $_ -split '=',2
@@ -53,6 +60,7 @@ Get-Content .env | ForEach-Object {
 Minimal example (enable exporter + fallback HTTP server locally):
 
 ```powershell
+$env:PYTHONPATH = "$PWD\\src"
 $env:MONITORING_EXPORTER_ENABLE = '1'
 $env:MONITORING_HTTP_ENABLE = '1'
 # MONITORING_HTTP_ADDR não definido -> default é 127.0.0.1
@@ -62,6 +70,7 @@ $env:MONITORING_HTTP_ENABLE = '1'
 Bind to all host interfaces (careful — external exposure):
 
 ```powershell
+$env:PYTHONPATH = "$PWD\\src"
 $env:MONITORING_EXPORTER_ENABLE = '1'
 $env:MONITORING_HTTP_ENABLE = '1'
 $env:MONITORING_HTTP_ADDR = '0.0.0.0'  # Risk: allows external access if the port is published
@@ -70,15 +79,15 @@ $env:MONITORING_HTTP_ADDR = '0.0.0.0'  # Risk: allows external access if the por
 
 ## Docker / Docker Compose
 
-`docker-compose.yml` already includes services for `prometheus`, `grafana`, `loki`, `promtail`, and the app service. By default, compose sets `MONITORING_HTTP_ADDR=0.0.0.0` on the app service, but **does not publish ports to the host** — which means:
+`docker/docker-compose.yml` already includes services for `prometheus`, `grafana`, `loki`, `promtail`, the app service, and a dedicated `main_http` metrics service. By default, the compose file:
 
-- Prometheus (inside the same compose network) can scrape it via: `http://infra-monitoring-system_app:8000/metrics`.
-- The service will NOT be reachable from the host/external networks unless you add a `ports:` mapping (e.g., `"8000:8000"`).
+- does NOT publish the metrics port (`8000`) to the host;
+- runs the metrics endpoint inside the compose network (scraped by Prometheus).
 
 Start compose (from the project root):
 
 ```bash
-docker compose up --build -d
+docker compose -f docker/docker-compose.yml up --build -d
 ```
 
 Common endpoints when ports are published:
@@ -87,7 +96,7 @@ Common endpoints when ports are published:
 - Loki → http://localhost:3100
 - Exporter → http://localhost:8000/metrics (only if `ports:` is configured)
 
-Compose note: `docker-compose.yml` includes a `main_http` service that runs `src.exporter.main_http`; that’s why `observability/prometheus.yml` is configured to scrape `main_http:8000`. The main app service (`infra-monitoring-system`) can also start a fallback HTTP metrics server when `MONITORING_HTTP_ENABLE=1`, but in the default compose the metrics server is served by `main_http` to separate responsibilities.
+Compose note: `docker/docker-compose.yml` includes a `main_http` service that runs `infra_monitoring.api.exporter.main_http`; that’s why `observability/prometheus.yml` is configured to scrape `main_http:8000`. The main app service (`infra-monitoring-system`) can also start a fallback HTTP metrics server when `MONITORING_HTTP_ENABLE=1`, but in the default compose the metrics server is served by `main_http` to separate responsibilities.
 
 ## Quick checks
 
@@ -117,10 +126,10 @@ pre-commit run --all-files
 Note: `hadolint` runs in CI during image scans. To run it locally without installing it, run:
 
 ```powershell
-docker run --rm -v "${PWD}":/data -w /data hadolint/hadolint:latest hadolint Dockerfile
+docker run --rm -v "${PWD}":/data -w /data hadolint/hadolint:latest hadolint docker/Dockerfile
 ```
 
-Or install `hadolint` natively and run `hadolint Dockerfile`.
+Or install `hadolint` natively and run `hadolint docker/Dockerfile`.
 
 ## Environment variables (metrics exposure and runtime)
 
@@ -128,10 +137,10 @@ Main variables that affect exposure and execution:
 
 - `MONITORING_EXPORTER_ENABLE` (0|1) — initializes/registers metrics (calls `start_exporter()`); does not automatically start an HTTP server by itself.
 - `MONITORING_EXPORTER_ADDR`, `MONITORING_EXPORTER_PORT` — defaults and metadata (e.g., `.env` sets `127.0.0.1`/8000).
-- `MONITORING_HTTP_ENABLE` (0|1) — starts the fallback HTTP server that exposes `/metrics` and `/health` (implemented in `src/exporter/main_http.py`).
+- `MONITORING_HTTP_ENABLE` (0|1) — starts the fallback HTTP server that exposes `/metrics` and `/health` (implemented in `infra_monitoring.api.exporter.main_http`).
 
 
-	Note: the main entrypoint (`src/main.py`) checks `MONITORING_HTTP_ENABLE` at runtime and, when set to `1`, starts the fallback HTTP server by calling the handler in `src.exporter.main_http`.
+	Note: the main entrypoint (`src/main.py`) checks `MONITORING_HTTP_ENABLE` at runtime and, when set to `1`, starts the fallback HTTP server by calling the handler in `infra_monitoring.api.exporter.main_http`.
 - `MONITORING_HTTP_ADDR`, `MONITORING_HTTP_PORT` — bind for the fallback HTTP server. Local default: `127.0.0.1`. Orchestrators may use `0.0.0.0` inside containers to allow scraping by other services.
 - `MONITORING_PROMTAIL_ENABLE` (0|1) — starts the internal worker that sends heartbeats directly to Loki (complements the `promtail` service in compose).
 - `MONITORING_INTERVAL_SEC`, `MONITORING_CYCLES` — interval and runtime controls; can also be set via CLI (`-i`, `-c`) — CLI takes precedence over env.
@@ -140,7 +149,7 @@ Best practices and recommendations:
 
 - Keep the app default as `127.0.0.1` for local runs.
 - In Docker Compose, use `MONITORING_HTTP_ADDR=0.0.0.0` **without** publishing ports (`ports:`) to limit exposure to the compose network (other containers), not the host.
-- Only publish ports in `docker-compose.yml` if you need to access `/metrics` from the host; if you publish, protect it with firewall/proxy/TLS as needed.
+- Only publish ports in `docker/docker-compose.yml` if you need to access `/metrics` from the host; if you publish, protect it with firewall/proxy/TLS as needed.
 - To reduce runtime differences across services, standardize the Python base image used in your compose services (e.g., `python:3.13-slim`).
 - For CI: keep security checks (Trivy) and Dockerfile linting (hadolint) to catch regressions.
 - For tests that require synchronous post-treatment, use `POST_TREATMENT_SYNC=1`.
