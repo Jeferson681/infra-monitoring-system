@@ -43,9 +43,13 @@ def test_run_maintenance_calls(monkeypatch):
     called = {}
 
     monkeypatch.setattr("infra_monitoring.infra.system.maintenance.rotate_logs", lambda: called.setdefault("r", True))
-    monkeypatch.setattr("infra_monitoring.infra.system.maintenance.compress_old_logs", lambda: called.setdefault("c", True))
+    monkeypatch.setattr(
+        "infra_monitoring.infra.system.maintenance.compress_old_logs", lambda: called.setdefault("c", True)
+    )
     monkeypatch.setattr("infra_monitoring.infra.system.maintenance.safe_remove", lambda: called.setdefault("s", True))
-    monkeypatch.setattr("infra_monitoring.infra.system.maintenance.get_log_paths", lambda: types.SimpleNamespace(root="."))
+    monkeypatch.setattr(
+        "infra_monitoring.infra.system.maintenance.get_log_paths", lambda: types.SimpleNamespace(root=".")
+    )
     monkeypatch.setattr("infra_monitoring.infra.system.maintenance.aggregate_last_seconds", lambda **k: {"m": 1})
     monkeypatch.setattr(
         "infra_monitoring.infra.system.maintenance.write_average_log", lambda *a, **k: called.setdefault("w", True)

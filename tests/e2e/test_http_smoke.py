@@ -17,6 +17,7 @@ def _get_free_local_port() -> int:
 
 @pytest.mark.skipif(os.getenv("RUN_E2E") != "1", reason="E2E opt-in: set RUN_E2E=1")
 def test_http_health_and_metrics_smoke(tmp_path: Path):
+    """Smoke-test HTTP `/health` and `/metrics` when E2E is enabled."""
     port = _get_free_local_port()
 
     env = dict(os.environ)

@@ -37,8 +37,6 @@ def test_run_loop_one_cycle(monkeypatch):
     # run only one cycle quickly by setting cycles=1 and interval=0
     monkeypatch.setattr("infra_monitoring.core.core._ensure_runtime_checks", lambda: None)
     monkeypatch.setattr("infra_monitoring.core.core._collect_and_emit", lambda s, v: {"state": "S"})
-    monkeypatch.setattr(
-        "infra_monitoring.core.core._run_maintenance", lambda now, a, b, c, d, intervals: (a, b, c, d)
-    )
+    monkeypatch.setattr("infra_monitoring.core.core._run_maintenance", lambda now, a, b, c, d, intervals: (a, b, c, d))
 
     core.run_loop(interval=0, cycles=1, verbose_level=0)
