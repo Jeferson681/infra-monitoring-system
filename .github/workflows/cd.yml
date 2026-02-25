@@ -27,6 +27,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: docker/Dockerfile
           push: true
           tags: |
             ${{ secrets.DOCKER_USERNAME }}/infra-monitoring-system:latest
@@ -38,24 +39,20 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
-      - name: Install Docker Compose
-        run: |
-          sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-          sudo chmod +x /usr/local/bin/docker-compose
       - name: Deploy container local com Docker
         run: |
-          docker-compose version
           sudo service docker start || true
-          docker-compose pull || echo "Falha ao puxar imagens, verifique permissões e rede."
-          docker-compose up -d --build || echo "Falha ao subir containers, verifique logs."
+          docker compose version
+          docker compose -f docker/docker-compose.yml pull || echo "Falha ao puxar imagens, verifique permissões e rede."
+          docker compose -f docker/docker-compose.yml up -d --build || echo "Falha ao subir containers, verifique logs."
       - name: Notify success on Discord (staging)
-        if: success()
+        if: ${{ success() && secrets.DISCORD_WEBHOOK_URL != '' }}
         run: |
           curl -H "Content-Type: application/json" \
             -d '{"content": "✅ Deploy to STAGING succeeded: ${{ github.repository }} on ${{ github.ref_name }} (run #${{ github.run_number }})"}' \
             ${{ secrets.DISCORD_WEBHOOK_URL }}
       - name: Notify failure on Discord (staging)
-        if: failure()
+        if: ${{ failure() && secrets.DISCORD_WEBHOOK_URL != '' }}
         run: |
           curl -H "Content-Type: application/json" \
             -d '{"content": "❌ Deploy to STAGING failed: See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
@@ -86,13 +83,13 @@ jobs:
         run: |
           echo "[DEMO] Esta etapa representa o deploy real em AWS ECS (prod). Para ativar, siga as instruções acima."
       - name: Notify success on Discord (prod)
-        if: success()
+        if: ${{ success() && secrets.DISCORD_WEBHOOK_URL != '' }}
         run: |
           curl -H "Content-Type: application/json" \
             -d '{"content": "✅ Deploy to PRODUCTION succeeded: ${{ github.repository }} on ${{ github.ref_name }} (run #${{ github.run_number }})"}' \
             ${{ secrets.DISCORD_WEBHOOK_URL }}
       - name: Notify failure on Discord (prod)
-        if: failure()
+        if: ${{ failure() && secrets.DISCORD_WEBHOOK_URL != '' }}
         run: |
           curl -H "Content-Type: application/json" \
             -d '{"content": "❌ Deploy to PRODUCTION failed: See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \

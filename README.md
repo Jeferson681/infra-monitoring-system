@@ -33,8 +33,10 @@ How to run (3 commands):
 ```bash
 git clone https://github.com/Jeferson681/infra-monitoring-system.git
 cd infra-monitoring-system
-docker compose up --build
+docker compose -f docker/docker-compose.yml up --build
 ```
+
+For a clear separation between **venv runs** (local Python) and **Docker/Compose runs**, plus the expected collector vs exporter flows, see [docs/RUN.md](docs/RUN.md).
 
 What this project demonstrates:
 

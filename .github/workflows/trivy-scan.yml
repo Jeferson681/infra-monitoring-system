@@ -20,6 +20,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: docker/Dockerfile
           push: false
           load: true
           tags: infra-monitoring-system:ci-scan
@@ -37,7 +38,7 @@ jobs:
 
       - name: Prepare Dockerfile for hadolint (pin openssl)
         run: |
-          cp Dockerfile Dockerfile.hadolint
+          cp docker/Dockerfile Dockerfile.hadolint
           # Replace dynamic version-resolution block with a pinned install line so hadolint DL3008 is satisfied
           awk -v v="$VER" '
             BEGIN { skip=0 }
@@ -50,7 +51,7 @@ jobs:
               next
             }
             skip==0 { print }
-          ' Dockerfile > Dockerfile.hadolint.tmp && mv Dockerfile.hadolint.tmp Dockerfile.hadolint
+          ' Dockerfile.hadolint > Dockerfile.hadolint.tmp && mv Dockerfile.hadolint.tmp Dockerfile.hadolint
           echo '--- Dockerfile.hadolint (head) ---'
           sed -n '1,120p' Dockerfile.hadolint || true
 
