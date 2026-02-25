@@ -11,11 +11,25 @@ Before applying to any real environment, review and adapt to your needs (network
 
 Remote state and concurrency locking are not configured by default.
 
+## What this example mirrors in the repo
+
+This Terraform is intentionally **conceptual** and is kept aligned with the current Docker structure:
+
+- Docker build/compose lives under `docker/` (see `docker/Dockerfile` and `docker/docker-compose.yml`).
+- The Compose file runs **one image** with two different containers/commands:
+	- `infra-monitoring-system_app`: `python -m src.main` (main loop)
+	- `infra-monitoring-main-http`: `python -u -m infra_monitoring.api.exporter.main_http` (HTTP exporter on port 8000)
+
+Terraform mirrors the same idea via two small modules under `infra/terraform/modules/`.
+
+Note: this example does **not** provision the full observability stack from Compose (Prometheus/Grafana/Loki/Promtail). It stays intentionally minimal and didactic.
+
 ### Local syntax validation
 
 ```sh
 cd infra/terraform
 terraform init -backend=false
+terraform fmt -check -recursive
 terraform validate
 ```
 
@@ -27,6 +41,12 @@ terraform apply
 ```
 
 Recommendation: use an isolated account or workspace to avoid unintended changes to critical environments.
+
+## Notes about volumes and .env
+
+The Compose setup mounts folders like `logs/`, `reports/` and `.cache/` and uses an `.env` file.
+The Terraform example keeps `*_volume_mounts` empty by default so `terraform validate` stays cross-platform and CI-friendly.
+If you ever apply it locally, pass volume mounts explicitly via variables.
 
 ---
 

@@ -45,7 +45,7 @@ Documentação técnica:
 
 - 📚 Portal de documentação: [docs/DOCS.md](docs/DOCS.md)
 - 📘 Documentação técnica (EN - canônico): [docs/README-TECH.md](docs/README-TECH.md)
-- 📘 Documentação técnica (PT-BR): [docs/README-TECH.md](docs/README-TECH.md)
+- 📘 Documentação técnica (PT-BR): [docs/README-TECH.PT-BR.md](docs/README-TECH.PT-BR.md)
 - 🧠 Decisões técnicas: [docs/DECISIONS.md](docs/DECISIONS.md)
 - ⚙️ Como executar: [docs/RUN.md](docs/RUN.md)
 - 🖼️ Evidências visuais: [docs/prints/README.md](docs/prints/README.md)

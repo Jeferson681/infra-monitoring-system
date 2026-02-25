@@ -1,51 +1,36 @@
-terraform {
-  required_providers {
-    docker = {
-      source  = "kreuzwerker/docker"
-      version = "3.0.2"
-    }
-  }
-}
-
 provider "docker" {}
 
-resource "docker_image" "monitoring" {
-  name         = "${var.dockerhub_username}/infra-monitoring-system:latest"
+locals {
+  image_name = "${var.dockerhub_username}/${var.image_repo}:${var.image_tag}"
+}
+
+# Conceptual image reference: the same repo image is used by both containers,
+# matching docker/docker-compose.yml.
+resource "docker_image" "infra_monitoring" {
+  name         = local.image_name
   keep_locally = false
 }
 
-resource "docker_container" "monitoring" {
-  name  = "monitoring-app"
-  image = docker_image.monitoring.name
-  ports {
-    internal = 8000
-    external = 8000
-  }
-  env = [
-    # Adicione variáveis de ambiente conforme necessário
-  ]
+module "app" {
+  source = "./modules/app"
+
+  name          = var.app_container_name
+  image         = docker_image.infra_monitoring.name
+  command       = var.app_command
+  env           = var.app_env
+  volume_mounts = var.app_volume_mounts
 }
 
-resource "docker_image" "monitoring_metrics" {
-  name         = "${var.dockerhub_username}/infra-monitoring-system_metrics:latest"
-  keep_locally = false
-}
+module "main_http" {
+  source = "./modules/main_http"
 
-resource "docker_container" "monitoring_metrics" {
-  name  = "monitoring-metrics"
-  image = docker_image.monitoring_metrics.name
-  ports {
-    internal = 8000
-    external = 8000
-  }
-  env = [
-    "MONITORING_HTTP_PORT=8000",
-  "LOKI_URL=http://loki:3100/loki/api/v1/push",
-    "LOKI_LABELS=job=infra-monitoring-system"
-  ]
-}
+  name          = var.main_http_container_name
+  image         = docker_image.infra_monitoring.name
+  command       = var.main_http_command
+  env           = var.main_http_env
+  internal_port = var.main_http_internal_port
+  external_port = var.main_http_external_port
+  volume_mounts = var.main_http_volume_mounts
 
-variable "dockerhub_username" {
-  description = "Docker Hub username"
-  type        = string
+  depends_on = [module.app]
 }

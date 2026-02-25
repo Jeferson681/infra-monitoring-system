@@ -1,36 +1,36 @@
 # Makefile para automação de tarefas comuns
 
-.PHONY: lint test coverage build up down logs run docker-up docker-down docker-logs
+.PHONY: lint test coverage run run-main-http docker-build docker-up docker-down docker-logs
+
+PY ?= python
+COMPOSE ?= docker compose -f docker/docker-compose.yml
 
 lint:
-	poetry run ruff src/ tests/
-	poetry run black --check src/ tests/
-	test -z "$(shell poetry run bandit -r src/ | grep 'No issues identified')" || exit 1
+	$(PY) -m ruff check src tests
+	$(PY) -m black --check src tests
+	$(PY) -m bandit -r src
 
 test:
-	poetry run pytest
+	$(PY) -m pytest -q
 
 coverage:
-	poetry run pytest --cov=src
+	$(PY) -m pytest --cov=src -q
 
-build:
-	docker-compose build
-
-up:
-	docker-compose up -d
-
-down:
-	docker-compose down
-
-logs:
-	docker-compose logs
-
-# Minimal, predictable developer commands (as per minimal restructure plan)
+# Minimal, predictable developer commands
 run:
-	python -m src.main
+	$(PY) -m src.main
 
-docker-up: up
+run-main-http:
+	$(PY) -m infra_monitoring.api.exporter.main_http
 
-docker-down: down
+docker-build:
+	$(COMPOSE) build
 
-docker-logs: logs
+docker-up:
+	$(COMPOSE) up --build -d
+
+docker-down:
+	$(COMPOSE) down
+
+docker-logs:
+	$(COMPOSE) logs -f

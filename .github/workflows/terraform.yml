@@ -17,7 +17,7 @@ jobs:
       - name: Validate Terraform IaC
         run: |
           if [ -d "infra/terraform" ]; then \
-            cd infra/terraform && terraform init -backend=false && terraform validate; \
+            cd infra/terraform && terraform init -backend=false && terraform fmt -check -recursive && terraform validate; \
           else \
             echo "No Terraform directory found."; \
           fi
