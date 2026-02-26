@@ -4,14 +4,21 @@
 
 ## 📘 Overview
 
-Application for **local system metrics collection and exposition**, designed to practice Python development and the use of automation, CI/CD, and observability tools.
-Principles and operational details (collection, formats and integrations) are consolidated in `docs/DECISIONS.md`. Execution instructions are available in `docs/RUN.md`.
+The Infra Monitoring System is a local observability platform designed to
+collect, structure and expose host-level metrics in a controlled environment.
 
-This file is the technical deep-dive:
+Version 1.x intentionally emphasizes foundational engineering.
+Core observability components — including metric collection, structured
+persistence and exporter logic — are implemented with explicit architectural
+boundaries to prioritize internal understanding, modularity and control.
 
-- Focuses on architecture, runtime model, and operational choices.
-- Not an audit report and not a mirror of the root `README.md`.
-- Links out to decision logs and runbooks instead of duplicating them.
+Rather than abstracting early through external tooling, this version focuses
+on clarity of design, traceability of decisions and operational transparency.
+Implementation trade-offs and constraints are documented in `docs/DECISIONS.md`,
+while execution details are available in `docs/RUN.md`.
+
+This document serves as a technical deep-dive into architecture,
+runtime model and operational posture.
 
 ---
 
@@ -98,6 +105,10 @@ infra-monitoring-system/
 - **IaC:** Terraform
 - **Pipeline:** GitHub Actions
 - **OS:** Linux, WSL2 and native Windows
+- The current stack reflects an intentionally defined architectural baseline.
+Future major versions may strategically align certain internal components
+with industry-standard observability tooling, preserving architectural
+boundaries while improving interoperability and production alignment.
 
 ---
 
@@ -107,6 +118,7 @@ infra-monitoring-system/
 - **Snyk** — detects vulnerabilities.
 - **Trivy** — scans Docker images.
 - **Dependabot** — keeps dependencies secure and up to date.
+-
 
 All checks are automated via GitHub Actions pipelines.
 
