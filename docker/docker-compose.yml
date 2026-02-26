@@ -48,6 +48,8 @@ services:
     environment:
       - MONITORING_HTTP_ADDR=0.0.0.0
       - MONITORING_HTTP_PORT=8000
+    ports:
+      - "8000:8000"
     volumes:
       - ../logs:/app/logs:ro
       - ../.cache:/app/.cache:ro

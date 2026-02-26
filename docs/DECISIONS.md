@@ -21,26 +21,26 @@ discussion easier.
 
 ## Architecture decisions
 
-- **Host-aware collection with psutil**  
-	The project uses `psutil` to collect host metrics (CPU, memory, disk, and interfaces).  
+- **Host-aware collection with psutil**
+	The project uses `psutil` to collect host metrics (CPU, memory, disk, and interfaces).
 	**Rationale:** direct local collection, low dependency on external agents,
 	cross-platform compatibility, and full control over metric shaping
 	and aggregation logic.
 
-- **JSONL format for export and archiving**  
-	The exporter writes and reads JSONL files for persistence and replay of metrics/logs.  
+- **JSONL format for export and archiving**
+	The exporter writes and reads JSONL files for persistence and replay of metrics/logs.
 	**Rationale:** incremental streaming-friendly format, deterministic replay capability,
 	and clear separation between collection and exposition layers.
 
-- **Exporter activation via environment variable**  
-	Metrics exposure is controlled by `MONITORING_EXPORTER_ENABLE=1`.  
+- **Exporter activation via environment variable**
+	Metrics exposure is controlled by `MONITORING_EXPORTER_ENABLE=1`.
 	**Rationale:** explicit enablement by environment (local, CI),
 	avoiding accidental exposure and preserving runtime control boundaries.
 
-- **Persistence and replay strategy**  
+- **Persistence and replay strategy**
 	Persisted data lives under `logs/json/`
 	(e.g., `logs/json/monitoring-YYYY-MM-DD.jsonl`)
-	and can be reused by the exporter when exposing metrics.  
+	and can be reused by the exporter when exposing metrics.
 	**Rationale:** deterministic replay, reproducibility in tests and pipelines,
 	and separation between data generation and HTTP exposition.
 
@@ -48,19 +48,19 @@ discussion easier.
 
 ## Integration decisions
 
-- **Observability-first architecture**  
-	Planned integration flow: exporter → Prometheus → Grafana, with Loki for logs.  
+- **Observability-first architecture**
+	Planned integration flow: exporter → Prometheus → Grafana, with Loki for logs.
 	**Rationale:** enables local experimentation via Docker Compose while maintaining
 	compatibility with real observability stacks.
 
-- **Controlled abstraction level (v1.x)**  
+- **Controlled abstraction level (v1.x)**
 	Core instrumentation logic is implemented within the project boundary
-	instead of relying immediately on external observability SDKs.  
+	instead of relying immediately on external observability SDKs.
 	**Rationale:** establish architectural ownership, understand internal mechanics,
 	and prepare the system for deliberate abstraction in future major versions.
 
-- **Terraform as an IaC demonstration**  
-	The `infra/terraform` folder contains educational infrastructure examples.  
+- **Terraform as an IaC demonstration**
+	The `infra/terraform` folder contains educational infrastructure examples.
 	**Rationale:** demonstrate Infrastructure as Code concepts without making
 	Terraform part of the core runtime or local metrics collection process.
 

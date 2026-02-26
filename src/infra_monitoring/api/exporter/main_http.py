@@ -15,8 +15,14 @@ import threading
 from infra_monitoring.api.exporter.promtail import send_log_to_loki
 
 
-# Default path to the system metrics JSONL directory
-SYSTEM_METRICS_JSONL_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "logs", "json")
+# Default path to the system metrics JSONL directory.
+# Prefer the project's `logs/json` in the current working directory (repository root)
+# when available (this avoids module-relative resolution issues on Windows).
+proj_jsonl = os.path.join(os.getcwd(), "logs", "json")
+if os.path.isdir(proj_jsonl):
+    SYSTEM_METRICS_JSONL_PATH = proj_jsonl
+else:
+    SYSTEM_METRICS_JSONL_PATH = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "logs", "json"))
 
 try:
 
