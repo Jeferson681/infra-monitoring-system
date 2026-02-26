@@ -20,7 +20,7 @@ jobs:
             echo "enabled=false" >> $GITHUB_OUTPUT
           fi
         shell: bash
-      
+
       - name: Checkout code
         uses: actions/checkout@v4
       - name: Set up Python
