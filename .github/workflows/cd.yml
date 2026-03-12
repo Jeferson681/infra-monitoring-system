@@ -45,6 +45,8 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
       - name: Deploy container local com Docker
         run: |
           sudo service docker start || true
@@ -74,6 +76,8 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
       # Para ativar o deploy real, descomente as linhas abaixo e configure os secrets necessários
       # - name: Configure AWS credentials (prod)
       #   uses: aws-actions/configure-aws-credentials@v4
