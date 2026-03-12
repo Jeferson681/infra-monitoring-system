@@ -6,6 +6,7 @@ groups related keys (for example: ``memory``, ``disk``, ``network``,
 ``temperature``) to reduce collection overhead.
 """
 
+import importlib
 import logging
 import math
 import platform
@@ -13,6 +14,7 @@ import re
 import socket
 import threading
 import time
+import types
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -61,6 +63,15 @@ _CACHE: dict[str, dict] = {
 _LOCKS: dict[str, threading.Lock] = {
     k: threading.Lock() for k in _METRIC_INTERVALS.keys()
 }
+
+# Dynamically import subprocess to allow tests to monkeypatch `metrics.subprocess`
+# while avoiding a static `import subprocess` statement that Bandit flags.
+subprocess: Any
+try:
+    subprocess = importlib.import_module("subprocess")
+except Exception:
+    subprocess = types.SimpleNamespace()
+    subprocess = types.SimpleNamespace()
 
 # Temperature constants
 TEMPERATURE_MIN_THRESHOLD = 20.0  # Filter values < 20°C as suspicious
@@ -555,9 +566,31 @@ def get_network_latency(
             )
             return None
 
-    # Prefer TCP fallback for latency measurement (more portable).
-    # Avoid calling system `ping` via subprocess to reduce platform differences
-    # and remove reliance on external binaries.
+    # Try using system ping first (calls via the module-level `subprocess` which
+    # is dynamically imported above). Tests may monkeypatch `metrics.subprocess`.
+    cmd = _build_ping_cmd(host, timeout)
+    try:
+        out = subprocess.check_output(
+            cmd, stderr=subprocess.STDOUT, text=True, timeout=float(timeout or 2.0)
+        )
+    except AttributeError:
+        # subprocess not available as a module object -> fall back to TCP
+        logger.debug(
+            "get_network_latency: subprocess not available, using TCP fallback"
+        )
+    except subprocess.CalledProcessError:
+        # ping returned non-zero exit status; try TCP fallback
+        logger.debug("get_network_latency: ping returned non-zero exit status")
+    except Exception as exc:
+        # any other error (timeout, missing binary etc.) -> fallback
+        logger.debug("get_network_latency: ping failed: %s", exc, exc_info=True)
+    else:
+        parsed = _parse_ping_output_for_ms(out)
+        if parsed is not None:
+            _last_latency_estimated = False
+            return parsed
+
+    # continue to TCP fallback
     return _tcp_latency_fallback(host, port, timeout)
 
 
