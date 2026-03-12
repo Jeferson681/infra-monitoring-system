@@ -5,15 +5,21 @@ runs:
   steps:
     - name: Send message to Discord
       shell: bash
+      env:
+        DISCORD_WEBHOOK_URL: ${{ inputs.webhook }}
+        PAYLOAD: ${{ inputs.payload }}
       run: |
-        if [ -n "${{ secrets.DISCORD_WEBHOOK_URL }}" ]; then
+        if [ -n "$DISCORD_WEBHOOK_URL" ]; then
           curl -H "Content-Type: application/json" \
-            -d "${{ inputs.payload }}" \
-            "${{ secrets.DISCORD_WEBHOOK_URL }}"
+            -d "$PAYLOAD" \
+            "$DISCORD_WEBHOOK_URL"
         else
-          echo "DISCORD_WEBHOOK_URL not set; skipping notification. Message: ${{ inputs.payload }}"
+          echo "DISCORD_WEBHOOK_URL not set; skipping notification. Message: $PAYLOAD"
         fi
 inputs:
   payload:
     description: 'Full JSON payload to POST to the webhook'
     required: true
+  webhook:
+    description: 'Discord webhook URL (pass via workflow secrets)'
+    required: false

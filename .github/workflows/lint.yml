@@ -33,9 +33,11 @@ jobs:
         uses: ./.github/actions/notify-discord
         with:
           payload: "{\"content\": \"✅ Lint passed: ${{ github.workflow }} on ${{ github.ref_name }} (run #${{ github.run_number }})\"}"
+          webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
 
       - name: Notify failure on Discord (Lint)
         if: ${{ failure() }}
         uses: ./.github/actions/notify-discord
         with:
           payload: "{\"content\": \"❌ Lint failed: ${{ github.workflow }} on ${{ github.ref_name }} (run #${{ github.run_number }}). See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
+          webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}

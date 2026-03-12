@@ -50,11 +50,13 @@ jobs:
         uses: ./.github/actions/notify-discord
         with:
           payload: "{\"content\": \"✅ Deploy to STAGING succeeded: ${{ github.repository }} on ${{ github.ref_name }} (run #${{ github.run_number }})\"}"
+          webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
       - name: Notify failure on Discord (staging)
         if: ${{ failure() }}
         uses: ./.github/actions/notify-discord
         with:
           payload: "{\"content\": \"❌ Deploy to STAGING failed: See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
+          webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
 
   deploy-production:
     # Production deploy is manual for portfolio safety. Run via "Run workflow" in Actions
@@ -85,8 +87,10 @@ jobs:
         uses: ./.github/actions/notify-discord
         with:
           payload: "{\"content\": \"✅ Deploy to PRODUCTION succeeded: ${{ github.repository }} on ${{ github.ref_name }} (run #${{ github.run_number }})\"}"
+          webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
       - name: Notify failure on Discord (prod)
         if: ${{ failure() }}
         uses: ./.github/actions/notify-discord
         with:
           payload: "{\"content\": \"❌ Deploy to PRODUCTION failed: See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
+          webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
