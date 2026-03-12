@@ -1,9 +1,7 @@
 import logging
-import sys
 import os
+import sys
 from types import SimpleNamespace
-
-import pytest
 
 import main as main_mod
 
@@ -24,7 +22,7 @@ def test_get_json_formatter_includes_exc():
             exc_info=sys.exc_info(),
         )
     out = fmt.format(record)
-    assert "\"level\": \"ERROR\"" in out
+    assert '"level": "ERROR"' in out
     assert "ValueError" in out
 
 
@@ -74,17 +72,30 @@ def test_main_starts_components(monkeypatch):
     monkeypatch.setattr(main_mod, "ensure_default_last_ts", lambda: None)
 
     # stub exporter start
-    monkeypatch.setattr("infra_monitoring.api.exporter.prometheus.start_exporter", lambda: called.setdefault("exporter", True))
+    monkeypatch.setattr(
+        "infra_monitoring.api.exporter.prometheus.start_exporter",
+        lambda: called.setdefault("exporter", True),
+    )
 
     # stub http and promtail functions
-    monkeypatch.setattr("infra_monitoring.api.exporter.main_http.run_http_server", lambda **kwargs: called.setdefault("http", True))
-    monkeypatch.setattr("infra_monitoring.api.exporter.main_http.run_promtail_worker", lambda: called.setdefault("promtail", True))
+    monkeypatch.setattr(
+        "infra_monitoring.api.exporter.main_http.run_http_server",
+        lambda **kwargs: called.setdefault("http", True),
+    )
+    monkeypatch.setattr(
+        "infra_monitoring.api.exporter.main_http.run_promtail_worker",
+        lambda: called.setdefault("promtail", True),
+    )
 
     # replace threading.Thread to avoid starting threads
     class DummyThread:
         def __init__(self, *args, **kwargs):
             # capture target and kwargs if provided
-            self._target = kwargs.get("target") if "target" in kwargs else (args[0] if args else None)
+            self._target = (
+                kwargs.get("target")
+                if "target" in kwargs
+                else (args[0] if args else None)
+            )
             self._tkwargs = kwargs.get("kwargs", {})
             called.setdefault("thread_created", True)
 
@@ -144,7 +155,11 @@ def test_main_loads_env_and_parse_args_none(monkeypatch, tmp_path):
     )
 
     # stub run_loop so we return quickly
-    monkeypatch.setattr(main_mod, "run_loop", lambda interval, cycles, verbose_level: called.setdefault("run_loop", True))
+    monkeypatch.setattr(
+        main_mod,
+        "run_loop",
+        lambda interval, cycles, verbose_level: called.setdefault("run_loop", True),
+    )
 
     # ensure env var not present
     monkeypatch.delenv("XTEST", raising=False)
@@ -154,18 +169,32 @@ def test_main_loads_env_and_parse_args_none(monkeypatch, tmp_path):
 
 def test_main_setup_debug_file_handler_exception(monkeypatch):
     # ensure errors from _setup_debug_file_handler are caught
-    monkeypatch.setattr(main_mod, "parse_args", lambda a: SimpleNamespace(interval=1, cycles=0, verbose=0))
+    monkeypatch.setattr(
+        main_mod,
+        "parse_args",
+        lambda a: SimpleNamespace(interval=1, cycles=0, verbose=0),
+    )
     monkeypatch.setattr(main_mod, "get_log_config", lambda args: {"level": "INFO"})
-    monkeypatch.setattr(main_mod, "_setup_debug_file_handler", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr(
+        main_mod,
+        "_setup_debug_file_handler",
+        lambda: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
     monkeypatch.setattr(main_mod, "ensure_default_last_ts", lambda: None)
-    monkeypatch.setattr(main_mod, "run_loop", lambda interval, cycles, verbose_level: None)
+    monkeypatch.setattr(
+        main_mod, "run_loop", lambda interval, cycles, verbose_level: None
+    )
     # should not raise
     main_mod.main(argv=[])
 
 
 def test_main_exporter_raises_and_http_addr(monkeypatch):
     called = {}
-    monkeypatch.setattr(main_mod, "parse_args", lambda a: SimpleNamespace(interval=1, cycles=0, verbose=0))
+    monkeypatch.setattr(
+        main_mod,
+        "parse_args",
+        lambda a: SimpleNamespace(interval=1, cycles=0, verbose=0),
+    )
     monkeypatch.setattr(main_mod, "get_log_config", lambda args: {"level": "INFO"})
     monkeypatch.setattr(main_mod, "_setup_debug_file_handler", lambda: None)
     monkeypatch.setattr(main_mod, "ensure_default_last_ts", lambda: None)
@@ -174,18 +203,26 @@ def test_main_exporter_raises_and_http_addr(monkeypatch):
     def bad_exporter():
         raise RuntimeError("fail")
 
-    monkeypatch.setattr("infra_monitoring.api.exporter.prometheus.start_exporter", bad_exporter)
+    monkeypatch.setattr(
+        "infra_monitoring.api.exporter.prometheus.start_exporter", bad_exporter
+    )
 
     # capture run_http_server kwargs
     def fake_run_http_server(**kwargs):
         called["http_kwargs"] = kwargs
 
-    monkeypatch.setattr("infra_monitoring.api.exporter.main_http.run_http_server", fake_run_http_server)
+    monkeypatch.setattr(
+        "infra_monitoring.api.exporter.main_http.run_http_server", fake_run_http_server
+    )
 
     # thread that calls target synchronously
     class DummyThread2:
         def __init__(self, *args, **kwargs):
-            self._target = kwargs.get("target") if "target" in kwargs else (args[0] if args else None)
+            self._target = (
+                kwargs.get("target")
+                if "target" in kwargs
+                else (args[0] if args else None)
+            )
             self._tkwargs = kwargs.get("kwargs", {})
 
         def start(self):
@@ -214,7 +251,11 @@ def test_main_env_load_exception(monkeypatch):
         lambda: (_ for _ in ()).throw(RuntimeError("boom")),
     )
     # stub parse_args/run_loop to exit quickly
-    monkeypatch.setattr(main_mod, "parse_args", lambda a: SimpleNamespace(interval=1, cycles=0, verbose=0))
+    monkeypatch.setattr(
+        main_mod,
+        "parse_args",
+        lambda a: SimpleNamespace(interval=1, cycles=0, verbose=0),
+    )
     monkeypatch.setattr(main_mod, "get_log_config", lambda args: {"level": "INFO"})
     monkeypatch.setattr(main_mod, "_setup_debug_file_handler", lambda: None)
     monkeypatch.setattr(main_mod, "ensure_default_last_ts", lambda: None)
@@ -225,19 +266,25 @@ def test_main_env_load_exception(monkeypatch):
 
 def test_main_exporter_importerror_and_promtail_inner(monkeypatch):
     # Simulate prometheus module present but missing start_exporter -> ImportError
-    import types as _types, sys as _sys
+    import sys as _sys
+    import types as _types
 
     mod = _types.ModuleType("infra_monitoring.api.exporter.prometheus")
     _sys.modules["infra_monitoring.api.exporter.prometheus"] = mod
 
     # Ensure main uses our parse_args and run_loop
-    monkeypatch.setattr(main_mod, "parse_args", lambda a: SimpleNamespace(interval=1, cycles=0, verbose=0))
+    monkeypatch.setattr(
+        main_mod,
+        "parse_args",
+        lambda a: SimpleNamespace(interval=1, cycles=0, verbose=0),
+    )
     monkeypatch.setattr(main_mod, "get_log_config", lambda args: {"level": "INFO"})
     monkeypatch.setattr(main_mod, "_setup_debug_file_handler", lambda: None)
     monkeypatch.setattr(main_mod, "ensure_default_last_ts", lambda: None)
 
     # For promtail inner import, provide main_http module without run_promtail_worker
     mod2 = _types.ModuleType("infra_monitoring.api.exporter.main_http")
+
     # provide run_http_server to avoid failure
     def fake_http(**kwargs):
         return None
@@ -248,7 +295,11 @@ def test_main_exporter_importerror_and_promtail_inner(monkeypatch):
     # Dummy thread that calls target
     class SyncThread:
         def __init__(self, *args, **kwargs):
-            self._target = kwargs.get("target") if "target" in kwargs else (args[0] if args else None)
+            self._target = (
+                kwargs.get("target")
+                if "target" in kwargs
+                else (args[0] if args else None)
+            )
             self._tkwargs = kwargs.get("kwargs", {})
 
         def start(self):
@@ -275,7 +326,11 @@ def test_main_thread_init_raises(monkeypatch):
             raise RuntimeError("bad init")
 
     monkeypatch.setattr("threading.Thread", BadThread)
-    monkeypatch.setattr(main_mod, "parse_args", lambda a: SimpleNamespace(interval=1, cycles=0, verbose=0))
+    monkeypatch.setattr(
+        main_mod,
+        "parse_args",
+        lambda a: SimpleNamespace(interval=1, cycles=0, verbose=0),
+    )
     monkeypatch.setattr(main_mod, "get_log_config", lambda args: {"level": "INFO"})
     monkeypatch.setattr(main_mod, "_setup_debug_file_handler", lambda: None)
     monkeypatch.setattr(main_mod, "ensure_default_last_ts", lambda: None)
