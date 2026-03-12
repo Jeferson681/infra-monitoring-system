@@ -44,7 +44,9 @@ def test_check_disk_usage(monkeypatch, tmp_path):
     from infra_monitoring.infra.system.treatments import check_disk_usage
 
     # monkeypatch roots and disk_usage
-    monkeypatch.setattr("infra_monitoring.infra.system.treatments._iter_roots", lambda: [tmp_path])
+    monkeypatch.setattr(
+        "infra_monitoring.infra.system.treatments._iter_roots", lambda: [tmp_path]
+    )
 
     class DummyUsage:
         def __init__(self, total, used):
@@ -61,6 +63,8 @@ def test_reapply_network_config_no_candidates(monkeypatch):
     from infra_monitoring.infra.system.treatments import reapply_network_config
 
     # force no candidates
-    monkeypatch.setattr("infra_monitoring.infra.system.treatments._platform_candidates", lambda p: [])
+    monkeypatch.setattr(
+        "infra_monitoring.infra.system.treatments._platform_candidates", lambda p: []
+    )
     # ensure returns without exception
     reapply_network_config()

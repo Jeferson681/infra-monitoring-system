@@ -1,6 +1,7 @@
 import os
-import pytest
 from pathlib import Path
+
+import pytest
 
 from infra_monitoring.infra.system import log_helpers as lh
 

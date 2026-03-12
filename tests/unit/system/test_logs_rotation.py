@@ -1,7 +1,7 @@
 import os
 
-from infra_monitoring.infra.system import logs as logs_mod
 from infra_monitoring.infra.system import log_helpers as lh
+from infra_monitoring.infra.system import logs as logs_mod
 
 
 def test_try_rotate_file_moves_and_compresses(tmp_path, monkeypatch):

@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+
 import pytest
 
 from infra_monitoring.core import args as args_mod

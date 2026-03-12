@@ -1,9 +1,12 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def test_parse_epoch_numeric_and_iso():
     """_numeric and ISO string parsing produce epoch floats or None."""
-    from infra_monitoring.infra.system.time_helpers import _parse_epoch_from_value, _parse_date_string
+    from infra_monitoring.infra.system.time_helpers import (
+        _parse_date_string,
+        _parse_epoch_from_value,
+    )
 
     assert isinstance(_parse_epoch_from_value(1234567890), float)
     assert _parse_date_string("2020-01-02T03:04:05Z") is not None
@@ -26,7 +29,7 @@ def test_extract_epoch_from_datetime():
     """extract_epoch deve retornar epoch correto de datetime com timezone."""
     from infra_monitoring.infra.system.time_helpers import extract_epoch
 
-    dt = datetime(2025, 10, 15, 12, 0, tzinfo=timezone.utc)
+    dt = datetime(2025, 10, 15, 12, 0, tzinfo=UTC)
     # extract_epoch expects a dict-like object; provide top-level 'ts'
     got = extract_epoch({"ts": dt.isoformat()})
     assert got is not None

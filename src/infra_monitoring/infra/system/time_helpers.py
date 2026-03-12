@@ -7,17 +7,26 @@ ISO formats, returning a float (seconds since epoch) or ``None`` if no
 timestamp is found.
 """
 
-from typing import Any, Optional, Iterator
 import datetime
 import logging
+from collections.abc import Iterator
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 # Common keys used when scanning for timestamp-like fields
-KEYS_TO_MATCH = {"ts", "timestamp", "time", "date", "last_time", "created_at", "data/hora"}
+KEYS_TO_MATCH = {
+    "ts",
+    "timestamp",
+    "time",
+    "date",
+    "last_time",
+    "created_at",
+    "data/hora",
+}
 
 
-def _epoch_from_numeric(v) -> Optional[float]:
+def _epoch_from_numeric(v) -> float | None:
     try:
         n = float(v)
     except (TypeError, ValueError):
@@ -27,7 +36,7 @@ def _epoch_from_numeric(v) -> Optional[float]:
     return n
 
 
-def _parse_date_string(s: str) -> Optional[float]:
+def _parse_date_string(s: str) -> float | None:
     """Try to parse a date/time string into epoch seconds.
 
     Supports ISO formats, numeric timestamps expressed as strings, and a
@@ -54,7 +63,7 @@ def _parse_date_string(s: str) -> Optional[float]:
     try:
         dt = datetime.datetime.fromisoformat(t2)
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=datetime.timezone.utc)
+            dt = dt.replace(tzinfo=datetime.UTC)
         return dt.timestamp()
     except ValueError:
         pass
@@ -62,7 +71,7 @@ def _parse_date_string(s: str) -> Optional[float]:
     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
         try:
             dt = datetime.datetime.strptime(t, fmt)
-            dt = dt.replace(tzinfo=datetime.timezone.utc)
+            dt = dt.replace(tzinfo=datetime.UTC)
             return dt.timestamp()
         except ValueError:
             continue
@@ -70,7 +79,7 @@ def _parse_date_string(s: str) -> Optional[float]:
     return None
 
 
-def _parse_epoch_from_value(v) -> Optional[float]:
+def _parse_epoch_from_value(v) -> float | None:
     """Normalize an arbitrary value into an epoch float when possible.
 
     Accepts numbers (int/float/numeric str) and date strings; returns
@@ -88,7 +97,7 @@ def _parse_epoch_from_value(v) -> Optional[float]:
     return None
 
 
-def _scan_keys_in_obj(container, depth: int = 3) -> Optional[float]:
+def _scan_keys_in_obj(container, depth: int = 3) -> float | None:
     if depth < 0 or container is None:
         return None
     if not isinstance(container, (dict, list)):
@@ -109,7 +118,7 @@ def _scan_keys_in_obj(container, depth: int = 3) -> Optional[float]:
     return _scan_list_for_keys(container, depth - 1)
 
 
-def _scan_list_for_keys(lst: list, depth: int) -> Optional[float]:
+def _scan_list_for_keys(lst: list, depth: int) -> float | None:
     best = None
     for item in lst:
         cand = _scan_keys_in_obj(item, depth)
@@ -118,7 +127,7 @@ def _scan_list_for_keys(lst: list, depth: int) -> Optional[float]:
     return best
 
 
-def _scan_direct_keys(container: dict, keys_to_match: set) -> Optional[float]:
+def _scan_direct_keys(container: dict, keys_to_match: set) -> float | None:
     for k, v in container.items():
         try:
             ks = str(k).lower()
@@ -137,7 +146,7 @@ def _iter_likely_subtrees(container: dict) -> Iterator[Any]:
             yield container.get(k)
 
 
-def _scan_values_shallow(container: dict, depth: int) -> Optional[float]:
+def _scan_values_shallow(container: dict, depth: int) -> float | None:
     for v in container.values():
         if isinstance(v, (dict, list)):
             cand = _scan_keys_in_obj(v, depth)
@@ -146,7 +155,7 @@ def _scan_values_shallow(container: dict, depth: int) -> Optional[float]:
     return None
 
 
-def _extract_from_metrics_raw(obj: dict) -> Optional[float]:
+def _extract_from_metrics_raw(obj: dict) -> float | None:
     m = obj.get("metrics_raw") or {}
     if isinstance(m, dict):
         v = m.get("timestamp")
@@ -155,7 +164,7 @@ def _extract_from_metrics_raw(obj: dict) -> Optional[float]:
     return None
 
 
-def _extract_from_top_level(obj: dict) -> Optional[float]:
+def _extract_from_top_level(obj: dict) -> float | None:
     for key in ("ts", "timestamp"):
         if key in obj:
             v = obj.get(key)
@@ -165,7 +174,7 @@ def _extract_from_top_level(obj: dict) -> Optional[float]:
     return None
 
 
-def _extract_from_common_subtrees(obj: dict) -> Optional[float]:
+def _extract_from_common_subtrees(obj: dict) -> float | None:
     for subtree in (obj.get("metrics_raw"), obj.get("meta"), obj.get("events")):
         if subtree is not None:
             n = _scan_keys_in_obj(subtree, depth=3)
@@ -174,7 +183,7 @@ def _extract_from_common_subtrees(obj: dict) -> Optional[float]:
     return None
 
 
-def _check_localized_date_keys(obj: dict) -> Optional[float]:
+def _check_localized_date_keys(obj: dict) -> float | None:
     for key in ("Data/hora", "Data/Hora", "data/hora", "date", "Date"):
         if key in obj:
             v = obj.get(key)
@@ -184,7 +193,7 @@ def _check_localized_date_keys(obj: dict) -> Optional[float]:
     return None
 
 
-def _dfs_scan_for_timestamp(node: Any) -> Optional[float]:
+def _dfs_scan_for_timestamp(node: Any) -> float | None:
     stack: list[Any] = [node]
     while stack:
         nd = stack.pop()
@@ -201,7 +210,7 @@ def _dfs_scan_for_timestamp(node: Any) -> Optional[float]:
     return None
 
 
-def _dfs_scan_dict(d: dict) -> Optional[float]:
+def _dfs_scan_dict(d: dict) -> float | None:
     keys_to_match = KEYS_TO_MATCH
     for k, v in d.items():
         try:
@@ -217,7 +226,7 @@ def _dfs_scan_dict(d: dict) -> Optional[float]:
     return None
 
 
-def _dfs_scan_list(lst: list) -> Optional[float]:
+def _dfs_scan_list(lst: list) -> float | None:
     for item in lst:
         if isinstance(item, (dict, list)):
             n = _dfs_scan_for_timestamp(item)
@@ -226,7 +235,7 @@ def _dfs_scan_list(lst: list) -> Optional[float]:
     return None
 
 
-def _scan_subtree_for_timestamp(subtree: Any, depth: int) -> Optional[float]:
+def _scan_subtree_for_timestamp(subtree: Any, depth: int) -> float | None:
     if isinstance(subtree, list):
         best = None
         for item in subtree:
@@ -237,7 +246,7 @@ def _scan_subtree_for_timestamp(subtree: Any, depth: int) -> Optional[float]:
     return _scan_keys_in_obj(subtree, depth)
 
 
-def extract_epoch(obj: dict) -> Optional[float]:
+def extract_epoch(obj: dict) -> float | None:
     """Extract an epoch timestamp (seconds since epoch) from a log-like object.
 
     The function tries several locations in order of priority:

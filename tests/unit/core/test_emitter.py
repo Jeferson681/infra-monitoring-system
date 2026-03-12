@@ -7,7 +7,8 @@ def test_format_human_fallback(monkeypatch):
 
     # monkeypatch format_snapshot_human to raise
     monkeypatch.setattr(
-        "infra_monitoring.core.emitter.format_snapshot_human", lambda s, r: (_ for _ in ()).throw(Exception("boom"))
+        "infra_monitoring.core.emitter.format_snapshot_human",
+        lambda s, r: (_ for _ in ()).throw(Exception("boom")),
     )
 
     res = fake._format_human_msg(None, {"state": "CRITICAL"})

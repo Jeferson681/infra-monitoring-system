@@ -8,12 +8,13 @@ subsystem when available.
 
 import json
 import os
-import psutil
+import threading
 import time  # Needed for uptime
 from http.server import BaseHTTPRequestHandler, HTTPServer
-import threading
-from infra_monitoring.api.exporter.promtail import send_log_to_loki
 
+import psutil
+
+from infra_monitoring.api.exporter.promtail import send_log_to_loki
 
 # Default path to the system metrics JSONL directory.
 # Prefer the project's `logs/json` in the current working directory (repository root)
@@ -22,10 +23,11 @@ proj_jsonl = os.path.join(os.getcwd(), "logs", "json")
 if os.path.isdir(proj_jsonl):
     SYSTEM_METRICS_JSONL_PATH = proj_jsonl
 else:
-    SYSTEM_METRICS_JSONL_PATH = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "logs", "json"))
+    SYSTEM_METRICS_JSONL_PATH = os.path.normpath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "logs", "json")
+    )
 
 try:
-
     PROMETHEUS_AVAILABLE = True
 except ImportError:
     PROMETHEUS_AVAILABLE = False
@@ -54,7 +56,9 @@ class HealthHandler(BaseHTTPRequestHandler):
 
                 payload = get_metrics_bytes()
                 self.send_response(200)
-                self.send_header("Content-type", "text/plain; version=0.0.4; charset=utf-8")
+                self.send_header(
+                    "Content-type", "text/plain; version=0.0.4; charset=utf-8"
+                )
                 self.end_headers()
                 self.wfile.write(payload)
             except Exception:
@@ -74,7 +78,11 @@ class HealthHandler(BaseHTTPRequestHandler):
         system_metrics = {}
         last_json = None
         try:
-            files = [f for f in os.listdir(jsonl_path) if f.startswith("monitoring-") and f.endswith(".jsonl")]
+            files = [
+                f
+                for f in os.listdir(jsonl_path)
+                if f.startswith("monitoring-") and f.endswith(".jsonl")
+            ]
             if files:
                 files.sort(reverse=True)
                 latest_file = os.path.join(jsonl_path, files[0])
@@ -95,7 +103,9 @@ class HealthHandler(BaseHTTPRequestHandler):
         except Exception as exc:
             import logging
 
-            logging.getLogger(__name__).exception("Failed to read metrics from JSONL: %s", exc)
+            logging.getLogger(__name__).exception(
+                "Failed to read metrics from JSONL: %s", exc
+            )
         return system_metrics
 
     def _get_process_metrics(self, prefix="", prometheus=False):
@@ -105,7 +115,9 @@ class HealthHandler(BaseHTTPRequestHandler):
             f"{prefix}cpu_percent": proc.cpu_percent(interval=0.0),
             f"{prefix}memory_percent": proc.memory_percent(),
             f"{prefix}memory_rss_bytes": getattr(proc.memory_info(), "rss", 0),
-            f"{prefix}uptime_seconds": float(max(0, (time.time() - proc.create_time()))),
+            f"{prefix}uptime_seconds": float(
+                max(0, (time.time() - proc.create_time()))
+            ),
             f"{prefix}num_threads": proc.num_threads(),
         }
         num_fds_fn = getattr(proc, "num_fds", None)
@@ -117,11 +129,17 @@ class HealthHandler(BaseHTTPRequestHandler):
             except Exception as exc:
                 import logging
 
-                logging.getLogger(__name__).debug("Failed to obtain number of file descriptors: %s", exc, exc_info=True)
+                logging.getLogger(__name__).debug(
+                    "Failed to obtain number of file descriptors: %s",
+                    exc,
+                    exc_info=True,
+                )
         # Adjust names for Prometheus if needed
         if prometheus:
             # Remove duplicated prefix for Prometheus
-            metrics = {k.replace("process_process_", "process_"): v for k, v in metrics.items()}
+            metrics = {
+                k.replace("process_process_", "process_"): v for k, v in metrics.items()
+            }
         return metrics
 
     def _format_prometheus_metrics(self, system_metrics, process_metrics):
@@ -197,7 +215,7 @@ class HealthHandler(BaseHTTPRequestHandler):
                 temps = psutil.sensors_temperatures()
                 if temps:
                     # pick first available sensor temperature
-                    for key, entries in temps.items():
+                    for entries in temps.values():
                         if entries:
                             t = entries[0].current
                             if t is not None:
@@ -205,11 +223,17 @@ class HealthHandler(BaseHTTPRequestHandler):
         except Exception as exc:
             import logging
 
-            logging.getLogger(__name__).debug("Failed to obtain temperature via psutil: %s", exc)
+            logging.getLogger(__name__).debug(
+                "Failed to obtain temperature via psutil: %s", exc
+            )
         # fallback to system metrics JSONL
         try:
             if isinstance(system_metrics, dict):
-                m = system_metrics.get("metrics") if "metrics" in system_metrics else system_metrics
+                m = (
+                    system_metrics.get("metrics")
+                    if "metrics" in system_metrics
+                    else system_metrics
+                )
                 if isinstance(m, dict):
                     temp = m.get("temperature_celsius") if isinstance(m, dict) else None
                     # fallback to legacy key for backward compatibility
@@ -220,7 +244,9 @@ class HealthHandler(BaseHTTPRequestHandler):
         except Exception as exc:
             import logging
 
-            logging.getLogger(__name__).debug("Failed to read temperature from JSONL: %s", exc)
+            logging.getLogger(__name__).debug(
+                "Failed to read temperature from JSONL: %s", exc
+            )
         return None
 
     # Module-level state for computing network deltas

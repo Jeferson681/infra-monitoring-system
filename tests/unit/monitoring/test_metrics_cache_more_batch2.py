@@ -33,7 +33,9 @@ def test_collect_metrics_triggers_export(monkeypatch):
         called["n"] += 1
 
     # call _export_some_metrics directly to validate behavior
-    monkeypatch.setattr(m, "_export_some_metrics", lambda metrics: fake_export(metrics), raising=False)
+    monkeypatch.setattr(
+        m, "_export_some_metrics", lambda metrics: fake_export(metrics), raising=False
+    )
     res = {}
     m._export_some_metrics(res)
     assert called["n"] == 1

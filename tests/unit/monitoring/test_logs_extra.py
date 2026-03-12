@@ -1,8 +1,7 @@
 import os
 import time
 
-from infra_monitoring.infra.system import log_helpers
-from infra_monitoring.infra.system import logs
+from infra_monitoring.infra.system import log_helpers, logs
 
 
 def test_sanitize_and_format():

@@ -16,8 +16,8 @@ import gzip
 import io
 import json
 import time
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator
 
 
 def _open_maybe_gzip(path: Path):
@@ -28,7 +28,7 @@ def _open_maybe_gzip(path: Path):
     if str(path).endswith(".gz"):
         # gzip.open yields bytes; open in text mode to simplify line reading
         return gzip.open(path, mode="rt", encoding="utf-8", errors="replace")
-    return open(path, mode="r", encoding="utf-8", errors="replace")
+    return open(path, encoding="utf-8", errors="replace")
 
 
 def iter_jsonl(

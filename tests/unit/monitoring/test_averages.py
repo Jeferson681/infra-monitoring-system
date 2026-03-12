@@ -1,5 +1,5 @@
-import json
 import datetime
+import json
 import time
 
 import pytest
@@ -16,7 +16,7 @@ def test__extract_epoch_numeric_and_iso():
     assert pytest.approx(extract_epoch(o1), rel=1e-6) == 1700000000
 
     # ISO string
-    iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    iso = datetime.datetime.now(datetime.UTC).isoformat()
     o2 = {"Data/hora": iso}
     assert extract_epoch(o2) is not None
 
@@ -92,7 +92,10 @@ def test_extract_window_entries(tmp_path):
     fname = f"monitoring-{today}.jsonl"
     fpath = logdir / fname
     now = time.time()
-    fpath.write_text(json.dumps({"metrics_raw": {"timestamp": now, "cpu_percent": 5}}) + "\n", encoding="utf-8")
+    fpath.write_text(
+        json.dumps({"metrics_raw": {"timestamp": now, "cpu_percent": 5}}) + "\n",
+        encoding="utf-8",
+    )
     # test removed: functionality covered by aggregate_last_seconds
 
 
@@ -101,7 +104,7 @@ def test_format_long_metric_from_aggregate_includes_used_lines(tmp_path):
     # build fake aggregate with used_files_lines
     agg = {
         "averages": {"cpu_percent": 55, "bytes_sent": None},
-        "time_to": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "time_to": datetime.datetime.now(datetime.UTC).isoformat(),
         "used_files_lines": {str(tmp_path / "a.jsonl"): (10, 20)},
     }
     out = averages.format_long_metric_from_aggregate(agg)

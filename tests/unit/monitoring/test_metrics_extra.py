@@ -1,4 +1,5 @@
 import subprocess
+
 import psutil
 
 from infra_monitoring.services.monitoring import metrics
@@ -99,6 +100,8 @@ def test_get_cpu_freq_ghz_handles_none(monkeypatch):
 
 def test_get_memory_info_handles_exceptions(monkeypatch):
     """get_memory_info returns (None, None) when psutil.virtual_memory raises."""
-    monkeypatch.setattr(psutil, "virtual_memory", lambda: (_ for _ in ()).throw(RuntimeError("oom")))
+    monkeypatch.setattr(
+        psutil, "virtual_memory", lambda: (_ for _ in ()).throw(RuntimeError("oom"))
+    )
     used, total = metrics.get_memory_info()
     assert used is None and total is None

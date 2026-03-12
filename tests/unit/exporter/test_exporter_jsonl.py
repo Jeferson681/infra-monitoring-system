@@ -1,6 +1,7 @@
+import json
 import os
 import tempfile
-import json
+
 from infra_monitoring.api.exporter import prometheus
 
 
@@ -15,13 +16,20 @@ def make_fake_jsonl_dir(metrics_dict):
 
 def test_expose_system_metrics_from_jsonl_updates_gauges():
     """Testa se expose_system_metrics_from_jsonl atualiza os Gauges corretamente a partir do JSONL."""
-    metrics = {"cpu_percent": 42.5, "ram_used": 1024, "disk_free": 20480, "latency_ms": 12.3}
+    metrics = {
+        "cpu_percent": 42.5,
+        "ram_used": 1024,
+        "disk_free": 20480,
+        "latency_ms": 12.3,
+    }
     temp_dir, file_path = make_fake_jsonl_dir(metrics)
     prometheus._gauges.clear()
     prometheus.expose_system_metrics_from_jsonl(temp_dir)
     # Verifica se os gauges foram atualizados corretamente
     for k, v in metrics.items():
-        gauge = prometheus._gauges.get(prometheus._sanitize_metric_name(f"monitoring_{k}"))
+        gauge = prometheus._gauges.get(
+            prometheus._sanitize_metric_name(f"monitoring_{k}")
+        )
         assert gauge is not None, f"Gauge para {k} não foi criado"
         # O valor do Gauge é acessado via gauge._value.get()
         assert gauge._value.get() == v, f"Gauge {k} não foi atualizado corretamente"

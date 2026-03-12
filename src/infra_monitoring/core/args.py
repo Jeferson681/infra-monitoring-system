@@ -10,13 +10,16 @@ when the corresponding CLI argument is not provided.
 import sys
 from pathlib import Path
 
-if __name__ == "__main__" or (hasattr(sys, "_getframe") and sys._getframe(1).f_globals.get("__name__") == "__main__"):
+if __name__ == "__main__" or (
+    hasattr(sys, "_getframe")
+    and sys._getframe(1).f_globals.get("__name__") == "__main__"
+):
     src_path = Path(__file__).resolve().parent.parent
     if str(src_path) not in sys.path:
         sys.path.insert(0, str(src_path))
 
 import argparse
-from typing import Sequence
+from collections.abc import Sequence
 
 
 # Main function in the module; create and return a configured ArgumentParser
@@ -113,7 +116,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             else:
                 setattr(ns, arg, env_val)
         except Exception as exc:
-            logging.getLogger(__name__).warning(f"{env_var} invalid ('{env_val}'): {exc}. Using CLI/default value.")
+            logging.getLogger(__name__).warning(
+                f"{env_var} invalid ('{env_val}'): {exc}. Using CLI/default value."
+            )
     # If in time mode, allow override via a specific env var
     if getattr(ns, "cycle_mode", "cycles") == "time":
         env_time = os.getenv("MONITORING_CYCLE_TIME_MIN")

@@ -1,7 +1,6 @@
 import time
 from pathlib import Path
 
-
 from infra_monitoring.infra.system import logs as logs_mod
 
 
@@ -55,13 +54,22 @@ def test_write_log_human_and_json(tmp_path, monkeypatch):
     monkeypatch.setattr(logs_mod, "write_json", fake_write_json)
 
     # single message
-    logs_mod.write_log("app", "INFO", "hello", extra={"k": "v"}, human_enable=True, json_enable=True)
+    logs_mod.write_log(
+        "app", "INFO", "hello", extra={"k": "v"}, human_enable=True, json_enable=True
+    )
     assert calls["text"] or calls["json"]
 
     # multiple messages with extras list
     calls["text"].clear()
     calls["json"].clear()
-    logs_mod.write_log("app", "INFO", ["a", "b"], extra=[{"i": 1}, {"i": 2}], human_enable=True, json_enable=True)
+    logs_mod.write_log(
+        "app",
+        "INFO",
+        ["a", "b"],
+        extra=[{"i": 1}, {"i": 2}],
+        human_enable=True,
+        json_enable=True,
+    )
     assert len(calls["text"]) == 2
     assert len(calls["json"]) == 2
 
@@ -76,11 +84,15 @@ def test_hourly_allows_write_and_perform_human(tmp_path, monkeypatch):
     cache_dir.mkdir(exist_ok=True)
     ts_file = cache_dir / f".last_human_{key}.ts"
     ts_file.write_text(str(int(time.time())))
-    assert logs_mod._hourly_allows_write(name, True, 3600, project_root=tmp_path) is False
+    assert (
+        logs_mod._hourly_allows_write(name, True, 3600, project_root=tmp_path) is False
+    )
 
     # old timestamp -> allow
     ts_file.write_text(str(int(time.time()) - 10000))
-    assert logs_mod._hourly_allows_write(name, True, 3600, project_root=tmp_path) is True
+    assert (
+        logs_mod._hourly_allows_write(name, True, 3600, project_root=tmp_path) is True
+    )
 
 
 def test_ensure_log_dirs_exist_creates_missing(tmp_path, monkeypatch):

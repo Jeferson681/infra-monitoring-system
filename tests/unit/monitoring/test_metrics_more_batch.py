@@ -1,5 +1,5 @@
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -37,7 +37,9 @@ def test_get_network_stats_and_disk_percent(monkeypatch):
     assert ns["bytes_recv"] == 2000
 
     # disk percent: monkeypatch disk candidate paths and psutil.disk_usage
-    monkeypatch.setattr(m, "_disk_candidate_paths", lambda: [Path("/nonexistent"), Path("/also")])
+    monkeypatch.setattr(
+        m, "_disk_candidate_paths", lambda: [Path("/nonexistent"), Path("/also")]
+    )
 
     class DU:
         def __init__(self, percent):
@@ -71,9 +73,17 @@ def test_get_disk_percent_with_path(monkeypatch, tmp_path):
 def test_get_network_latency_ping_success(monkeypatch):
     """Testa get_network_latency com sucesso via ping."""
     # simulate ping output
-    monkeypatch.setattr(m.subprocess, "check_output", lambda *a, **k: "round-trip min/avg/max = 12.34 ms")
+    monkeypatch.setattr(
+        m.subprocess,
+        "check_output",
+        lambda *a, **k: "round-trip min/avg/max = 12.34 ms",
+    )
     # ensure tcp fallback not called by forcing socket.create_connection to raise if used
-    monkeypatch.setattr(m.socket, "create_connection", lambda *a, **k: (_ for _ in ()).throw(OSError("no")))
+    monkeypatch.setattr(
+        m.socket,
+        "create_connection",
+        lambda *a, **k: (_ for _ in ()).throw(OSError("no")),
+    )
 
     # reset flag
     m._last_latency_estimated = False
@@ -150,6 +160,7 @@ def test_get_temp_from_script_and_collector(monkeypatch, tmp_path):
     assert m._get_temp_from_script(tmp_path / "temp.sh") is None
 
     import sys
+
     import pytest
 
     # skip on Windows where psutil.sensors_temperatures() is not supported

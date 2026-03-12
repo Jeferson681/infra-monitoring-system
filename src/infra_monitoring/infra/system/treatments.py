@@ -15,9 +15,8 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import List, Optional
 
-from .helpers import reap_children_nonblocking, record_network_usage, get_network_limit
+from .helpers import get_network_limit, reap_children_nonblocking, record_network_usage
 from .log_helpers import process_temp_item
 
 logger = logging.getLogger(__name__)
@@ -29,7 +28,7 @@ NETWORK_TREATMENT_COOLDOWN_SECONDS = 3 * 24 * 3600  # 3 days
 
 ## ...existing code...
 
-_excess_since: Optional[float] = None
+_excess_since: float | None = None
 
 
 def update_network_usage_learning(bytes_sent: int, bytes_recv: int) -> bool:
@@ -69,7 +68,11 @@ def update_network_usage_learning(bytes_sent: int, bytes_recv: int) -> bool:
             if restart_func is not None:
                 restart_func()
         except Exception as exc:
-            logger.warning("update_network_usage_learning: restart_interface failed: %s", exc, exc_info=True)
+            logger.warning(
+                "update_network_usage_learning: restart_interface failed: %s",
+                exc,
+                exc_info=True,
+            )
         return True
     return False
 
@@ -96,18 +99,20 @@ def cleanup_temp_files(days: int = 7) -> None:
             process_temp_item(item, max_age)
     except OSError as exc:
         # Debug log; do not raise when scanning tempdir
-        logger.debug("cleanup_temp_files: scanning %s failed: %s", tmpdir, exc, exc_info=True)
+        logger.debug(
+            "cleanup_temp_files: scanning %s failed: %s", tmpdir, exc, exc_info=True
+        )
 
 
 # vulture: ignore
-def check_disk_usage(threshold_pct: int = 90) -> List[str]:
+def check_disk_usage(threshold_pct: int = 90) -> list[str]:
     """Check disk usage and log/return issues above the threshold.
 
     Returns a list of messages describing volumes whose usage exceeds
     `threshold_pct`.
     """
     roots = _iter_roots()
-    issues: List[str] = []
+    issues: list[str] = []
     for r in roots:
         try:
             exists = r.exists()
@@ -172,7 +177,9 @@ def trim_process_working_set_windows(pid: int) -> bool:
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
         psapi = ctypes.WinDLL("psapi", use_last_error=True)  # type: ignore[attr-defined]
 
-        h = kernel32.OpenProcess(PROCESS_SET_QUOTA | PROCESS_QUERY_INFORMATION, False, pid)
+        h = kernel32.OpenProcess(
+            PROCESS_SET_QUOTA | PROCESS_QUERY_INFORMATION, False, pid
+        )
         if not h:
             return False
         try:
@@ -222,11 +229,17 @@ def trim_process_working_set_posix(pid: int) -> bool:
                 res = malloc_trim(0)
                 return bool(res)
             except Exception as exc:
-                logger.debug("trim_process_working_set_posix: malloc_trim failed: %s", exc, exc_info=True)
+                logger.debug(
+                    "trim_process_working_set_posix: malloc_trim failed: %s",
+                    exc,
+                    exc_info=True,
+                )
                 return False
         return False
     except Exception as exc:  # pragma: no cover - defensive
-        logger.debug("trim_process_working_set_posix unexpected error: %s", exc, exc_info=True)
+        logger.debug(
+            "trim_process_working_set_posix unexpected error: %s", exc, exc_info=True
+        )
         return False
 
 
@@ -260,22 +273,31 @@ def reapply_network_config() -> None:
 
     candidates = _platform_candidates(sys.platform)
     if not candidates:
-        logger.debug("reapply_network_config: no candidate commands for platform %s", sys.platform)
+        logger.debug(
+            "reapply_network_config: no candidate commands for platform %s",
+            sys.platform,
+        )
         logger.warning("Could not restore network connectivity")
         return
 
     for cmd in candidates:
         if shutil.which(cmd[0]) is None:
-            logger.debug("reapply_network_config: command not found, skipping %s", cmd[0])
+            logger.debug(
+                "reapply_network_config: command not found, skipping %s", cmd[0]
+            )
             continue
 
         try:
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         except (subprocess.SubprocessError, OSError) as exc:
-            logger.error("reapply_network_config: %s failed: %s", cmd, exc, exc_info=True)
+            logger.error(
+                "reapply_network_config: %s failed: %s", cmd, exc, exc_info=True
+            )
             continue
 
-        logger.debug("reapply_network_config: %s => %s", cmd, getattr(proc, "returncode", None))
+        logger.debug(
+            "reapply_network_config: %s => %s", cmd, getattr(proc, "returncode", None)
+        )
         if _online_check():
             logger.info("Network connectivity restored after %s", cmd)
             return

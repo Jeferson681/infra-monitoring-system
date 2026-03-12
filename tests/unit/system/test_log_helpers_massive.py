@@ -37,14 +37,18 @@ def test_is_older_than_oserror(tmp_path, monkeypatch):
     def fake_stat():
         raise OSError("boom")
 
-    monkeypatch.setattr(Path, "stat", lambda self: (_ for _ in ()).throw(OSError("boom")))
+    monkeypatch.setattr(
+        Path, "stat", lambda self: (_ for _ in ()).throw(OSError("boom"))
+    )
     assert lh.is_older_than(p, 10) is False
 
 
 def test_archive_file_is_old_oserror(tmp_path, monkeypatch):
     """Teste para OSError em archive_file_is_old."""
     p = tmp_path / "x"
-    monkeypatch.setattr(Path, "stat", lambda self: (_ for _ in ()).throw(OSError("boom")))
+    monkeypatch.setattr(
+        Path, "stat", lambda self: (_ for _ in ()).throw(OSError("boom"))
+    )
     assert lh.archive_file_is_old(p, 0, 1) is False
 
 
@@ -61,7 +65,9 @@ def test_attempts_failures(tmp_path, monkeypatch):
     # patch shutil.copy2 to raise
     import shutil as _sh
 
-    monkeypatch.setattr(_sh, "copy2", lambda a, b: (_ for _ in ()).throw(OSError("boom")))
+    monkeypatch.setattr(
+        _sh, "copy2", lambda a, b: (_ for _ in ()).throw(OSError("boom"))
+    )
 
     res = lh._copy_replace_fallback(s, d)
     assert res is False
@@ -72,7 +78,9 @@ def test_all_children_old_oserror(tmp_path, monkeypatch):
     d = tmp_path / "d"
     d.mkdir()
 
-    monkeypatch.setattr(Path, "iterdir", lambda self: (_ for _ in ()).throw(OSError("boom")))
+    monkeypatch.setattr(
+        Path, "iterdir", lambda self: (_ for _ in ()).throw(OSError("boom"))
+    )
     assert lh.all_children_old(d, 1) is False
 
 
@@ -82,7 +90,11 @@ def test_process_temp_item_file_unlink(tmp_path, monkeypatch):
     f.write_text("x")
     os.utime(f, (0, 0))
     # simulate unlink raising
-    monkeypatch.setattr(Path, "unlink", lambda self, missing_ok=False: (_ for _ in ()).throw(OSError("boom")))
+    monkeypatch.setattr(
+        Path,
+        "unlink",
+        lambda self, missing_ok=False: (_ for _ in ()).throw(OSError("boom")),
+    )
     # should not raise
     lh.process_temp_item(f, max_age=1)
 

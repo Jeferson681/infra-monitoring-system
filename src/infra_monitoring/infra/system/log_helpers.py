@@ -5,15 +5,15 @@ writing helpers used by the higher-level logging subsystem. Implementations
 favor robustness and best-effort behavior for I/O operations.
 """
 
-from pathlib import Path
-import os
-from datetime import datetime, timezone, date
-import logging
 import gzip
+import json as _json
+import logging
+import os
+import re
 import shutil
 import time
-import json as _json
-import re
+from datetime import UTC, date, datetime
+from pathlib import Path
 
 try:
     import portalocker  # type: ignore
@@ -31,7 +31,12 @@ try:
 
     DURABLE_WRITES = bool(LOGS_DURABLE_WRITES)
 except (ImportError, AttributeError):
-    DURABLE_WRITES = os.environ.get("LOGS_DURABLE_WRITES", "1").lower() in ("1", "true", "yes", "on")
+    DURABLE_WRITES = os.environ.get("LOGS_DURABLE_WRITES", "1").lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
 
 
 # -----------------------
@@ -54,7 +59,9 @@ def write_text(path: Path, text: str) -> bool:
                         portalocker.lock(fh, portalocker.LOCK_EX)
                         locked = True
                     except Exception as exc:
-                        logger.debug("write_text: portalocker.lock failed on %s: %s", path, exc)
+                        logger.debug(
+                            "write_text: portalocker.lock failed on %s: %s", path, exc
+                        )
 
                 fh.write(text)
                 fh.flush()
@@ -69,12 +76,16 @@ def write_text(path: Path, text: str) -> bool:
                     try:
                         portalocker.unlock(fh)
                     except Exception as exc:
-                        logger.debug("write_text: portalocker.unlock failed on %s: %s", path, exc)
+                        logger.debug(
+                            "write_text: portalocker.unlock failed on %s: %s", path, exc
+                        )
         return True
     except PermissionError as exc:
         # Permission issues are non-fatal for the main loop; warn for
         # visibility without marking the service as failed.
-        logger.warning("write_text: permission denied writing to %s: %s", path, exc, exc_info=True)
+        logger.warning(
+            "write_text: permission denied writing to %s: %s", path, exc, exc_info=True
+        )
         return False
     except OSError as exc:
         logger.error("write_text: failed on %s: %s", path, exc, exc_info=True)
@@ -94,9 +105,16 @@ def write_json(path: Path, obj: dict) -> bool:
             line = _json.dumps(obj, ensure_ascii=False, default=str) + "\n"
             # Emit a WARNING for fallback serialization; recoverable but
             # indicates non-strictly-serializable types.
-            logger.warning("write_json: fallback default=str used on %s: %s", path, exc, exc_info=True)
+            logger.warning(
+                "write_json: fallback default=str used on %s: %s",
+                path,
+                exc,
+                exc_info=True,
+            )
         except Exception as exc2:
-            logger.error("write_json: failed on %s: %s; %s", path, exc, exc2, exc_info=True)
+            logger.error(
+                "write_json: failed on %s: %s; %s", path, exc, exc2, exc_info=True
+            )
             return False
     return write_text(path, line)
 
@@ -146,7 +164,9 @@ def build_json_entry(ts: str, level: str, msg, extra: dict | None = None) -> dic
     return entry
 
 
-def build_human_line(ts: str, level: str, msg_str: str, extras: dict | None = None) -> str:
+def build_human_line(
+    ts: str, level: str, msg_str: str, extras: dict | None = None
+) -> str:
     r"""Compose a human-readable log line.
 
     For compatibility with existing consumers the legacy format is a single
@@ -206,7 +226,11 @@ def _should_use_multiline(msg_str: object) -> bool:
     message contains internal newline characters.
     """
     try:
-        use_multiline_env = os.environ.get("MONITORING_HUMAN_MULTILINE", "0") in ("1", "true", "yes")
+        use_multiline_env = os.environ.get("MONITORING_HUMAN_MULTILINE", "0") in (
+            "1",
+            "true",
+            "yes",
+        )
     except Exception:
         use_multiline_env = False
 
@@ -231,9 +255,9 @@ def format_date_for_log(dt=None) -> str:
             return dt.date().isoformat()
         if isinstance(dt, date):
             return dt.isoformat()
-        return datetime.now(timezone.utc).date().isoformat()
+        return datetime.now(UTC).date().isoformat()
     except (AttributeError, TypeError):
-        return datetime.now(timezone.utc).date().isoformat()
+        return datetime.now(UTC).date().isoformat()
 
 
 # -----------------------
@@ -246,7 +270,7 @@ def is_older_than(p: Path, seconds: int) -> bool:
     except OSError as exc:
         logger.error("is_older_than: failed accessing %s: %s", p, exc, exc_info=True)
         return False
-    now_ts = datetime.now(timezone.utc).timestamp()
+    now_ts = datetime.now(UTC).timestamp()
     return st.st_mtime <= (now_ts - int(seconds))
 
 
@@ -255,7 +279,9 @@ def archive_file_is_old(p: Path, now_ts: float, retention_days: int) -> bool:
     try:
         st = p.stat()
     except OSError as exc:
-        logger.error("archive_file_is_old: failed accessing %s: %s", p, exc, exc_info=True)
+        logger.error(
+            "archive_file_is_old: failed accessing %s: %s", p, exc, exc_info=True
+        )
         return False
     cutoff = now_ts - retention_days * 86400
     return st.st_mtime < cutoff
@@ -294,7 +320,9 @@ def _copy_replace_fallback(s: Path, d: Path) -> bool:
             pass
         return True
     except OSError as exc:
-        logger.debug("atomic_move_to_archive: copy fallback failed: %s", exc, exc_info=True)
+        logger.debug(
+            "atomic_move_to_archive: copy fallback failed: %s", exc, exc_info=True
+        )
         if tmp.exists():
             tmp.unlink(missing_ok=True)
         return False
@@ -317,7 +345,12 @@ def atomic_move_to_archive(src: Path, dst_rotating: Path) -> bool:
         if dst_rotating.exists() and not src.exists():
             dst_rotating.unlink()
     except Exception as exc3:
-        logger.error("atomic_move_to_archive: cleanup failed on %s: %s", dst_rotating, exc3, exc_info=True)
+        logger.error(
+            "atomic_move_to_archive: cleanup failed on %s: %s",
+            dst_rotating,
+            exc3,
+            exc_info=True,
+        )
     return False
 
 
@@ -331,12 +364,16 @@ def compress_file(src: Path, dst_gz: Path) -> bool:
         os.replace(str(tmp), str(dst_gz))
         return True
     except OSError as exc:
-        logger.error("compress_file: failed %s -> %s: %s", src, dst_gz, exc, exc_info=True)
+        logger.error(
+            "compress_file: failed %s -> %s: %s", src, dst_gz, exc, exc_info=True
+        )
         tmp.unlink(missing_ok=True)
         return False
 
 
-def try_rotate_file(p: Path, archive_dir: Path, gz_suffix: str, day_secs: int, week_secs: int) -> None:
+def try_rotate_file(
+    p: Path, archive_dir: Path, gz_suffix: str, day_secs: int, week_secs: int
+) -> None:
     """Move and compress a log file into archive, respecting safe-retention."""
     threshold = week_secs if "_safe" in p.name else day_secs
     if not is_older_than(p, threshold):
@@ -349,7 +386,9 @@ def try_rotate_file(p: Path, archive_dir: Path, gz_suffix: str, day_secs: int, w
         rotating.unlink(missing_ok=True)
 
 
-def try_compress_rotating(rotating: Path, archive_dir: Path, day_secs: int, week_secs: int) -> None:
+def try_compress_rotating(
+    rotating: Path, archive_dir: Path, day_secs: int, week_secs: int
+) -> None:
     """Try to compress a `.rotating` file that was moved to archive."""
     threshold = week_secs if "_safe" in rotating.name else day_secs
     if not is_older_than(rotating, threshold):
@@ -376,7 +415,11 @@ def process_temp_item(item: Path, max_age: int) -> None:
         if item.is_file() and is_older_than(item, max_age):
             item.unlink(missing_ok=True)
             logger.info("Removed %s", item)
-        elif item.is_dir() and all_children_old(item, max_age) and is_older_than(item, max_age):
+        elif (
+            item.is_dir()
+            and all_children_old(item, max_age)
+            and is_older_than(item, max_age)
+        ):
             shutil.rmtree(item, ignore_errors=True)
             logger.info("Removed directory %s", item)
     except OSError as exc:
@@ -399,10 +442,20 @@ def ensure_dir_writable(p: Path) -> bool:
         except PermissionError as exc:
             # Permission issues are non-fatal for the main loop; warn and
             # return False so callers can handle accordingly.
-            logger.warning("ensure_dir_writable: permission denied writing to %s: %s", p, exc, exc_info=True)
+            logger.warning(
+                "ensure_dir_writable: permission denied writing to %s: %s",
+                p,
+                exc,
+                exc_info=True,
+            )
             return False
         except OSError as exc:
-            logger.error("ensure_dir_writable: write test failed for %s: %s", p, exc, exc_info=True)
+            logger.error(
+                "ensure_dir_writable: write test failed for %s: %s",
+                p,
+                exc,
+                exc_info=True,
+            )
             return False
         finally:
             try:
@@ -414,7 +467,12 @@ def ensure_dir_writable(p: Path) -> bool:
                 pass
         return True
     except PermissionError as exc:
-        logger.warning("ensure_dir_writable: permission denied creating %s: %s", p, exc, exc_info=True)
+        logger.warning(
+            "ensure_dir_writable: permission denied creating %s: %s",
+            p,
+            exc,
+            exc_info=True,
+        )
         return False
     except OSError as exc:
         logger.error("ensure_dir_writable: failed for %s: %s", p, exc, exc_info=True)

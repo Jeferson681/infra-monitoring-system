@@ -6,7 +6,10 @@ from datetime import datetime
 
 def test_sanitize_and_normalize():
     """sanitize_log_name e normalize_message_for_human comportam-se como esperado."""
-    from infra_monitoring.infra.system.log_helpers import sanitize_log_name, normalize_message_for_human
+    from infra_monitoring.infra.system.log_helpers import (
+        normalize_message_for_human,
+        sanitize_log_name,
+    )
 
     assert sanitize_log_name("../etc/passwd") != "../etc/passwd"
     assert sanitize_log_name("") == "debug_log"
@@ -19,7 +22,10 @@ def test_sanitize_and_normalize():
 
 def test_build_json_entry_and_human_line(monkeypatch):
     """build_json_entry cria dicionário e build_human_line alterna legacy/multiline."""
-    from infra_monitoring.infra.system.log_helpers import build_json_entry, build_human_line
+    from infra_monitoring.infra.system.log_helpers import (
+        build_human_line,
+        build_json_entry,
+    )
 
     j = build_json_entry("ts", "INFO", "ok", {"a": 1, "msg": "shadow"})
     # existing keys should be preserved and collisions renamed
@@ -78,7 +84,11 @@ def test_write_json_fallback(tmp_path):
 
 def test_atomic_move_and_compress(tmp_path):
     """atomic_move_to_archive e compress_file devem mover e comprimir arquivos."""
-    from infra_monitoring.infra.system.log_helpers import atomic_move_to_archive, compress_file, is_older_than
+    from infra_monitoring.infra.system.log_helpers import (
+        atomic_move_to_archive,
+        compress_file,
+        is_older_than,
+    )
 
     src = tmp_path / "src.txt"
     src.write_text("payload")
@@ -166,7 +176,10 @@ def test_format_date_for_log():
 
 def test_is_older_than_and_ensure_dir_writable(tmp_path):
     """ensure_dir_writable cria pastas e is_older_than mede corretamente."""
-    from infra_monitoring.infra.system.log_helpers import is_older_than, ensure_dir_writable
+    from infra_monitoring.infra.system.log_helpers import (
+        ensure_dir_writable,
+        is_older_than,
+    )
 
     f = tmp_path / "t.txt"
     f.write_text("x")
