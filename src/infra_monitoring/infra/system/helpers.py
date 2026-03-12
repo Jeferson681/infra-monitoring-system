@@ -182,7 +182,9 @@ def _disk_candidate_paths() -> list[object]:
         # Best-effort fallback for Path.anchor access; record debug info
         import logging as _logging
 
-        _logging.getLogger(__name__).debug("Path.anchor access failed, falling back", exc_info=exc)
+        _logging.getLogger(__name__).debug(
+            "Path.anchor access failed, falling back", exc_info=exc
+        )
     candidates.append(Path("/"))
     candidates.append("/")
     return candidates

@@ -555,28 +555,9 @@ def get_network_latency(
             )
             return None
 
-    # Try using system ping
-    cmd = _build_ping_cmd(host, timeout)
-    try:
-        import subprocess  # nosec B404 - used with vetted list args and no shell
-
-        # subprocess.check_output is called with a vetted list `cmd` (no shell).
-        out = subprocess.check_output(
-            cmd, stderr=subprocess.STDOUT, text=True, timeout=float(timeout or 2.0)
-        )  # nosec B603
-    except subprocess.CalledProcessError:
-        # ping returned non-zero exit status; try TCP fallback
-        logger.debug("get_network_latency: ping returned non-zero exit status")
-    except (subprocess.SubprocessError, OSError) as exc:
-        # any other error (timeout, missing binary etc.) -> fallback
-        logger.debug("get_network_latency: ping failed: %s", exc, exc_info=True)
-    else:
-        parsed = _parse_ping_output_for_ms(out)
-        if parsed is not None:
-            _last_latency_estimated = False
-            return parsed
-
-    # continue to TCP fallback
+    # Prefer TCP fallback for latency measurement (more portable).
+    # Avoid calling system `ping` via subprocess to reduce platform differences
+    # and remove reliance on external binaries.
     return _tcp_latency_fallback(host, port, timeout)
 
 

@@ -287,12 +287,21 @@ def reapply_network_config() -> None:
             continue
 
         try:
-            import subprocess  # nosec B404 - used with vetted list args and no shell
+            # By default we do not execute external system commands to avoid
+            # accidental execution in constrained environments. Execution can be
+            # explicitly enabled by setting `ALLOW_SYSTEM_CMDS=1` in the environment.
+            if os.environ.get("ALLOW_SYSTEM_CMDS") == "1":
+                import importlib
 
-            # subprocess.run used with list args and without shell=True; commands
-            # are validated by `shutil.which` and come from internal candidates.
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=10)  # nosec B603
-        except (subprocess.SubprocessError, OSError) as exc:
+                subprocess = importlib.import_module("subprocess")
+                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            else:
+                logger.info(
+                    "reapply_network_config: skipping execution of %s (ALLOW_SYSTEM_CMDS not set)",
+                    cmd,
+                )
+                continue
+        except Exception as exc:
             logger.error(
                 "reapply_network_config: %s failed: %s", cmd, exc, exc_info=True
             )

@@ -219,7 +219,7 @@ class SystemState:
             nf = _normalize_for_display(metrics if isinstance(metrics, dict) else {})
             snap["summary_short"] = cast(Any, nf.get("summary_short"))
             snap["summary_long"] = cast(Any, nf.get("summary_long"))
-        except Exception as exc:
+        except Exception:
             try:
                 import logging as _logging
 
@@ -227,7 +227,9 @@ class SystemState:
             except Exception as exc2:
                 import logging as _logging
 
-                _logging.getLogger(__name__).debug("inner logging failure in _build_snapshot", exc_info=exc2)
+                _logging.getLogger(__name__).debug(
+                    "inner logging failure in _build_snapshot", exc_info=exc2
+                )
         return snap
 
     def _compute_alerts(self, metrics: dict[str, Any]) -> list[dict[str, Any]]:
@@ -457,12 +459,16 @@ class SystemState:
                 # but record debug information for diagnostics.
                 import logging as _logging
 
-                _logging.getLogger(__name__).debug("persist post snapshot failed", exc_info=exc)
+                _logging.getLogger(__name__).debug(
+                    "persist post snapshot failed", exc_info=exc
+                )
         except Exception as exc:
             # Best-effort: if recording fails, keep the snapshot in memory.
             import logging as _logging
 
-            _logging.getLogger(__name__).debug("record post snapshot failed", exc_info=exc)
+            _logging.getLogger(__name__).debug(
+                "record post snapshot failed", exc_info=exc
+            )
             self.post_treatment_snapshot = snap
 
     def _persist_post_treatment_snapshot(self, snap: dict[str, Any]) -> None:
@@ -486,7 +492,12 @@ class SystemState:
                     )
 
                     _write_text(hist_path, _json.dumps(snap, ensure_ascii=False) + "\n")
-                except Exception:  # nosec B110
+                except Exception as exc:
+                    import logging as _logging
+
+                    _logging.getLogger(__name__).debug(
+                        "persist post snapshot write_text failed", exc_info=exc
+                    )
                     return
         except Exception:
             return
@@ -516,7 +527,9 @@ class SystemState:
         except Exception as exc:
             import logging as _logging
 
-            _logging.getLogger(__name__).debug("normalize last_state failed", exc_info=exc)
+            _logging.getLogger(__name__).debug(
+                "normalize last_state failed", exc_info=exc
+            )
         return out
 
 

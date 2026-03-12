@@ -610,7 +610,9 @@ def persist_last_time(last_ts: float | None = None, name: str = "last_ts") -> Pa
         except Exception as exc:
             # best-effort fallback: ignore errors when attempting append fallback
             # record debug info for diagnostics
-            logging.getLogger(__name__).debug("persist_last_time fallback failed", exc_info=exc)
+            logging.getLogger(__name__).debug(
+                "persist_last_time fallback failed", exc_info=exc
+            )
     except OSError as exc:
         logging.getLogger(__name__).error(
             "persist_last_time: failed writing %s: %s", fpath, exc, exc_info=True

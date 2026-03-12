@@ -465,7 +465,9 @@ def ensure_dir_writable(p: Path) -> bool:
                 # Ignore cleanup failures; best-effort operation only.
                 import logging as _logging
 
-                _logging.getLogger(__name__).debug("cleanup failed during ensure_dir_writable", exc_info=exc)
+                _logging.getLogger(__name__).debug(
+                    "cleanup failed during ensure_dir_writable", exc_info=exc
+                )
         return True
     except PermissionError as exc:
         logger.warning(
