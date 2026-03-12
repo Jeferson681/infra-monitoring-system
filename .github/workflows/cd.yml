@@ -7,6 +7,11 @@ on:
       - main
       - develop
   workflow_dispatch:
+    inputs:
+      run_production:
+        description: 'Set to true to actually run the production deploy (default: false)'
+        required: false
+        default: 'false'
 
 jobs:
   build-and-push:
@@ -23,12 +28,13 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-      - name: Build and push Docker image
+      - name: Build and (optionally) push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: docker/Dockerfile
-          push: true
+          # Only push to the registry for protected branches (main/master).
+          push: ${{ github.ref_name == 'main' || github.ref_name == 'master' }}
           tags: |
             ${{ secrets.DOCKER_USERNAME }}/infra-monitoring-system:latest
             ${{ secrets.DOCKER_USERNAME }}/infra-monitoring-system:${{ github.sha }}
@@ -61,9 +67,10 @@ jobs:
   deploy-production:
     # Production deploy is manual for portfolio safety. Run via "Run workflow" in Actions
     # to avoid accidental production changes from PRs or automated pushes.
-    # Keep production deploy disabled by default; allow manual runs only
-    # and restrict to the `main` branch.
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    # This job is restricted to manual runs on `main` and will only execute when
+    # the workflow_dispatch input `run_production` is set to 'true'. By default
+    # the input is 'false' so production deploys are skipped.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.inputs.run_production == 'true'
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
