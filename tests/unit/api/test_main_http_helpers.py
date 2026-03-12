@@ -1,10 +1,6 @@
 import json
-import types
-from types import SimpleNamespace
-import os
 import time
-
-import pytest
+from types import SimpleNamespace
 
 from infra_monitoring.api.exporter import main_http
 
@@ -71,7 +67,9 @@ def test_format_prometheus_metrics_and_helpers(monkeypatch, tmp_path):
     assert "process_x 2" in text
 
     # exercise load averages branch: monkeypatch getloadavg (may not exist on Windows)
-    monkeypatch.setattr(main_http.os, "getloadavg", lambda: (0.1, 0.2, 0.3), raising=False)
+    monkeypatch.setattr(
+        main_http.os, "getloadavg", lambda: (0.1, 0.2, 0.3), raising=False
+    )
     out2 = h._format_prometheus_metrics(system_metrics, process_metrics)
     assert b"monitoring_load_1" in out2
 
@@ -79,13 +77,20 @@ def test_format_prometheus_metrics_and_helpers(monkeypatch, tmp_path):
 def test_get_cpu_temp_c_fallback_and_psutil(monkeypatch):
     h = make_handler()
     # psutil sensors path
-    monkeypatch.setattr(main_http.psutil, "sensors_temperatures", lambda: {"t": [SimpleNamespace(current=45.0)]}, raising=False)
+    monkeypatch.setattr(
+        main_http.psutil,
+        "sensors_temperatures",
+        lambda: {"t": [SimpleNamespace(current=45.0)]},
+        raising=False,
+    )
     assert h._get_cpu_temp_c({}) == 45.0
 
     # fallback to provided system_metrics dict
     sm = {"metrics": {"temperature_celsius": 55}}
     # ensure psutil.sensors_temperatures returns empty so fallback is used
-    monkeypatch.setattr(main_http.psutil, "sensors_temperatures", lambda: {}, raising=False)
+    monkeypatch.setattr(
+        main_http.psutil, "sensors_temperatures", lambda: {}, raising=False
+    )
     assert h._get_cpu_temp_c(sm) == 55.0
 
 
@@ -119,6 +124,7 @@ def test_get_network_rates(monkeypatch):
 
     # advance time and change counters
     monkeypatch.setattr(main_http, "time", SimpleNamespace(time=lambda: 1000))
+
     class Counters2:
         bytes_sent = 3000
         bytes_recv = 5000
@@ -162,6 +168,11 @@ def test_process_num_fds_exception(monkeypatch):
 def test_cpu_temp_psutil_raises_and_fallback(monkeypatch):
     h = make_handler()
     # sensors_temperatures raises
-    monkeypatch.setattr(main_http.psutil, "sensors_temperatures", lambda: (_ for _ in ()).throw(RuntimeError("boom")), raising=False)
+    monkeypatch.setattr(
+        main_http.psutil,
+        "sensors_temperatures",
+        lambda: (_ for _ in ()).throw(RuntimeError("boom")),
+        raising=False,
+    )
     # fallback if provided
     assert h._get_cpu_temp_c({"temperature": 12}) == 12.0

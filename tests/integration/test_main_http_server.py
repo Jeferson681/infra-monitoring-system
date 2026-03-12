@@ -1,7 +1,5 @@
-import threading
-import time
 import http.client
-
+import threading
 from http.server import HTTPServer
 
 from infra_monitoring.api.exporter import main_http
@@ -23,7 +21,7 @@ def test_health_endpoint_returns_ok():
         resp = conn.getresponse()
         body = resp.read().decode("utf-8")
         assert resp.status == 200
-        assert "\"status\": \"ok\"" in body
+        assert '"status": "ok"' in body
     finally:
         conn.close()
         server.shutdown()

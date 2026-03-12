@@ -170,7 +170,7 @@ def _process_window_item(
     # Use compute_metric_states (centralized in state.py) to obtain individual states
     metrics_for_state = {k: rel.get(k) for k in metric_keys}
     # keep compatibility; can be updated to pass real thresholds
-    thresholds = {}  # type: Dict[str, Dict[str, Any]]
+    thresholds: dict[str, dict[str, Any]] = {}
     metric_states = compute_metric_states(metrics_for_state, thresholds)
 
     # Mapping of metric to individual state field (consistent with state.py)
