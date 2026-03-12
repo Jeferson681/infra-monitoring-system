@@ -219,13 +219,15 @@ class SystemState:
             nf = _normalize_for_display(metrics if isinstance(metrics, dict) else {})
             snap["summary_short"] = cast(Any, nf.get("summary_short"))
             snap["summary_long"] = cast(Any, nf.get("summary_long"))
-        except Exception:  # nosec B110
+        except Exception as exc:
             try:
                 import logging as _logging
 
                 _logging.exception("formatters error in _build_snapshot")
-            except Exception:  # nosec B110
-                pass
+            except Exception as exc2:
+                import logging as _logging
+
+                _logging.getLogger(__name__).debug("inner logging failure in _build_snapshot", exc_info=exc2)
         return snap
 
     def _compute_alerts(self, metrics: dict[str, Any]) -> list[dict[str, Any]]:
@@ -450,10 +452,17 @@ class SystemState:
             # _persist_post_treatment_snapshot being used.
             try:
                 self._persist_post_treatment_snapshot(snap)
-            except Exception:  # nosec B110
-                # Swallow errors to keep this best-effort and non-fatal.
-                pass
-        except Exception:  # nosec B110
+            except Exception as exc:
+                # Swallow errors to keep this best-effort and non-fatal,
+                # but record debug information for diagnostics.
+                import logging as _logging
+
+                _logging.getLogger(__name__).debug("persist post snapshot failed", exc_info=exc)
+        except Exception as exc:
+            # Best-effort: if recording fails, keep the snapshot in memory.
+            import logging as _logging
+
+            _logging.getLogger(__name__).debug("record post snapshot failed", exc_info=exc)
             self.post_treatment_snapshot = snap
 
     def _persist_post_treatment_snapshot(self, snap: dict[str, Any]) -> None:
@@ -504,8 +513,10 @@ class SystemState:
         try:
             if isinstance(self.last_state, str) and self.last_state:
                 out["last_state"] = self.last_state
-        except Exception:  # nosec B110
-            pass
+        except Exception as exc:
+            import logging as _logging
+
+            _logging.getLogger(__name__).debug("normalize last_state failed", exc_info=exc)
         return out
 
 

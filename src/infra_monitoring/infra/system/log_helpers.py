@@ -461,10 +461,11 @@ def ensure_dir_writable(p: Path) -> bool:
             try:
                 if test.exists():
                     test.unlink()
-            except Exception:
+            except Exception as exc:
                 # Ignore cleanup failures; best-effort operation only.
-                # nosec B110 - cleanup should not raise during best-effort path
-                pass
+                import logging as _logging
+
+                _logging.getLogger(__name__).debug("cleanup failed during ensure_dir_writable", exc_info=exc)
         return True
     except PermissionError as exc:
         logger.warning(

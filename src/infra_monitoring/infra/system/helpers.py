@@ -178,9 +178,11 @@ def _disk_candidate_paths() -> list[object]:
         anchor = Path().anchor
         if anchor:
             candidates.append(Path(anchor))
-    except Exception:  # nosec B110 - best-effort fallback for Path.anchor access
-        # Intentionally ignore errors here and fall back to '/'
-        pass
+    except Exception as exc:
+        # Best-effort fallback for Path.anchor access; record debug info
+        import logging as _logging
+
+        _logging.getLogger(__name__).debug("Path.anchor access failed, falling back", exc_info=exc)
     candidates.append(Path("/"))
     candidates.append("/")
     return candidates

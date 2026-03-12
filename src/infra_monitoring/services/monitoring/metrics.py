@@ -11,7 +11,6 @@ import math
 import platform
 import re
 import socket
-import subprocess
 import threading
 import time
 from collections.abc import Callable
@@ -404,7 +403,7 @@ def get_disk_percent(path: str | None = None) -> float | None:
                 return psutil.disk_usage(str(p)).percent
             except OSError:
                 # try next candidate; probe in best-effort mode and continue
-                continue  # nosec
+                continue
 
         # if no candidate worked, try the first one even if it does not exist
         try:
@@ -559,9 +558,12 @@ def get_network_latency(
     # Try using system ping
     cmd = _build_ping_cmd(host, timeout)
     try:
+        import subprocess  # nosec B404 - used with vetted list args and no shell
+
+        # subprocess.check_output is called with a vetted list `cmd` (no shell).
         out = subprocess.check_output(
             cmd, stderr=subprocess.STDOUT, text=True, timeout=float(timeout or 2.0)
-        )
+        )  # nosec B603
     except subprocess.CalledProcessError:
         # ping returned non-zero exit status; try TCP fallback
         logger.debug("get_network_latency: ping returned non-zero exit status")

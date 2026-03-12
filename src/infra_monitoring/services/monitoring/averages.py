@@ -607,10 +607,10 @@ def persist_last_time(last_ts: float | None = None, name: str = "last_ts") -> Pa
             from infra_monitoring.infra.system.log_helpers import write_text
 
             write_text(fpath, json.dumps(entry, ensure_ascii=False) + "\n")
-        except Exception:
+        except Exception as exc:
             # best-effort fallback: ignore errors when attempting append fallback
-            # nosec B110 - intentional swallow: persistence is best-effort here
-            pass
+            # record debug info for diagnostics
+            logging.getLogger(__name__).debug("persist_last_time fallback failed", exc_info=exc)
     except OSError as exc:
         logging.getLogger(__name__).error(
             "persist_last_time: failed writing %s: %s", fpath, exc, exc_info=True
