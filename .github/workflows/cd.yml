@@ -61,7 +61,9 @@ jobs:
   deploy-production:
     # Production deploy is manual for portfolio safety. Run via "Run workflow" in Actions
     # to avoid accidental production changes from PRs or automated pushes.
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master'
+    # Keep production deploy disabled by default; allow manual runs only
+    # and restrict to the `main` branch.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
