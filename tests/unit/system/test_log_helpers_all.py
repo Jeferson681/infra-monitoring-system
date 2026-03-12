@@ -1,6 +1,6 @@
+import importlib
 import os
 import time
-import importlib
 
 mod = importlib.import_module("infra_monitoring.infra.system.log_helpers")
 

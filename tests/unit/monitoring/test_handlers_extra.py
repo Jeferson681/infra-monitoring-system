@@ -14,7 +14,11 @@ def test_select_action_matches():
     # platform-aware to avoid false failures in CI.
     import os
 
-    expected = "trim_process_working_set_posix" if os.name == "posix" else "trim_process_working_set_windows"
+    expected = (
+        "trim_process_working_set_posix"
+        if os.name == "posix"
+        else "trim_process_working_set_windows"
+    )
     assert handlers._select_action("memory_percent")[0] == expected
     assert handlers._select_action("network_bytes")[0] == "reapply_network_config"
     assert handlers._select_action("cpu_load")[0] == "reap_zombie_processes"
@@ -23,7 +27,9 @@ def test_select_action_matches():
 
 def test_on_cooldown_and_run_main_action():
     """_on_cooldown honors cooldown windows and _run_main_action handles special case."""
-    state = SimpleNamespace(treatment_cooldowns={"a": 10}, last_treatment_run={"a": time.monotonic() - 20})
+    state = SimpleNamespace(
+        treatment_cooldowns={"a": 10}, last_treatment_run={"a": time.monotonic() - 20}
+    )
     now = time.monotonic()
     assert handlers._on_cooldown(state, "a", now) is False
 
@@ -38,8 +44,10 @@ def test_on_cooldown_and_run_main_action():
         return days or 0
 
     state2 = SimpleNamespace()
-    setattr(state2, "cleanup_temp_age_days", 5)
-    assert handlers._run_main_action(state2, "cleanup_temp_files", cleanup_days, ()) == 5
+    state2.cleanup_temp_age_days = 5
+    assert (
+        handlers._run_main_action(state2, "cleanup_temp_files", cleanup_days, ()) == 5
+    )
 
 
 def test_maybe_run_aux_cleanup_and_run_reap_aux(monkeypatch):
@@ -54,7 +62,9 @@ def test_maybe_run_aux_cleanup_and_run_reap_aux(monkeypatch):
         called["cleanup"] = days
         return True
 
-    monkeypatch.setattr("infra_monitoring.infra.system.treatments.cleanup_temp_files", fake_cleanup)
+    monkeypatch.setattr(
+        "infra_monitoring.infra.system.treatments.cleanup_temp_files", fake_cleanup
+    )
     handlers._maybe_run_aux_cleanup(state, time.monotonic())
     # if function ran, last_treatment_run should be updated
     assert isinstance(state.last_treatment_run, dict)
@@ -63,7 +73,9 @@ def test_maybe_run_aux_cleanup_and_run_reap_aux(monkeypatch):
     def fake_reap():
         return "reaped"
 
-    monkeypatch.setattr("infra_monitoring.infra.system.treatments.reap_zombie_processes", fake_reap)
+    monkeypatch.setattr(
+        "infra_monitoring.infra.system.treatments.reap_zombie_processes", fake_reap
+    )
     res = handlers._run_reap_aux(state, "not_reap", None, time.monotonic())
     assert res in (None, "reaped")
 
@@ -90,7 +102,9 @@ def test_attempt_treatment_no_action_or_cooldown(monkeypatch):
     def fake_check():
         return "checked"
 
-    monkeypatch.setattr("infra_monitoring.infra.system.treatments.check_disk_usage", fake_check)
+    monkeypatch.setattr(
+        "infra_monitoring.infra.system.treatments.check_disk_usage", fake_check
+    )
     s3 = S()
     s3.critic_since = {"disk_percent": time.monotonic() - 1000}
     s3.sustained_critic_seconds = 1

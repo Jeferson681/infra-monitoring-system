@@ -1,6 +1,8 @@
-import json
 import datetime
+import json
+
 import pytest
+
 from infra_monitoring.infra.system.network_learning import NetworkUsageLearningHandler
 
 

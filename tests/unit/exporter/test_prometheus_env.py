@@ -11,7 +11,9 @@ def test_start_exporter_initializes_without_starting_server(monkeypatch):
     def fake_start_http_server(port, addr):
         called["start_http_called"] = True
 
-    monkeypatch.setattr(prom, "start_http_server", fake_start_http_server, raising=False)
+    monkeypatch.setattr(
+        prom, "start_http_server", fake_start_http_server, raising=False
+    )
 
     # Substitui a população inicial de metrics para verificar que foi chamada
     def fake_expose(jsonl_path):

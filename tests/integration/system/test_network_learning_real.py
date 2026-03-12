@@ -1,4 +1,5 @@
 import datetime
+
 from infra_monitoring.infra.system.network_learning import NetworkUsageLearningHandler
 
 
@@ -24,7 +25,9 @@ def test_network_learning_real():
                 except Exception:
                     continue
     found = any(
-        e.get("date") == today and e.get("bytes_sent") == bytes_sent and e.get("bytes_recv") == bytes_recv
+        e.get("date") == today
+        and e.get("bytes_sent") == bytes_sent
+        and e.get("bytes_recv") == bytes_recv
         for e in entries
     )
     assert found, f"Entrada de hoje não encontrada no jsonl: {handler.LEARNING_FILE}"

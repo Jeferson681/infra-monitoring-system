@@ -11,16 +11,13 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
+
+      - name: Setup and install deps
+        uses: ./.github/actions/setup-deps
         with:
           python-version: '3.13'
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
       - name: Run lint (ruff, flake8, black)
         run: |
           ruff check src tests
@@ -36,22 +33,14 @@ jobs:
 
       - name: Notify success on Discord (Lint)
         if: ${{ success() }}
-        run: |
-          if [ -n "${{ secrets.DISCORD_WEBHOOK_URL }}" ]; then
-            curl -H "Content-Type: application/json" \
-              -d "{\"content\": \"✅ Lint passed: ${{ github.workflow }} on ${{ github.ref_name }} (run #${{ github.run_number }})\"}" \
-              ${{ secrets.DISCORD_WEBHOOK_URL }}
-          else
-            echo "DISCORD_WEBHOOK_URL not set; skipping notification."
-          fi
+        uses: ./.github/actions/notify-discord
+        with:
+          payload: "{\"content\": \"✅ Lint passed: ${{ github.workflow }} on ${{ github.ref_name }} (run #${{ github.run_number }})\"}"
+          webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
 
       - name: Notify failure on Discord (Lint)
         if: ${{ failure() }}
-        run: |
-          if [ -n "${{ secrets.DISCORD_WEBHOOK_URL }}" ]; then
-            curl -H "Content-Type: application/json" \
-              -d "{\"content\": \"❌ Lint failed: ${{ github.workflow }} on ${{ github.ref_name }} (run #${{ github.run_number }}). See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
-              ${{ secrets.DISCORD_WEBHOOK_URL }}
-          else
-            echo "DISCORD_WEBHOOK_URL not set; skipping notification."
-          fi
+        uses: ./.github/actions/notify-discord
+        with:
+          payload: "{\"content\": \"❌ Lint failed: ${{ github.workflow }} on ${{ github.ref_name }} (run #${{ github.run_number }}). See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
+          webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}

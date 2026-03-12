@@ -7,6 +7,7 @@ expose system metrics.
 """
 
 import os
+
 import requests  # type: ignore[import-untyped]
 
 LOKI_URL = os.getenv("LOKI_URL", "http://loki:3100/loki/api/v1/push")
@@ -34,7 +35,9 @@ def _parse_labels(labels):
             k, v = p.split("=", 1)
             v = v.strip()
             # remove quotes if present
-            if (v.startswith('"') and v.endswith('"')) or (v.startswith("'") and v.endswith("'")):
+            if (v.startswith('"') and v.endswith('"')) or (
+                v.startswith("'") and v.endswith("'")
+            ):
                 v = v[1:-1]
             out[k.strip()] = v
     return out
@@ -50,8 +53,8 @@ def send_log_to_loki(message, labels=None, timestamp=None):
     - `labels`: 'k=v,k2=v2' string or dict (optional)
     - `timestamp`: epoch in nanoseconds as string/int (optional)
     """
-    import time
     import logging
+    import time
 
     url = os.getenv("LOKI_URL", LOKI_URL)
 
@@ -67,12 +70,16 @@ def send_log_to_loki(message, labels=None, timestamp=None):
     logging.getLogger(__name__).debug("Loki payload: %s", payload)
 
     try:
-        resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=5)
+        resp = requests.post(
+            url, json=payload, headers={"Content-Type": "application/json"}, timeout=5
+        )
         resp.raise_for_status()
         return True
     except requests.RequestException as exc:
         logging.getLogger(__name__).warning("Failed to send log to Loki: %s", exc)
         return False
     except Exception as exc:
-        logging.getLogger(__name__).warning("Unexpected error sending log to Loki: %s", exc)
+        logging.getLogger(__name__).warning(
+            "Unexpected error sending log to Loki: %s", exc
+        )
         return False

@@ -1,6 +1,5 @@
 from types import SimpleNamespace
 
-
 from infra_monitoring.services.monitoring import state as st
 
 
@@ -23,7 +22,9 @@ def test_write_post_treatment_primary(monkeypatch, tmp_path):
     def fake_write_json(p, obj):
         written.append((p, obj))
 
-    monkeypatch.setattr("infra_monitoring.infra.system.log_helpers.write_json", fake_write_json)
+    monkeypatch.setattr(
+        "infra_monitoring.infra.system.log_helpers.write_json", fake_write_json
+    )
 
     snap = {"state": "post_treatment", "metrics": {}}
     ss._write_post_treatment_primary(snap)
@@ -62,7 +63,9 @@ def test_persist_post_treatment_snapshot_fallback(monkeypatch, tmp_path):
     def bad_write_json(p, obj):
         raise RuntimeError("bad")
 
-    monkeypatch.setattr("infra_monitoring.infra.system.log_helpers.write_json", bad_write_json)
+    monkeypatch.setattr(
+        "infra_monitoring.infra.system.log_helpers.write_json", bad_write_json
+    )
 
     # monkeypatch write_text to capture content
     captured = []
@@ -71,9 +74,13 @@ def test_persist_post_treatment_snapshot_fallback(monkeypatch, tmp_path):
         captured.append((p, text))
 
     # ensure fallback write_text is used by monkeypatching log_helpers.write_text
-    monkeypatch.setattr("infra_monitoring.infra.system.log_helpers.write_text", fake_write_text)
+    monkeypatch.setattr(
+        "infra_monitoring.infra.system.log_helpers.write_text", fake_write_text
+    )
     # also prevent external fallback from writing to disk by patching the class method
-    monkeypatch.setattr(st.SystemState, "_write_post_treatment_fallback", lambda self, snap: None)
+    monkeypatch.setattr(
+        st.SystemState, "_write_post_treatment_fallback", lambda self, snap: None
+    )
 
     snap = {"state": "post_treatment", "metrics": {}}
     ss._persist_post_treatment_snapshot(snap)

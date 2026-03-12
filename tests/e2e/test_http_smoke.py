@@ -66,7 +66,9 @@ def test_http_health_and_metrics_smoke(tmp_path: Path):
                     out = proc.stdout.read()[-4000:]
                 except Exception:
                     out = ""
-            raise AssertionError(f"/health did not become ready (last_err={last_err}); tail=\n{out}")
+            raise AssertionError(
+                f"/health did not become ready (last_err={last_err}); tail=\n{out}"
+            )
 
         health = requests.get(f"{base}/health", timeout=1.0)
         assert health.status_code == 200

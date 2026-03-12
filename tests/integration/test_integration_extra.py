@@ -1,10 +1,11 @@
 import json
 import time
+
 import pytest
 
+from infra_monitoring.infra.config.settings import load_settings
 from infra_monitoring.infra.system.log_helpers import build_human_line
 from infra_monitoring.infra.system.logs import get_log_paths
-from infra_monitoring.infra.config.settings import load_settings
 from infra_monitoring.services.monitoring.state import SystemState
 
 

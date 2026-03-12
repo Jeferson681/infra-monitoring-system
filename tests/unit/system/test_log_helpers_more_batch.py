@@ -1,7 +1,6 @@
-from infra_monitoring.infra.system import log_helpers as lh
-
-
 import os
+
+from infra_monitoring.infra.system import log_helpers as lh
 
 
 def test_is_older_than_and_all_children_old(tmp_path, monkeypatch):

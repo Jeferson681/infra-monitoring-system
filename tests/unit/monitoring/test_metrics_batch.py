@@ -1,8 +1,9 @@
+import sys
 from types import SimpleNamespace
 
-from infra_monitoring.services.monitoring import metrics
-import sys
 import pytest
+
+from infra_monitoring.services.monitoring import metrics
 
 
 def test_safe_float_and_counter():
@@ -37,7 +38,10 @@ def test_get_temp_from_script_success_and_failure(monkeypatch):
     assert metrics._get_temp_from_script(metrics.Path("another")) is None
 
 
-@pytest.mark.skipif(sys.platform.startswith("win"), reason="CPU temperature via psutil not supported on Windows")
+@pytest.mark.skipif(
+    sys.platform.startswith("win"),
+    reason="CPU temperature via psutil not supported on Windows",
+)
 def test_temperature_collector_posix_and_nonposix(monkeypatch, tmp_path):
     """Teste para coleta de temperatura usando psutil.sensors_temperatures()."""
     from types import SimpleNamespace
@@ -91,7 +95,9 @@ def test_get_network_latency_ping_and_tcp(monkeypatch):
 
     monkeypatch.setattr(metrics.subprocess, "check_output", fake_check_output_err)
     monkeypatch.setattr(metrics.time, "perf_counter", fake_perf_counter)
-    monkeypatch.setattr(metrics.socket, "create_connection", lambda *a, **k: DummyConn())
+    monkeypatch.setattr(
+        metrics.socket, "create_connection", lambda *a, **k: DummyConn()
+    )
     v2 = metrics.get_network_latency("8.8.8.8", 53, timeout=1.0)
     # should be small but > 0 (millisecond rounding)
     assert isinstance(v2, float) and v2 >= 0.0
@@ -100,7 +106,9 @@ def test_get_network_latency_ping_and_tcp(monkeypatch):
 def test_get_disk_percent_and_usage(monkeypatch):
     """Teste para obtenção do uso de disco e tratamento de falhas."""
     # success path for disk percent
-    monkeypatch.setattr(metrics.psutil, "disk_usage", lambda p: SimpleNamespace(percent=42))
+    monkeypatch.setattr(
+        metrics.psutil, "disk_usage", lambda p: SimpleNamespace(percent=42)
+    )
     assert metrics.get_disk_percent(None) == 42
 
     # failure path: disk_usage raises OSError for candidates -> None
@@ -108,15 +116,21 @@ def test_get_disk_percent_and_usage(monkeypatch):
         raise OSError()
 
     monkeypatch.setattr(metrics.psutil, "disk_usage", raise_oserror)
-    monkeypatch.setattr(metrics, "_disk_candidate_paths", lambda: [metrics.Path("/nonexist")])
+    monkeypatch.setattr(
+        metrics, "_disk_candidate_paths", lambda: [metrics.Path("/nonexist")]
+    )
     assert metrics.get_disk_percent(None) is None
 
 
 def test_get_memory_and_disk_info(monkeypatch):
     """Teste para obtenção de informações de memória e disco."""
-    monkeypatch.setattr(metrics.psutil, "virtual_memory", lambda: SimpleNamespace(used=1000, total=2000))
+    monkeypatch.setattr(
+        metrics.psutil, "virtual_memory", lambda: SimpleNamespace(used=1000, total=2000)
+    )
     assert metrics.get_memory_info() == (1000, 2000)
 
-    monkeypatch.setattr(metrics.psutil, "disk_usage", lambda p: SimpleNamespace(used=300, total=1000))
+    monkeypatch.setattr(
+        metrics.psutil, "disk_usage", lambda p: SimpleNamespace(used=300, total=1000)
+    )
     used, total = metrics.get_disk_usage_info(None)
     assert used == 300 and total == 1000

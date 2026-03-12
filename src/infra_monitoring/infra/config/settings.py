@@ -8,6 +8,7 @@ monitoring loop and treatment subsystems.
 
 import os
 from pathlib import Path
+
 from infra_monitoring.infra.system.helpers import merge_env_items, read_env_file
 
 # Global constants and defaults
@@ -109,7 +110,10 @@ def load_settings() -> dict:
 
     return {
         "thresholds": thresholds,
-        "log_level": (env_items.get("MONITORING_LOG_LEVEL") or os.getenv("MONITORING_LOG_LEVEL", "INFO")),
+        "log_level": (
+            env_items.get("MONITORING_LOG_LEVEL")
+            or os.getenv("MONITORING_LOG_LEVEL", "INFO")
+        ),
         "treatment_policies": treatment_policies,
     }
 
@@ -147,14 +151,18 @@ def _apply_threshold_overrides(env_items: dict, thresholds: dict, logger) -> Non
 
 
 # Assists load_settings; apply overrides to treatment policies
-def _apply_treatment_policies(env_items: dict, treatment_policies: dict, logger) -> None:
+def _apply_treatment_policies(
+    env_items: dict, treatment_policies: dict, logger
+) -> None:
     """Apply treatment policy overrides from environment variables.
 
     E.g. ``MONITORING_SUSTAINED_CRIT_SECONDS``.
     """
     if "MONITORING_SUSTAINED_CRIT_SECONDS" in env_items:
         try:
-            treatment_policies["sustained_crit_seconds"] = int(env_items["MONITORING_SUSTAINED_CRIT_SECONDS"])
+            treatment_policies["sustained_crit_seconds"] = int(
+                env_items["MONITORING_SUSTAINED_CRIT_SECONDS"]
+            )
         except (TypeError, ValueError):
             logger.warning(
                 "MONITORING_SUSTAINED_CRIT_SECONDS invalid: %s",
@@ -162,7 +170,9 @@ def _apply_treatment_policies(env_items: dict, treatment_policies: dict, logger)
             )
     if "MONITORING_MIN_CRITICAL_ALERTS" in env_items:
         try:
-            treatment_policies["min_critical_alerts"] = int(env_items["MONITORING_MIN_CRITICAL_ALERTS"])
+            treatment_policies["min_critical_alerts"] = int(
+                env_items["MONITORING_MIN_CRITICAL_ALERTS"]
+            )
         except (TypeError, ValueError):
             logger.warning(
                 "MONITORING_MIN_CRITICAL_ALERTS invalid: %s",
@@ -170,7 +180,9 @@ def _apply_treatment_policies(env_items: dict, treatment_policies: dict, logger)
             )
     if "MONITORING_CLEANUP_TEMP_AGE_DAYS" in env_items:
         try:
-            treatment_policies["cleanup_temp_age_days"] = int(env_items["MONITORING_CLEANUP_TEMP_AGE_DAYS"])
+            treatment_policies["cleanup_temp_age_days"] = int(
+                env_items["MONITORING_CLEANUP_TEMP_AGE_DAYS"]
+            )
         except (TypeError, ValueError):
             logger.warning(
                 "MONITORING_CLEANUP_TEMP_AGE_DAYS invalid: %s",
@@ -196,9 +208,13 @@ def _coerce_threshold(metric_name: str, raw_value: dict) -> dict:
     Ensure that `warning` < `critical` and that values are within expected bounds.
     """
     if not isinstance(raw_value, dict):
-        raise ValueError(f"threshold for {metric_name} must be a dict with 'warning' and 'critical' keys")
+        raise ValueError(
+            f"threshold for {metric_name} must be a dict with 'warning' and 'critical' keys"
+        )
     if "warning" not in raw_value or ("critical" not in raw_value):
-        raise ValueError(f"threshold for {metric_name} must contain 'warning' and 'critical' keys: {raw_value!r}")
+        raise ValueError(
+            f"threshold for {metric_name} must contain 'warning' and 'critical' keys: {raw_value!r}"
+        )
     try:
         warning_v = float(raw_value["warning"])
         # use only the canonical key 'critical'
@@ -207,10 +223,14 @@ def _coerce_threshold(metric_name: str, raw_value: dict) -> dict:
             raise TypeError("missing critical threshold")
         critical_v = float(critical_raw)
     except (TypeError, ValueError) as exc:
-        raise ValueError(f"threshold values for {metric_name} must be numeric: {raw_value!r}") from exc
+        raise ValueError(
+            f"threshold values for {metric_name} must be numeric: {raw_value!r}"
+        ) from exc
 
     if warning_v >= critical_v:
-        raise ValueError(f"threshold 'warning' must be < 'critical' for {metric_name}: {warning_v} >= {critical_v}")
+        raise ValueError(
+            f"threshold 'warning' must be < 'critical' for {metric_name}: {warning_v} >= {critical_v}"
+        )
 
     if (
         metric_name.endswith("_percent")
@@ -248,7 +268,9 @@ def validate_settings(settings: dict) -> dict:
         raw = raw_thresholds.get(metric)
         if raw is None:
             # ensure defaults for the metric when missing
-            default = DEFAULT_THRESHOLDS.get(metric, {"warning": 0.0, "critical": 100.0}).copy()
+            default = DEFAULT_THRESHOLDS.get(
+                metric, {"warning": 0.0, "critical": 100.0}
+            ).copy()
             normalized[metric] = default
             continue
         coerced = _coerce_threshold(metric, raw)
@@ -273,7 +295,11 @@ def get_valid_thresholds(settings: dict | None = None) -> dict:
         if settings is None:
             settings = load_settings()
         validated = validate_settings(settings)
-        return validated.get("thresholds", {k: v.copy() for k, v in DEFAULT_THRESHOLDS.items()})
+        return validated.get(
+            "thresholds", {k: v.copy() for k, v in DEFAULT_THRESHOLDS.items()}
+        )
     except (TypeError, ValueError, OSError) as exc:
-        logger.warning("Failed to validate settings; DEFAULT_THRESHOLDS will be used: %s", exc)
+        logger.warning(
+            "Failed to validate settings; DEFAULT_THRESHOLDS will be used: %s", exc
+        )
         return {k: v.copy() for k, v in DEFAULT_THRESHOLDS.items()}

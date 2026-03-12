@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 from infra_monitoring.infra.system import log_helpers as lh
 
 

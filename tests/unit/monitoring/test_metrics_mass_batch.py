@@ -54,7 +54,9 @@ def test_get_network_latency_tcp_fallback(monkeypatch):
 def test_get_disk_usage_info_branches(monkeypatch):
     """Teste para branches de info de uso de disco."""
     # simulate psutil.disk_usage raising OSError for candidates
-    monkeypatch.setattr(m.psutil, "disk_usage", lambda p: (_ for _ in ()).throw(OSError("no")))
+    monkeypatch.setattr(
+        m.psutil, "disk_usage", lambda p: (_ for _ in ()).throw(OSError("no"))
+    )
     # should return None, None when all candidates fail
     used, total = m.get_disk_usage_info(None)
     assert (used, total) == (None, None)
@@ -75,7 +77,11 @@ def test_collect_metrics_full_flow(monkeypatch):
 
     monkeypatch.setattr(m.psutil, "virtual_memory", lambda: VM())
     monkeypatch.setattr(m.psutil, "net_io_counters", lambda: Net())
-    monkeypatch.setattr(m.psutil, "disk_usage", lambda p: SimpleNamespace(percent=50, used=500, total=1000))
+    monkeypatch.setattr(
+        m.psutil,
+        "disk_usage",
+        lambda p: SimpleNamespace(percent=50, used=500, total=1000),
+    )
 
     # monkeypatch latency to return known value
     monkeypatch.setattr(m, "get_latency", lambda *a, **k: 10.0)

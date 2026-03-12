@@ -6,14 +6,15 @@ emission subsystem. The module includes minimal persistence helpers used by
 post-treatment routines.
 """
 
-import time
-from datetime import datetime, timezone
-from threading import Thread, Lock
-from typing import Any, Optional
 import logging
 import os
+import time
+from datetime import UTC, datetime
+from threading import Lock, Thread
+from typing import Any
 
 from infra_monitoring.infra.config.settings import load_settings
+
 from .formatters import normalize_for_display as _normalize_for_display
 
 # State constants
@@ -27,7 +28,9 @@ _CACHE_DIRNAME = ".cache"
 _POST_TREATMENT_FILENAME = "post_treatment_history.jsonl"
 
 
-def _compute_metric_states(metrics: dict, thresholds: dict, ignore_metrics: Optional[list[str]] = None) -> dict:
+def _compute_metric_states(
+    metrics: dict, thresholds: dict, ignore_metrics: list[str] | None = None
+) -> dict:
     state_field_map = {
         "cpu_percent": "state_cpu",
         "memory_used_bytes": "state_ram",
@@ -60,7 +63,9 @@ def _compute_metric_states(metrics: dict, thresholds: dict, ignore_metrics: Opti
     valid_states = {STATE_STABLE, STATE_WARNING, STATE_CRITICAL, None}
     for key, state_val in out.items():
         if state_val not in valid_states:
-            logging.getLogger(__name__).warning("_compute_metric_states: invalid state for %s: %s", key, state_val)
+            logging.getLogger(__name__).warning(
+                "_compute_metric_states: invalid state for %s: %s", key, state_val
+            )
             out[key] = None
 
     return out
@@ -98,7 +103,11 @@ class SystemState:
     critic_since: dict[str, float]
 
     def __init__(
-        self, thresholds: dict[str, Any], *, critical_duration: int | None = None, post_treatment_wait_seconds: int = 10
+        self,
+        thresholds: dict[str, Any],
+        *,
+        critical_duration: int | None = None,
+        post_treatment_wait_seconds: int = 10,
     ):
         """Initialize the system state manager.
 
@@ -120,12 +129,14 @@ class SystemState:
             policies = {}
 
         self.sustained_crit_seconds = (
-            int(policies.get("sustained_crit_seconds", 5 * 60)) if critical_duration is None else int(critical_duration)
+            int(policies.get("sustained_crit_seconds", 5 * 60))
+            if critical_duration is None
+            else int(critical_duration)
         )
         self.post_treatment_wait_seconds = int(post_treatment_wait_seconds)
 
-        self.current_snapshot: Optional[dict[str, Any]] = None
-        self.post_treatment_snapshot: Optional[dict[str, Any]] = None
+        self.current_snapshot: dict[str, Any] | None = None
+        self.post_treatment_snapshot: dict[str, Any] | None = None
         self.post_treatment_history: list[dict[str, Any]] = []
 
         self.is_critical_active = False
@@ -142,7 +153,9 @@ class SystemState:
         """
         # Update dynamic network thresholds using learned limits
         try:
-            from infra_monitoring.infra.system.network_learning import NetworkUsageLearningHandler
+            from infra_monitoring.infra.system.network_learning import (
+                NetworkUsageLearningHandler,
+            )
 
             learning = NetworkUsageLearningHandler()
             limit = learning.get_current_limit()
@@ -181,7 +194,9 @@ class SystemState:
                 if not self.is_critical_active:
                     self.is_critical_active = True
                     self.critical_start_time = now
-                elif (now - self.critical_start_time) >= self.sustained_crit_seconds and not self.treatment_active:
+                elif (
+                    now - self.critical_start_time
+                ) >= self.sustained_crit_seconds and not self.treatment_active:
                     to_activate = True
             else:
                 self.is_critical_active = False
@@ -193,20 +208,28 @@ class SystemState:
             self._activate_treatment(metrics)
 
     def _build_snapshot(self, state: str, metrics: dict[str, Any]) -> dict[str, Any]:
-        snap = {"state": state, "timestamp": datetime.now(timezone.utc).isoformat(), "metrics": metrics}
+        snap = {
+            "state": state,
+            "timestamp": datetime.now(UTC).isoformat(),
+            "metrics": metrics,
+        }
         try:
             from typing import cast
 
             nf = _normalize_for_display(metrics if isinstance(metrics, dict) else {})
             snap["summary_short"] = cast(Any, nf.get("summary_short"))
             snap["summary_long"] = cast(Any, nf.get("summary_long"))
-        except Exception:  # nosec B110
+        except Exception:
             try:
                 import logging as _logging
 
                 _logging.exception("formatters error in _build_snapshot")
-            except Exception:  # nosec B110
-                pass
+            except Exception as exc2:
+                import logging as _logging
+
+                _logging.getLogger(__name__).debug(
+                    "inner logging failure in _build_snapshot", exc_info=exc2
+                )
         return snap
 
     def _compute_alerts(self, metrics: dict[str, Any]) -> list[dict[str, Any]]:
@@ -223,7 +246,9 @@ class SystemState:
             return []
         return alerts
 
-    def _classify_metric(self, name: str, limits: dict[str, Any], val: Any) -> Optional[dict[str, Any]]:
+    def _classify_metric(
+        self, name: str, limits: dict[str, Any], val: Any
+    ) -> dict[str, Any] | None:
         warn = limits.get("warning")
         crit = limits.get("critical")
         try:
@@ -249,7 +274,7 @@ class SystemState:
         except Exception:
             return {
                 "state": STATE_POST_TREATMENT,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "metrics": metrics_after,
                 "alerts": alerts_after,
                 "post_treatment": True,
@@ -264,13 +289,16 @@ class SystemState:
             try:
                 self._write_post_treatment_fallback(snap)
             except Exception as _exc:
-                logging.getLogger(__name__).debug("post_treatment write fallback failed: %s", _exc)
+                logging.getLogger(__name__).debug(
+                    "post_treatment write fallback failed: %s", _exc
+                )
 
     def _write_post_treatment_primary(self, snap: dict[str, Any]) -> None:
         """Primary path: use .cache in project root and helper write_json."""
-        from infra_monitoring.infra.system.log_helpers import write_json
-        from infra_monitoring.infra.system.helpers import get_project_root
         import time as _time
+
+        from infra_monitoring.infra.system.helpers import get_project_root
+        from infra_monitoring.infra.system.log_helpers import write_json
 
         cache_dir = get_project_root() / _CACHE_DIRNAME
         cache_dir.mkdir(parents=True, exist_ok=True)
@@ -280,26 +308,37 @@ class SystemState:
         from infra_monitoring.infra.system.logs import get_log_paths
 
         lp = get_log_paths()
-        entry = {"ts": datetime.now(timezone.utc).isoformat(), "level": "INFO", "msg": "post_treatment"}
+        entry = {
+            "ts": datetime.now(UTC).isoformat(),
+            "level": "INFO",
+            "msg": "post_treatment",
+        }
         for k, v in snap.items():
             if k not in entry:
                 entry[k] = v
-        write_json(lp.json_dir / f"monitoring-{_time.strftime('%Y-%m-%d')}.jsonl", entry)
+        write_json(
+            lp.json_dir / f"monitoring-{_time.strftime('%Y-%m-%d')}.jsonl", entry
+        )
 
     def _write_post_treatment_fallback(self, snap: dict[str, Any]) -> None:
         """Fallback path: write only to .cache in project root."""
-        from infra_monitoring.infra.system.helpers import get_project_root
         import json as _json
+
+        from infra_monitoring.infra.system.helpers import get_project_root
 
         cache_dir = get_project_root() / _CACHE_DIRNAME
         cache_dir.mkdir(parents=True, exist_ok=True)
         try:
-            from infra_monitoring.infra.system.log_helpers import write_json as _write_json
+            from infra_monitoring.infra.system.log_helpers import (
+                write_json as _write_json,
+            )
 
             _write_json(cache_dir / _POST_TREATMENT_FILENAME, snap)
         except Exception:
             try:
-                with (cache_dir / _POST_TREATMENT_FILENAME).open("a", encoding="utf-8") as fh:
+                with (cache_dir / _POST_TREATMENT_FILENAME).open(
+                    "a", encoding="utf-8"
+                ) as fh:
                     fh.write(_json.dumps(snap, ensure_ascii=False) + "\n")
             except Exception as exc:
                 logging.warning(f"Failed to write snapshot: {exc}")
@@ -309,7 +348,11 @@ class SystemState:
         try:
             start_time = time.monotonic()
             if metrics_snapshot:
-                _ = metrics_snapshot.get("timestamp", None) if isinstance(metrics_snapshot, dict) else None
+                _ = (
+                    metrics_snapshot.get("timestamp", None)
+                    if isinstance(metrics_snapshot, dict)
+                    else None
+                )
             time.sleep(self.post_treatment_wait_seconds)
 
             metrics_after = self._collect_metrics_after()
@@ -325,7 +368,9 @@ class SystemState:
             elapsed = time.monotonic() - start_time
             if elapsed > 0.5:
                 logging.getLogger(__name__).info(
-                    "post_treatment_worker took %.2fs (sleep=%.2fs)", elapsed, self.post_treatment_wait_seconds
+                    "post_treatment_worker took %.2fs (sleep=%.2fs)",
+                    elapsed,
+                    self.post_treatment_wait_seconds,
                 )
 
         except Exception as _exc:
@@ -334,7 +379,9 @@ class SystemState:
 
                 _logging.exception("post_treatment worker unexpected error: %s", _exc)
             except Exception as _exc2:
-                logging.getLogger(__name__).debug("failed to log post_treatment worker error: %s", _exc2)
+                logging.getLogger(__name__).debug(
+                    "failed to log post_treatment worker error: %s", _exc2
+                )
         finally:
             with self._lock:
                 self.treatment_active = False
@@ -354,14 +401,20 @@ class SystemState:
             try:
                 self._record_post_treatment_snapshot(snap)
             except Exception as _exc:  # best-effort record, log debug
-                logging.getLogger(__name__).debug("_record_post_treatment_snapshot failed: %s", _exc)
+                logging.getLogger(__name__).debug(
+                    "_record_post_treatment_snapshot failed: %s", _exc
+                )
 
             try:
                 self._write_post_treatment_artifacts(snap)
             except Exception as _exc:
-                logging.getLogger(__name__).debug("_write_post_treatment_artifacts failed: %s", _exc)
+                logging.getLogger(__name__).debug(
+                    "_write_post_treatment_artifacts failed: %s", _exc
+                )
         except Exception as _exc_outer:
-            logging.getLogger(__name__).debug("_record_and_write_snapshot unexpected error: %s", _exc_outer)
+            logging.getLogger(__name__).debug(
+                "_record_and_write_snapshot unexpected error: %s", _exc_outer
+            )
 
     def _activate_treatment(self, metrics: dict[str, Any]):  # noqa: C901
         """Public activator: mark treatment active and start worker thread."""
@@ -379,7 +432,9 @@ class SystemState:
             if os.getenv("POST_TREATMENT_SYNC", "0") in ("1", "true", "yes"):
                 self._post_treatment_worker(metrics)
         except Exception as _exc:
-            logging.getLogger(__name__).debug("post_treatment worker synchronous run failed: %s", _exc, exc_info=True)
+            logging.getLogger(__name__).debug(
+                "post_treatment worker synchronous run failed: %s", _exc, exc_info=True
+            )
 
     def _safe_collect(self, collect_fn) -> dict[str, Any]:
         try:
@@ -399,20 +454,30 @@ class SystemState:
             # _persist_post_treatment_snapshot being used.
             try:
                 self._persist_post_treatment_snapshot(snap)
-            except Exception:  # nosec B110
-                # Swallow errors to keep this best-effort and non-fatal.
-                pass
-        except Exception:  # nosec B110
+            except Exception as exc:
+                # Swallow errors to keep this best-effort and non-fatal,
+                # but record debug information for diagnostics.
+                import logging as _logging
+
+                _logging.getLogger(__name__).debug(
+                    "persist post snapshot failed", exc_info=exc
+                )
+        except Exception as exc:
+            # Best-effort: if recording fails, keep the snapshot in memory.
+            import logging as _logging
+
+            _logging.getLogger(__name__).debug(
+                "record post snapshot failed", exc_info=exc
+            )
             self.post_treatment_snapshot = snap
 
     def _persist_post_treatment_snapshot(self, snap: dict[str, Any]) -> None:
         try:
             # import get_log_paths removed; no longer necessary
-            from infra_monitoring.infra.system.log_helpers import write_json  # type: ignore
-
             # get_log_paths() removed; no longer necessary
             # Corrige para sempre criar .cache na raiz do projeto
             from infra_monitoring.infra.system.helpers import get_project_root
+            from infra_monitoring.infra.system.log_helpers import write_json  # type: ignore
 
             hist_path = get_project_root() / _CACHE_DIRNAME / _POST_TREATMENT_FILENAME
             hist_path.parent.mkdir(parents=True, exist_ok=True)
@@ -420,11 +485,19 @@ class SystemState:
                 write_json(hist_path, snap)
             except Exception:
                 try:
-                    from infra_monitoring.infra.system.log_helpers import write_text as _write_text
                     import json as _json
 
+                    from infra_monitoring.infra.system.log_helpers import (
+                        write_text as _write_text,
+                    )
+
                     _write_text(hist_path, _json.dumps(snap, ensure_ascii=False) + "\n")
-                except Exception:  # nosec B110
+                except Exception as exc:
+                    import logging as _logging
+
+                    _logging.getLogger(__name__).debug(
+                        "persist post snapshot write_text failed", exc_info=exc
+                    )
                     return
         except Exception:
             return
@@ -451,8 +524,12 @@ class SystemState:
         try:
             if isinstance(self.last_state, str) and self.last_state:
                 out["last_state"] = self.last_state
-        except Exception:  # nosec B110
-            pass
+        except Exception as exc:
+            import logging as _logging
+
+            _logging.getLogger(__name__).debug(
+                "normalize last_state failed", exc_info=exc
+            )
         return out
 
 

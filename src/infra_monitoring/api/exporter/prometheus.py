@@ -6,17 +6,19 @@ unavailable the functions are no-ops and log debug information instead.
 """
 
 import json
+import logging
 import os
 import time
+from collections.abc import Iterable
+from typing import Any, cast
+
 import psutil
-import logging
-from typing import Dict, cast, Iterable, Tuple, Any
 
 logger = logging.getLogger(__name__)
 
 # Try to import prometheus_client; fall back to no-op if unavailable
 _HAVE_PROM = False
-_gauges: Dict[str, object] = {}
+_gauges: dict[str, object] = {}
 _server_started = False
 
 try:
@@ -29,7 +31,7 @@ except Exception:  # pragma: no cover - optional dependency
 
 
 # Cache for _sanitize_metric_name() to avoid reprocessing identical names
-_sanitize_cache: Dict[str, str] = {}
+_sanitize_cache: dict[str, str] = {}
 
 
 def _sanitize_metric_name(name: str) -> str:
@@ -92,7 +94,9 @@ def expose_metric(name: str, value: float, description: str = "") -> None:
     If `prometheus_client` is not available, logs and returns.
     """
     if not _HAVE_PROM:
-        logger.debug("prometheus_client not available; expose_metric %s=%s ignored", name, value)
+        logger.debug(
+            "prometheus_client not available; expose_metric %s=%s ignored", name, value
+        )
         return
 
     san = _sanitize_metric_name(name)
@@ -129,7 +133,11 @@ def expose_system_metrics_from_jsonl(jsonl_path: str) -> None:
     if not _HAVE_PROM:
         return
     try:
-        files = [f for f in os.listdir(jsonl_path) if f.startswith("monitoring-") and f.endswith(".jsonl")]
+        files = [
+            f
+            for f in os.listdir(jsonl_path)
+            if f.startswith("monitoring-") and f.endswith(".jsonl")
+        ]
         if not files:
             return
         files.sort(reverse=True)
@@ -150,9 +158,13 @@ def expose_system_metrics_from_jsonl(jsonl_path: str) -> None:
             metrics = json.loads(last_json)
             for k, v in metrics.items():
                 if isinstance(v, (int, float)):
-                    expose_metric(f"monitoring_{k}", float(v), f"System metric {k} from JSONL")
+                    expose_metric(
+                        f"monitoring_{k}", float(v), f"System metric {k} from JSONL"
+                    )
     except Exception as exc:
-        logger.debug("Failed to expose system metrics from JSONL: %s", exc, exc_info=True)
+        logger.debug(
+            "Failed to expose system metrics from JSONL: %s", exc, exc_info=True
+        )
 
 
 def expose_process_metrics() -> None:
@@ -167,16 +179,26 @@ def expose_process_metrics() -> None:
         expose_metric("process_cpu_percent", cpu, "CPU percent used by this process")
         mem = proc.memory_percent()
         # - Memory percent
-        expose_metric("process_memory_percent", mem, "Memory percent used by this process")
+        expose_metric(
+            "process_memory_percent", mem, "Memory percent used by this process"
+        )
         rss = getattr(proc.memory_info(), "rss", 0)
         # - RSS memory (resident set size)
-        expose_metric("process_memory_rss_bytes", rss, "Resident memory used by this process (bytes)")
+        expose_metric(
+            "process_memory_rss_bytes",
+            rss,
+            "Resident memory used by this process (bytes)",
+        )
         uptime = time.time() - proc.create_time()
         # - Process uptime
-        expose_metric("process_uptime_seconds", uptime, "Uptime of this process in seconds")
+        expose_metric(
+            "process_uptime_seconds", uptime, "Uptime of this process in seconds"
+        )
         threads = proc.num_threads()
         # - Number of threads
-        expose_metric("process_num_threads", threads, "Number of threads in this process")
+        expose_metric(
+            "process_num_threads", threads, "Number of threads in this process"
+        )
         # - Number of open file descriptors (if available on the platform)
         # Use getattr to avoid static analysis/linter errors
         num_fds_fn = getattr(proc, "num_fds", None)
@@ -185,10 +207,16 @@ def expose_process_metrics() -> None:
                 fds = num_fds_fn()
                 # Only expose the metric if fds is an int
                 if isinstance(fds, int):
-                    expose_metric("process_num_fds", float(fds), "Number of open file descriptors")
+                    expose_metric(
+                        "process_num_fds", float(fds), "Number of open file descriptors"
+                    )
             except Exception as exc:
                 # May occur on platforms without num_fds support; ignore silently
-                logger.debug("Failed to obtain number of file descriptors: %s", exc, exc_info=True)
+                logger.debug(
+                    "Failed to obtain number of file descriptors: %s",
+                    exc,
+                    exc_info=True,
+                )
     except Exception as exc:
         logger.debug("Failed to expose process metrics: %s", exc, exc_info=True)
 
@@ -206,13 +234,19 @@ def get_metrics_bytes() -> bytes:
 
             return generate_latest()
         except Exception:
-            logger.debug("prometheus_client present but failed to generate latest", exc_info=True)
+            logger.debug(
+                "prometheus_client present but failed to generate latest", exc_info=True
+            )
 
     # Fallback: build a simple text exposition from JSONL and psutil
     lines = []
     try:
         jsonl_path = os.path.join(os.path.dirname(__file__), "..", "..", "logs", "json")
-        files = [f for f in os.listdir(jsonl_path) if f.startswith("monitoring-") and f.endswith(".jsonl")]
+        files = [
+            f
+            for f in os.listdir(jsonl_path)
+            if f.startswith("monitoring-") and f.endswith(".jsonl")
+        ]
         if files:
             files.sort(reverse=True)
             latest_file = os.path.join(jsonl_path, files[0])
@@ -236,7 +270,7 @@ def get_metrics_bytes() -> bytes:
                 except Exception:
                     metrics = {}
                 # If metrics contains a 'metrics' sub-dict, use it
-                items: Iterable[Tuple[str, Any]] = ()
+                items: Iterable[tuple[str, Any]] = ()
                 if isinstance(metrics, dict):
                     m = metrics.get("metrics") if "metrics" in metrics else metrics
                     if isinstance(m, dict):

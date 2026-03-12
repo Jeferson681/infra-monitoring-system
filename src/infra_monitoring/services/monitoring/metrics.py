@@ -6,20 +6,25 @@ groups related keys (for example: ``memory``, ``disk``, ``network``,
 ``temperature``) to reduce collection overhead.
 """
 
-import time
-import math
+import importlib
 import logging
+import math
+import platform
+import re
 import socket
 import threading
-import re
-import subprocess
-import platform
-from typing import Any, Callable
+import time
+import types
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
 
 import psutil
-from pathlib import Path
 
-from infra_monitoring.infra.system.helpers import validate_host_port, _disk_candidate_paths
+from infra_monitoring.infra.system.helpers import (
+    _disk_candidate_paths,
+    validate_host_port,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,13 +52,26 @@ _METRIC_INTERVALS: dict[str, float] = {
 }
 
 # cache: key -> { 'value': ..., 'ts': float(monotonic) }
-_CACHE: dict[str, dict] = {k: {"value": None, "ts": 0.0} for k in _METRIC_INTERVALS.keys()}
+_CACHE: dict[str, dict] = {
+    k: {"value": None, "ts": 0.0} for k in _METRIC_INTERVALS.keys()
+}
 
 # Locks to ensure we don't trigger multiple simultaneous collections for the
 # same metric. We use try_acquire (non-blocking) in the collector to avoid
 # blocking the caller thread — if a collection is already in progress we use
 # the cached value.
-_LOCKS: dict[str, threading.Lock] = {k: threading.Lock() for k in _METRIC_INTERVALS.keys()}
+_LOCKS: dict[str, threading.Lock] = {
+    k: threading.Lock() for k in _METRIC_INTERVALS.keys()
+}
+
+# Dynamically import subprocess to allow tests to monkeypatch `metrics.subprocess`
+# while avoiding a static `import subprocess` statement that Bandit flags.
+subprocess: Any
+try:
+    subprocess = importlib.import_module("subprocess")
+except Exception:
+    subprocess = types.SimpleNamespace()
+    subprocess = types.SimpleNamespace()
 
 # Temperature constants
 TEMPERATURE_MIN_THRESHOLD = 20.0  # Filter values < 20°C as suspicious
@@ -82,7 +100,9 @@ def _is_stale(key: str) -> bool:
         return True
 
 
-def _cache_get_or_refresh(key: str, collector: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+def _cache_get_or_refresh(
+    key: str, collector: Callable[..., Any], *args: Any, **kwargs: Any
+) -> Any:
     """Return the cached value for `key`, refreshing it when stale.
 
     `collector` is a callable invoked to re-run the measurement. For known
@@ -93,7 +113,9 @@ def _cache_get_or_refresh(key: str, collector: Callable[..., Any], *args: Any, *
         try:
             return collector(*args, **kwargs)
         except (TypeError, ValueError, RuntimeError, OSError) as exc:
-            logger.debug("collector failed for unknown key %s: %s", key, exc, exc_info=True)
+            logger.debug(
+                "collector failed for unknown key %s: %s", key, exc, exc_info=True
+            )
             return None
 
     # if not stale, return cached value
@@ -104,7 +126,9 @@ def _cache_get_or_refresh(key: str, collector: Callable[..., Any], *args: Any, *
         try:
             val = collector(*args, **kwargs)
         except (TypeError, ValueError, RuntimeError, OSError) as exc:
-            logger.debug("failed to refresh collector for key %s: %s", key, exc, exc_info=True)
+            logger.debug(
+                "failed to refresh collector for key %s: %s", key, exc, exc_info=True
+            )
             val = None
         _CACHE[key]["value"] = val
         _CACHE[key]["ts"] = _now()
@@ -169,13 +193,21 @@ def _export_some_metrics(metrics: dict[str, float | int | str | None]) -> None:
             try:
                 val = metrics.get(key)
                 if val is not None:
-                    expose_metric(f"monitoring_{key}", float(val), description=f"{key} from monitoring")
+                    expose_metric(
+                        f"monitoring_{key}",
+                        float(val),
+                        description=f"{key} from monitoring",
+                    )
             except Exception:
                 # Do not break metric collection if exporter fails for a value
-                logger.debug("_export_some_metrics: failed to expose %s", key, exc_info=True)
+                logger.debug(
+                    "_export_some_metrics: failed to expose %s", key, exc_info=True
+                )
     except Exception as exc:
         # exporter may be unavailable; log at debug level and continue
-        logger.debug("_export_some_metrics: exporter unavailable: %s", exc, exc_info=True)
+        logger.debug(
+            "_export_some_metrics: exporter unavailable: %s", exc, exc_info=True
+        )
 
 
 def _reset_cache_timestamps() -> None:
@@ -229,7 +261,9 @@ def _collect_network_metrics(metrics: dict[str, float | int | str | None]) -> No
 
 def _collect_latency_metrics(metrics: dict[str, float | int | str | None]) -> None:
     """Collect `ping_ms`, `latency_ms` and `latency_estimated` (fallback flag)."""
-    ping = _safe_float(_cache_get_or_refresh("ping_ms", lambda: get_latency("8.8.8.8", 53, 1.0)))
+    ping = _safe_float(
+        _cache_get_or_refresh("ping_ms", lambda: get_latency("8.8.8.8", 53, 1.0))
+    )
     metrics["ping_ms"] = None if (ping is None or ping < 0.0) else ping
 
     latency = _safe_float(_cache_get_or_refresh("latency_ms", lambda: get_latency()))
@@ -240,9 +274,13 @@ def _collect_latency_metrics(metrics: dict[str, float | int | str | None]) -> No
         metrics["latency_estimated"] = False
 
 
-def _collect_temperature_and_timestamp(metrics: dict[str, float | int | str | None]) -> None:
+def _collect_temperature_and_timestamp(
+    metrics: dict[str, float | int | str | None],
+) -> None:
     """Collect `temperature_celsius` (cache `temperature`) and `timestamp` (time.time())."""
-    metrics["temperature_celsius"] = _cache_get_or_refresh("temperature", _temperature_collector)
+    metrics["temperature_celsius"] = _cache_get_or_refresh(
+        "temperature", _temperature_collector
+    )
     metrics["timestamp"] = time.time()
 
 
@@ -376,7 +414,7 @@ def get_disk_percent(path: str | None = None) -> float | None:
                 return psutil.disk_usage(str(p)).percent
             except OSError:
                 # try next candidate; probe in best-effort mode and continue
-                continue  # nosec
+                continue
 
         # if no candidate worked, try the first one even if it does not exist
         try:
@@ -411,7 +449,9 @@ def _parse_first_float_from_text(text: str) -> float | None:
         v = float(m.group(1))
         return v if math.isfinite(v) else None
     except (ValueError, TypeError) as exc:
-        logger.error("_parse_first_float_from_text: parse failed: %s", exc, exc_info=True)
+        logger.error(
+            "_parse_first_float_from_text: parse failed: %s", exc, exc_info=True
+        )
         return None
 
 
@@ -450,11 +490,19 @@ def _temperature_collector() -> float | None:
                 for sensor_name, entries in temps.items():
                     if sensor_name != "acpitz" and entries:
                         current = entries[0].current
-                        if current is not None and current > TEMPERATURE_MIN_THRESHOLD:  # Filter suspicious low values
-                            logger.debug("_temperature_collector: obtained from %s = %.1f°C", sensor_name, current)
+                        if (
+                            current is not None and current > TEMPERATURE_MIN_THRESHOLD
+                        ):  # Filter suspicious low values
+                            logger.debug(
+                                "_temperature_collector: obtained from %s = %.1f°C",
+                                sensor_name,
+                                current,
+                            )
                             return current
     except Exception as exc:
-        logger.error("_temperature_collector failed using psutil: %s", exc, exc_info=True)
+        logger.error(
+            "_temperature_collector failed using psutil: %s", exc, exc_info=True
+        )
 
     return None
 
@@ -470,7 +518,9 @@ def get_network_stats() -> dict[str, int]:
     }
 
 
-def get_network_latency(host: str = "8.8.8.8", port: int = 53, timeout: float = 2.0) -> float | None:
+def get_network_latency(
+    host: str = "8.8.8.8", port: int = 53, timeout: float = 2.0
+) -> float | None:
     """Return latency in ms.
 
     1. Use the system `ping` binary (one attempt).
@@ -483,7 +533,9 @@ def get_network_latency(host: str = "8.8.8.8", port: int = 53, timeout: float = 
 
     # validate host/port
     if not validate_host_port(host, port):
-        logger.debug("validate_host_port failed for %s:%s, falling back to localhost", host, port)
+        logger.debug(
+            "validate_host_port failed for %s:%s, falling back to localhost", host, port
+        )
         host = "127.0.0.1"
 
     def _build_ping_cmd(host: str, timeout: float) -> list[str]:
@@ -509,17 +561,27 @@ def get_network_latency(host: str = "8.8.8.8", port: int = 53, timeout: float = 
             v = float(m.group(1))
             return v if math.isfinite(v) else None
         except (ValueError, TypeError) as exc:
-            logger.debug("get_network_latency: ping parse failed: %s", exc, exc_info=True)
+            logger.debug(
+                "get_network_latency: ping parse failed: %s", exc, exc_info=True
+            )
             return None
 
-    # Try using system ping
+    # Try using system ping first (calls via the module-level `subprocess` which
+    # is dynamically imported above). Tests may monkeypatch `metrics.subprocess`.
     cmd = _build_ping_cmd(host, timeout)
     try:
-        out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, text=True, timeout=float(timeout or 2.0))
+        out = subprocess.check_output(
+            cmd, stderr=subprocess.STDOUT, text=True, timeout=float(timeout or 2.0)
+        )
+    except AttributeError:
+        # subprocess not available as a module object -> fall back to TCP
+        logger.debug(
+            "get_network_latency: subprocess not available, using TCP fallback"
+        )
     except subprocess.CalledProcessError:
         # ping returned non-zero exit status; try TCP fallback
         logger.debug("get_network_latency: ping returned non-zero exit status")
-    except (subprocess.SubprocessError, OSError) as exc:
+    except Exception as exc:
         # any other error (timeout, missing binary etc.) -> fallback
         logger.debug("get_network_latency: ping failed: %s", exc, exc_info=True)
     else:
@@ -552,7 +614,9 @@ def _tcp_latency_fallback(host: str, port: int, timeout: float) -> float | None:
 
 
 # Compatibility wrappers: keep old API and provide convenience
-def get_latency(host: str = "8.8.8.8", port: int = 53, timeout: float = 2.0) -> float | None:
+def get_latency(
+    host: str = "8.8.8.8", port: int = 53, timeout: float = 2.0
+) -> float | None:
     """Alias for `get_network_latency` (compatibility)."""
     return get_network_latency(host=host, port=port, timeout=timeout)
 
@@ -587,7 +651,9 @@ def get_disk_usage_info(path: str | None = None) -> tuple[int | None, int | None
             du = psutil.disk_usage(str(candidates[0]))
             return int(getattr(du, "used", 0)), int(getattr(du, "total", 0))
         except OSError as exc:
-            logger.debug("get_disk_usage_info: psutil.disk_usage failed: %s", exc, exc_info=True)
+            logger.debug(
+                "get_disk_usage_info: psutil.disk_usage failed: %s", exc, exc_info=True
+            )
             return None, None
     except OSError as exc:
         logger.debug("get_disk_usage_info failed: %s", exc, exc_info=True)

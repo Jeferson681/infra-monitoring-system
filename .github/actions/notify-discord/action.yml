@@ -1,0 +1,25 @@
+name: "Notify Discord"
+description: "Send a message to a Discord webhook (if set in secrets)"
+runs:
+  using: "composite"
+  steps:
+    - name: Send message to Discord
+      shell: bash
+      env:
+        DISCORD_WEBHOOK_URL: ${{ inputs.webhook }}
+        PAYLOAD: ${{ inputs.payload }}
+      run: |
+        if [ -n "$DISCORD_WEBHOOK_URL" ]; then
+          curl -H "Content-Type: application/json" \
+            -d "$PAYLOAD" \
+            "$DISCORD_WEBHOOK_URL"
+        else
+          echo "DISCORD_WEBHOOK_URL not set; skipping notification. Message: $PAYLOAD"
+        fi
+inputs:
+  payload:
+    description: 'Full JSON payload to POST to the webhook'
+    required: true
+  webhook:
+    description: 'Discord webhook URL (pass via workflow secrets)'
+    required: false

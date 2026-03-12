@@ -26,7 +26,9 @@ def test_expose_metric_no_prom(monkeypatch, caplog):
     # Ensure prometheus_client is absent
     monkeypatch.setitem(sys.modules, "prometheus_client", None)
     # reload module to pick up absence
-    mod = importlib.reload(importlib.import_module("infra_monitoring.api.exporter.prometheus"))
+    mod = importlib.reload(
+        importlib.import_module("infra_monitoring.api.exporter.prometheus")
+    )
     import logging
 
     caplog.clear()
@@ -40,7 +42,9 @@ def test_expose_metric_no_prom(monkeypatch, caplog):
     # so that subsequent tests see the real prometheus_client (if available)
     if "prometheus_client" in sys.modules:
         del sys.modules["prometheus_client"]
-    importlib.reload(importlib.import_module("infra_monitoring.api.exporter.prometheus"))
+    importlib.reload(
+        importlib.import_module("infra_monitoring.api.exporter.prometheus")
+    )
 
 
 def test_expose_metric_with_prom(monkeypatch):
@@ -60,7 +64,9 @@ def test_expose_metric_with_prom(monkeypatch):
     monkeypatch.setitem(sys.modules, "prometheus_client", fake)
 
     # reload module to pick up fake prometheus_client
-    mod = importlib.reload(importlib.import_module("infra_monitoring.api.exporter.prometheus"))
+    mod = importlib.reload(
+        importlib.import_module("infra_monitoring.api.exporter.prometheus")
+    )
 
     mod.expose_metric("monitoring_cpu_percent", 5.5)
     # sanitized name should be present in calls
@@ -70,7 +76,9 @@ def test_expose_metric_with_prom(monkeypatch):
     # Cleanup: restore real prometheus_client
     if "prometheus_client" in sys.modules:
         del sys.modules["prometheus_client"]
-    importlib.reload(importlib.import_module("infra_monitoring.api.exporter.prometheus"))
+    importlib.reload(
+        importlib.import_module("infra_monitoring.api.exporter.prometheus")
+    )
 
 
 def test_start_exporter_invokes_start_http_server(monkeypatch):
@@ -80,10 +88,14 @@ def test_start_exporter_invokes_start_http_server(monkeypatch):
     def fake_start_http_server(port, addr):
         events["started"] = (addr, int(port))
 
-    fake = SimpleNamespace(Gauge=lambda *a, **k: None, start_http_server=fake_start_http_server)
+    fake = SimpleNamespace(
+        Gauge=lambda *a, **k: None, start_http_server=fake_start_http_server
+    )
     monkeypatch.setitem(sys.modules, "prometheus_client", fake)
 
-    mod = importlib.reload(importlib.import_module("infra_monitoring.api.exporter.prometheus"))
+    mod = importlib.reload(
+        importlib.import_module("infra_monitoring.api.exporter.prometheus")
+    )
     # set env to provide port
     monkeypatch.setenv("MONITORING_EXPORTER_PORT", "9009")
 
@@ -94,4 +106,6 @@ def test_start_exporter_invokes_start_http_server(monkeypatch):
     # Cleanup: restore real prometheus_client
     if "prometheus_client" in sys.modules:
         del sys.modules["prometheus_client"]
-    importlib.reload(importlib.import_module("infra_monitoring.api.exporter.prometheus"))
+    importlib.reload(
+        importlib.import_module("infra_monitoring.api.exporter.prometheus")
+    )

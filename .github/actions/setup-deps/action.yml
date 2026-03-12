@@ -1,0 +1,26 @@
+name: "Setup Python and install deps"
+description: "Composite action to checkout, setup Python and install project dependencies"
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f requirements.txt ]; then
+          pip install -r requirements.txt
+        fi
+
+inputs:
+  python-version:
+    description: 'Python version to setup'
+    required: false
+    default: '3.13'

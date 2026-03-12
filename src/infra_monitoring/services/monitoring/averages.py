@@ -6,23 +6,31 @@ by maintenance routines and reports. Implementations are resilient to I/O
 errors and designed to remain compatible with existing test APIs.
 """
 
-from pathlib import Path
-from typing import Iterator, Optional, Dict, Any, List, Tuple
-import json
 import datetime
+import json
 import logging
 import time
-from .formatters import _build_long_from_metrics, _fmt_bytes_human, format_used_files_lines, format_duration
-from .state import compute_metric_states
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Any
+
 from infra_monitoring.infra.system.logs import write_log
 from infra_monitoring.infra.system.time_helpers import extract_epoch
+
+from .formatters import (
+    _build_long_from_metrics,
+    _fmt_bytes_human,
+    format_duration,
+    format_used_files_lines,
+)
+from .state import compute_metric_states
 
 # imports kept minimal; avoid unused imports that ruff flags
 
 # do not import iter_jsonl_objects from averages (may be removed); decode JSONL inline
 
 
-def _find_candidate_files(root: Path, pattern_prefix: str = "monitoring") -> List[Path]:
+def _find_candidate_files(root: Path, pattern_prefix: str = "monitoring") -> list[Path]:
     """Find possible locations of JSONL files for a given filename pattern.
 
     Parameters
@@ -47,7 +55,9 @@ def _find_candidate_files(root: Path, pattern_prefix: str = "monitoring") -> Lis
     ]
 
 
-def _iter_jsonl_file(path: Path, max_retries: int = 3) -> Iterator[tuple[dict, Path, int]]:
+def _iter_jsonl_file(
+    path: Path, max_retries: int = 3
+) -> Iterator[tuple[dict, Path, int]]:
     """Yield JSON objects from a single file path, skipping malformed lines.
 
     Uses retries with exponential backoff to handle files being written.
@@ -67,7 +77,7 @@ def _iter_jsonl_file(path: Path, max_retries: int = 3) -> Iterator[tuple[dict, P
                     if isinstance(obj, dict):
                         yield obj, path, lineno
             return  # Success, exit
-        except IOError as exc:
+        except OSError as exc:
             if attempt < max_retries - 1:
                 # Retry with exponential backoff
                 wait_time = 0.1 * (2**attempt)
@@ -82,11 +92,16 @@ def _iter_jsonl_file(path: Path, max_retries: int = 3) -> Iterator[tuple[dict, P
             else:
                 # Last attempt failed
                 logging.getLogger(__name__).error(
-                    "_iter_jsonl_file: failed after %d attempts: %s", max_retries, exc, exc_info=True
+                    "_iter_jsonl_file: failed after %d attempts: %s",
+                    max_retries,
+                    exc,
+                    exc_info=True,
                 )
                 raise
         except Exception as exc:
-            logging.getLogger(__name__).error("_iter_jsonl_file: unexpected failure %s", exc, exc_info=True)
+            logging.getLogger(__name__).error(
+                "_iter_jsonl_file: unexpected failure %s", exc, exc_info=True
+            )
 
 
 def _iter_jsonl_today(logs_root: Path) -> Iterator[tuple[dict, Path, int]]:
@@ -97,30 +112,34 @@ def _iter_jsonl_today(logs_root: Path) -> Iterator[tuple[dict, Path, int]]:
     for c in _find_candidate_files(logs_root):
         if not c.exists():
             continue
-        for obj_tuple in _iter_jsonl_file(c):
-            yield obj_tuple
+        yield from _iter_jsonl_file(c)
 
 
 # --- Extracted helpers for epoch parsing (moved to module level to reduce
 # complexity inside _extract_epoch)
 
 
-def _compute_averages_and_counts(
-    window: List[tuple], metric_keys: List[str]
-) -> Tuple[Dict[str, Optional[float]], Dict[str, int], Dict[str, Dict[str, int]], Dict[str, int]]:
+def _compute_averages_and_counts(window: list[tuple], metric_keys: list[str]) -> tuple[
+    dict[str, float | None],
+    dict[str, int],
+    dict[str, dict[str, int]],
+    dict[str, int],
+]:
     """Compute sums, counts, averages and counts_by_state for a given window.
 
     Returns (averages, counts, counts_by_state_per_metric, state_counts).
     """
-    sums: Dict[str, float] = dict.fromkeys(metric_keys, 0.0)
-    counts: Dict[str, int] = dict.fromkeys(metric_keys, 0)
-    counts_by_state_per_metric: Dict[str, Dict[str, int]] = {k: {} for k in metric_keys}
-    state_counts: Dict[str, int] = {}
+    sums: dict[str, float] = dict.fromkeys(metric_keys, 0.0)
+    counts: dict[str, int] = dict.fromkeys(metric_keys, 0)
+    counts_by_state_per_metric: dict[str, dict[str, int]] = {k: {} for k in metric_keys}
+    state_counts: dict[str, int] = {}
 
     for o, _ts, _p, _ln in window:
-        _process_window_item(o, metric_keys, sums, counts, counts_by_state_per_metric, state_counts)
+        _process_window_item(
+            o, metric_keys, sums, counts, counts_by_state_per_metric, state_counts
+        )
 
-    averages: Dict[str, Optional[float]] = {}
+    averages: dict[str, float | None] = {}
     for k in metric_keys:
         cnt = counts.get(k, 0) or 0
         if cnt == 0:
@@ -133,11 +152,11 @@ def _compute_averages_and_counts(
 
 def _process_window_item(
     o: dict,
-    metric_keys: List[str],
-    sums: Dict[str, float],
-    counts: Dict[str, int],
-    counts_by_state_per_metric: Dict[str, Dict[str, int]],
-    state_counts: Dict[str, int],
+    metric_keys: list[str],
+    sums: dict[str, float],
+    counts: dict[str, int],
+    counts_by_state_per_metric: dict[str, dict[str, int]],
+    state_counts: dict[str, int],
 ) -> None:
     """Process a single window item and update aggregates in-place.
 
@@ -151,7 +170,7 @@ def _process_window_item(
     # Use compute_metric_states (centralized in state.py) to obtain individual states
     metrics_for_state = {k: rel.get(k) for k in metric_keys}
     # keep compatibility; can be updated to pass real thresholds
-    thresholds = {}  # type: Dict[str, Dict[str, Any]]
+    thresholds: dict[str, dict[str, Any]] = {}
     metric_states = compute_metric_states(metrics_for_state, thresholds)
 
     # Mapping of metric to individual state field (consistent with state.py)
@@ -188,8 +207,10 @@ def _process_window_item(
             counts_by_state_per_metric[k] = d
 
 
-def _compute_state_durations(sorted_window: List[tuple]) -> tuple[Dict[str, float], Dict[str, str]]:
-    state_durations: Dict[str, float] = {}
+def _compute_state_durations(
+    sorted_window: list[tuple],
+) -> tuple[dict[str, float], dict[str, str]]:
+    state_durations: dict[str, float] = {}
 
     for i in range(len(sorted_window) - 1):
         o_curr, ts_curr, _, _ = sorted_window[i]
@@ -201,28 +222,30 @@ def _compute_state_durations(sorted_window: List[tuple]) -> tuple[Dict[str, floa
         state_durations[st] = state_durations.get(st, 0.0) + float(dur)
 
     # Use centralized formatter for durations to keep presentation consistent
-    state_durations_human: Dict[str, str] = (
-        {k: format_duration(v) for k, v in state_durations.items()} if state_durations else {}
+    state_durations_human: dict[str, str] = (
+        {k: format_duration(v) for k, v in state_durations.items()}
+        if state_durations
+        else {}
     )
     return state_durations, state_durations_human
 
 
-def _compute_time_from_to(window: List[tuple]) -> tuple[str, str]:
+def _compute_time_from_to(window: list[tuple]) -> tuple[str, str]:
     """Return (time_from_iso, time_to_iso) for the given window of (o, ts, p, ln).
 
     Small helper to keep aggregate_last_seconds simpler.
     """
     time_from = datetime.datetime.fromtimestamp(
-        min(ts for (_, ts, __, ___) in window), tz=datetime.timezone.utc
+        min(ts for (_, ts, __, ___) in window), tz=datetime.UTC
     ).isoformat()
     time_to = datetime.datetime.fromtimestamp(
-        max(ts for (_, ts, __, ___) in window), tz=datetime.timezone.utc
+        max(ts for (_, ts, __, ___) in window), tz=datetime.UTC
     ).isoformat()
     return time_from, time_to
 
 
-def _build_used_files_lines(window: List[tuple]) -> Dict[str, tuple[int, int]]:
-    used_files: Dict[str, tuple[int, int]] = {}
+def _build_used_files_lines(window: list[tuple]) -> dict[str, tuple[int, int]]:
+    used_files: dict[str, tuple[int, int]] = {}
     for _o, _ts, p, ln in window:
         k = str(p)
         if k in used_files:
@@ -237,7 +260,7 @@ def _build_used_files_lines(window: List[tuple]) -> Dict[str, tuple[int, int]]:
     return used_files
 
 
-def extract_relevant(obj: dict) -> Dict[str, Any]:
+def extract_relevant(obj: dict) -> dict[str, Any]:
     """Extract relevant fields from a log object for aggregation.
 
     Returns a dictionary with 'state' and raw metrics mapped to predictable
@@ -271,12 +294,20 @@ def extract_relevant(obj: dict) -> Dict[str, Any]:
         "ping_ms": m.get("ping_ms"),
         "latency_ms": m.get("latency_ms"),
         "temperature_celsius": m.get("temperature_celsius"),
-        "bytes_sent_human": _fmt_bytes_human(int(m["bytes_sent"])) if m.get("bytes_sent") is not None else None,
-        "bytes_recv_human": _fmt_bytes_human(int(m["bytes_recv"])) if m.get("bytes_recv") is not None else None,
+        "bytes_sent_human": (
+            _fmt_bytes_human(int(m["bytes_sent"]))
+            if m.get("bytes_sent") is not None
+            else None
+        ),
+        "bytes_recv_human": (
+            _fmt_bytes_human(int(m["bytes_recv"]))
+            if m.get("bytes_recv") is not None
+            else None
+        ),
     }
 
 
-def _normalize_state(s: Optional[str]) -> Optional[str]:
+def _normalize_state(s: str | None) -> str | None:
     """Normalize state strings to canonical uppercase values.
 
     Examples: 'CRITICAL' or 'CRIT' -> 'CRITICAL'; 'WARN' -> 'WARNING'.
@@ -295,18 +326,18 @@ def _normalize_state(s: Optional[str]) -> Optional[str]:
     return su
 
 
-def aggregate_last_seconds(logs_root: Path, seconds: int = 10) -> Optional[Dict[str, Any]]:
+def aggregate_last_seconds(logs_root: Path, seconds: int = 10) -> dict[str, Any] | None:
     """Aggregate metrics from the last `seconds` seconds from today's JSONL files.
 
     Returns a dict containing averages, counts and metadata, or None if no
     valid data is available. Designed to be resilient to invalid JSON lines.
     """
-    objs: List[tuple[dict, Path, int]] = list(_iter_jsonl_today(logs_root))
+    objs: list[tuple[dict, Path, int]] = list(_iter_jsonl_today(logs_root))
     if not objs:
         return None
 
     # extract timestamps and keep valid items (defensive unpack)
-    items: List[tuple[dict, float, Path, int]] = []
+    items: list[tuple[dict, float, Path, int]] = []
     for entry in objs:
         try:
             o, src_path, src_ln = entry
@@ -345,7 +376,9 @@ def aggregate_last_seconds(logs_root: Path, seconds: int = 10) -> Optional[Dict[
     )
 
     # Compute averages, counts and per-state counts using helper
-    averages, counts, counts_by_state_per_metric, state_counts = _compute_averages_and_counts(window, list(metric_keys))
+    averages, counts, counts_by_state_per_metric, state_counts = (
+        _compute_averages_and_counts(window, list(metric_keys))
+    )
 
     # compute state durations using helper
     sorted_window = sorted(window, key=lambda x: x[1])
@@ -353,7 +386,7 @@ def aggregate_last_seconds(logs_root: Path, seconds: int = 10) -> Optional[Dict[
 
     time_from, time_to = _compute_time_from_to(window)
 
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "window_seconds": seconds,
         "n_lines": n_lines,
         "time_from": time_from,
@@ -372,7 +405,9 @@ def aggregate_last_seconds(logs_root: Path, seconds: int = 10) -> Optional[Dict[
         if used_files:
             result["used_files_lines"] = used_files
     except Exception as exc:
-        logging.getLogger(__name__).debug("aggregate used_files_lines build failed: %s", exc, exc_info=True)
+        logging.getLogger(__name__).debug(
+            "aggregate used_files_lines build failed: %s", exc, exc_info=True
+        )
 
     # human readable for bytes averages
     _add_human_bytes(result["averages"])
@@ -382,7 +417,7 @@ def aggregate_last_seconds(logs_root: Path, seconds: int = 10) -> Optional[Dict[
     return result
 
 
-def _add_human_bytes(averages: Dict[str, Any]) -> None:
+def _add_human_bytes(averages: dict[str, Any]) -> None:
     """Add human-readable (GB) fields to the averages dictionary when applicable."""
     try:
         if averages.get("bytes_sent") is not None:
@@ -401,10 +436,12 @@ def _safe_persist_last_time(last_ts: float) -> None:
     try:
         persist_last_time(last_ts=last_ts)
     except Exception as exc:
-        logging.getLogger(__name__).debug("persist_last_time failed: %s", exc, exc_info=True)
+        logging.getLogger(__name__).debug(
+            "persist_last_time failed: %s", exc, exc_info=True
+        )
 
 
-def format_long_metric_from_aggregate(aggregate: Dict[str, Any]) -> str:
+def format_long_metric_from_aggregate(aggregate: dict[str, Any]) -> str:
     """Build a long_metric string (multiple lines) from aggregate result.
 
     Uses formatters._build_long_from_metrics to produce the list of lines,
@@ -424,7 +461,9 @@ def format_long_metric_from_aggregate(aggregate: Dict[str, Any]) -> str:
 
     # If used_files_lines present, format into human-friendly lines
     try:
-        used = aggregate.get("used_files_lines") if isinstance(aggregate, dict) else None
+        used = (
+            aggregate.get("used_files_lines") if isinstance(aggregate, dict) else None
+        )
         if used:
             out_lines.extend(format_used_files_lines(used))
     except Exception as exc:
@@ -445,12 +484,12 @@ def format_long_metric_from_aggregate(aggregate: Dict[str, Any]) -> str:
 # be restored from version control.
 
 
-def _build_metrics_src_from_aggregate(aggregate: Dict[str, Any]) -> Dict[str, Any]:
+def _build_metrics_src_from_aggregate(aggregate: dict[str, Any]) -> dict[str, Any]:
     """Build the metrics_src dict used by format_long_metric_from_aggregate.
 
     Copies averages and converts time_to ISO to epoch when possible.
     """
-    metrics_src: Dict[str, Any] = {}
+    metrics_src: dict[str, Any] = {}
     avgs = aggregate.get("averages") or {}
     for k, v in avgs.items():
         metrics_src[k] = v
@@ -459,9 +498,15 @@ def _build_metrics_src_from_aggregate(aggregate: Dict[str, Any]) -> Dict[str, An
     if ts_iso:
         # Delegate parsing to centralized helper to support many timestamp formats
         try:
-            from infra_monitoring.infra.system.time_helpers import extract_epoch as _extract_epoch  # local import
+            from infra_monitoring.infra.system.time_helpers import (
+                extract_epoch as _extract_epoch,
+            )  # local import
 
-            parsed = _extract_epoch({"time_to": ts_iso}) if not isinstance(ts_iso, (int, float)) else float(ts_iso)
+            parsed = (
+                _extract_epoch({"time_to": ts_iso})
+                if not isinstance(ts_iso, (int, float))
+                else float(ts_iso)
+            )
             metrics_src["timestamp"] = parsed if parsed is not None else ts_iso
         except Exception:
             metrics_src["timestamp"] = ts_iso
@@ -473,7 +518,7 @@ def _build_metrics_src_from_aggregate(aggregate: Dict[str, Any]) -> Dict[str, An
 
 
 def write_average_log(
-    aggregate: Dict[str, Any],
+    aggregate: dict[str, Any],
     human_enable: bool = True,
     json_enable: bool = False,
     safe_log_enable: bool = True,
@@ -530,18 +575,20 @@ def get_last_ts_file(name: str = "last_ts") -> Path:
     return cache_dir / f"{name}.json"
 
 
-def persist_last_time(last_ts: Optional[float] = None, name: str = "last_ts") -> Path:
+def persist_last_time(last_ts: float | None = None, name: str = "last_ts") -> Path:
     """Persist a small JSON object with the last timestamp (epoch and ISO).
 
     Overwrites the file with a compact JSON object. If `last_ts` is None,
     use the current UTC timestamp.
     """
     if last_ts is None:
-        last_ts = datetime.datetime.now(datetime.timezone.utc).timestamp()
+        last_ts = datetime.datetime.now(datetime.UTC).timestamp()
 
     entry = {
         "last_time": float(last_ts),
-        "last_time_iso": datetime.datetime.fromtimestamp(last_ts, tz=datetime.timezone.utc).isoformat(),
+        "last_time_iso": datetime.datetime.fromtimestamp(
+            last_ts, tz=datetime.UTC
+        ).isoformat(),
     }
 
     fpath = get_last_ts_file(name=name)
@@ -550,23 +597,30 @@ def persist_last_time(last_ts: Optional[float] = None, name: str = "last_ts") ->
             json.dump(entry, fh, ensure_ascii=False)
     except PermissionError as exc:
         logging.getLogger(__name__).warning(
-            "persist_last_time: permission denied creating %s: %s", fpath, exc, exc_info=True
+            "persist_last_time: permission denied creating %s: %s",
+            fpath,
+            exc,
+            exc_info=True,
         )
         # best-effort: try append via write_text as fallback
         try:
             from infra_monitoring.infra.system.log_helpers import write_text
 
             write_text(fpath, json.dumps(entry, ensure_ascii=False) + "\n")
-        except Exception:
+        except Exception as exc:
             # best-effort fallback: ignore errors when attempting append fallback
-            # nosec B110 - intentional swallow: persistence is best-effort here
-            pass
+            # record debug info for diagnostics
+            logging.getLogger(__name__).debug(
+                "persist_last_time fallback failed", exc_info=exc
+            )
     except OSError as exc:
-        logging.getLogger(__name__).error("persist_last_time: failed writing %s: %s", fpath, exc, exc_info=True)
+        logging.getLogger(__name__).error(
+            "persist_last_time: failed writing %s: %s", fpath, exc, exc_info=True
+        )
     return fpath
 
 
-def read_last_time(name: str = "last_ts") -> Optional[float]:
+def read_last_time(name: str = "last_ts") -> float | None:
     """Read the JSON file and return the numeric `last_time` (epoch) or None."""
     fpath = get_last_ts_file(name=name)
     if not fpath.exists():
@@ -579,7 +633,9 @@ def read_last_time(name: str = "last_ts") -> Optional[float]:
             return None
         return float(v)
     except (OSError, TypeError, ValueError) as exc:
-        logging.getLogger(__name__).error("read_last_time: failed reading %s: %s", fpath, exc, exc_info=True)
+        logging.getLogger(__name__).error(
+            "read_last_time: failed reading %s: %s", fpath, exc, exc_info=True
+        )
         return None
 
 
@@ -596,7 +652,9 @@ def ensure_last_ts_exists(name: str = "last_ts") -> None:
     try:
         fpath = get_last_ts_file(name=name)
     except Exception as exc:
-        logger.error("ensure_last_ts_exists: failed to resolve path: %s", exc, exc_info=True)
+        logger.error(
+            "ensure_last_ts_exists: failed to resolve path: %s", exc, exc_info=True
+        )
         return
 
     if not fpath.exists():
@@ -605,7 +663,12 @@ def ensure_last_ts_exists(name: str = "last_ts") -> None:
             persist_last_time(last_ts=None, name=name)
             logger.debug("ensure_last_ts_exists: created %s", fpath)
         except Exception as exc:
-            logger.error("ensure_last_ts_exists: failed to create %s: %s", fpath, exc, exc_info=True)
+            logger.error(
+                "ensure_last_ts_exists: failed to create %s: %s",
+                fpath,
+                exc,
+                exc_info=True,
+            )
 
 
 def ensure_default_last_ts() -> None:
@@ -623,10 +686,14 @@ def ensure_default_last_ts() -> None:
         try:
             persist_last_time()
         except Exception as exc:
-            logging.getLogger(__name__).debug("persist_last_time on startup init failed: %s", exc, exc_info=True)
+            logging.getLogger(__name__).debug(
+                "persist_last_time on startup init failed: %s", exc, exc_info=True
+            )
             # Persist current timestamp (persist_last_time ensures the directory)
             try:
                 persist_last_time()
             except Exception as exc:
                 # fallback: log debug but do not raise
-                logging.getLogger(__name__).debug("persist_last_time on startup init failed: %s", exc, exc_info=True)
+                logging.getLogger(__name__).debug(
+                    "persist_last_time on startup init failed: %s", exc, exc_info=True
+                )

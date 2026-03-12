@@ -6,7 +6,7 @@ def test_write_debug_entry(tmp_path, monkeypatch):
     monkeypatch.setenv("MONITORING_LOG_ROOT", str(tmp_path))
 
     # Import local após setenv para garantir get_log_paths usa MONITORING_LOG_ROOT
-    from infra_monitoring.infra.system.logs import write_log, get_log_paths
+    from infra_monitoring.infra.system.logs import get_log_paths, write_log
 
     # Execute a escrita: humana + json
     write_log(

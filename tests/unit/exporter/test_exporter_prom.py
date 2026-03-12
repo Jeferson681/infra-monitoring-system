@@ -16,12 +16,12 @@ def test_sanitize_metric_name_and_expose_with_prom(monkeypatch):
             self.value = v
 
     def fake_start_http_server(port, addr):
-        setattr(fake_mod, "started", (addr, port))
+        fake_mod.started = addr, port
 
-    setattr(fake_mod, "Gauge", FakeGauge)
-    setattr(fake_mod, "start_http_server", fake_start_http_server)
+    fake_mod.Gauge = FakeGauge
+    fake_mod.start_http_server = fake_start_http_server
     # allow recording start
-    setattr(fake_mod, "started", None)
+    fake_mod.started = None
 
     # Patch the exporter module's import mechanism by injecting into sys.modules
     import sys
@@ -31,7 +31,9 @@ def test_sanitize_metric_name_and_expose_with_prom(monkeypatch):
     # Now reload the canonical exporter package to pick up the fake
     import importlib
 
-    exp = importlib.reload(importlib.import_module("infra_monitoring.api.exporter.prometheus"))
+    exp = importlib.reload(
+        importlib.import_module("infra_monitoring.api.exporter.prometheus")
+    )
 
     # test sanitize
     san = exp._sanitize_metric_name("1bad-name%!*")
@@ -45,7 +47,10 @@ def test_sanitize_metric_name_and_expose_with_prom(monkeypatch):
     # expose metric should create and set a gauge
     exp.expose_metric("my.metric-name", 3.14)
     # gauge stored under sanitized name
-    assert any(g.name.startswith("my_metric_name") or g.name == "my_metric_name" for g in exp._gauges.values())
+    assert any(
+        g.name.startswith("my_metric_name") or g.name == "my_metric_name"
+        for g in exp._gauges.values()
+    )
 
 
 def test_expose_metric_without_prom(monkeypatch):
@@ -64,7 +69,9 @@ def test_expose_metric_without_prom(monkeypatch):
 
     import importlib
 
-    exp = importlib.reload(importlib.import_module("infra_monitoring.api.exporter.prometheus"))
+    exp = importlib.reload(
+        importlib.import_module("infra_monitoring.api.exporter.prometheus")
+    )
     if hasattr(exp, "_gauges"):
         exp._gauges.clear()
 

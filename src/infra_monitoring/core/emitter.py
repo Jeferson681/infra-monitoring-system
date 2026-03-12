@@ -9,10 +9,14 @@ improves testability of formatting and output behavior.
 
 import logging
 
-# ruff: noqa: D401
-from ..services.monitoring.formatters import normalize_for_display, format_snapshot_human
-from ..infra.system.logs import write_log
 from ..api.exporter.prometheus import expose_metric as _expose_metric
+from ..infra.system.logs import write_log
+
+# ruff: noqa: D401
+from ..services.monitoring.formatters import (
+    format_snapshot_human,
+    normalize_for_display,
+)
 
 # Lightweight counter for snapshot emits
 _APP_SNAPSHOT_EMITS = 0
@@ -88,7 +92,9 @@ def _print_snapshot_long(snap: dict | None) -> None:  # noqa: D401
     print("SNAPSHOT:", snap)
 
 
-def emit_snapshot(snapshot: dict | None, result: dict, verbose_level: int) -> None:  # noqa: D401
+def emit_snapshot(
+    snapshot: dict | None, result: dict, verbose_level: int
+) -> None:  # noqa: D401
     """Emit the canonical snapshot and optionally print human output.
 
     Side effects:
@@ -106,14 +112,27 @@ def emit_snapshot(snapshot: dict | None, result: dict, verbose_level: int) -> No
         try:
             # Write the canonical JSON feed used for monitoring ingestion.
             # Disable any additional human formatting for the ingestion path.
-            write_log("monitoring", "INFO", human_msg, extra=snapshot, human_enable=False, json_enable=True)
+            write_log(
+                "monitoring",
+                "INFO",
+                human_msg,
+                extra=snapshot,
+                human_enable=False,
+                json_enable=True,
+            )
             # increment and expose a lightweight emit counter
             try:
                 global _APP_SNAPSHOT_EMITS
                 _APP_SNAPSHOT_EMITS += 1
-                _expose_metric("app_snapshot_emit_total", float(_APP_SNAPSHOT_EMITS), "Number of snapshot emits")
+                _expose_metric(
+                    "app_snapshot_emit_total",
+                    float(_APP_SNAPSHOT_EMITS),
+                    "Number of snapshot emits",
+                )
             except Exception:
-                logging.getLogger(__name__).debug("Failed to expose snapshot emit metric", exc_info=True)
+                logging.getLogger(__name__).debug(
+                    "Failed to expose snapshot emit metric", exc_info=True
+                )
         except Exception as exc:
             logger.info("Failed to write log via write_log: %s", exc)
     except Exception:

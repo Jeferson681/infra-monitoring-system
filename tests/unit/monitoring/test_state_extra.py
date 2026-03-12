@@ -4,7 +4,10 @@ from infra_monitoring.services.monitoring import state
 def test_compute_metric_states_basic():
     """_compute_metric_states classifies metrics into per-metric state keys."""
     metrics = {"cpu_percent": 80, "memory_used_bytes": 100}
-    thresholds = {"cpu_percent": {"warning": 50, "critical": 90}, "memory_used_bytes": {"warning": 50}}
+    thresholds = {
+        "cpu_percent": {"warning": 50, "critical": 90},
+        "memory_used_bytes": {"warning": 50},
+    }
     res = state._compute_metric_states(metrics, thresholds)
     assert res.get("state_cpu") in (state.STATE_WARNING, state.STATE_STABLE)
 

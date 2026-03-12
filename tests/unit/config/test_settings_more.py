@@ -1,8 +1,7 @@
-import logging
 import importlib
+import logging
 
 import pytest
-
 
 settings_mod = importlib.import_module("infra_monitoring.infra.config.settings")
 
@@ -41,7 +40,11 @@ def test_get_valid_thresholds_fallback_on_error(monkeypatch, caplog):
     caplog.set_level(logging.WARNING)
 
     # make validate_settings raise
-    monkeypatch.setattr(settings_mod, "validate_settings", lambda s: (_ for _ in ()).throw(ValueError("bad")))
+    monkeypatch.setattr(
+        settings_mod,
+        "validate_settings",
+        lambda s: (_ for _ in ()).throw(ValueError("bad")),
+    )
 
     out = settings_mod.get_valid_thresholds({"thresholds": {}})
     assert isinstance(out, dict)

@@ -5,18 +5,18 @@ logging, installs debug handlers and starts the main monitoring loop. Runtime
 logic is kept in the ``core`` package to simplify testing and reuse.
 """
 
-from infra_monitoring.core.args import parse_args, get_log_config
+import json as _json
 import logging as _logging
-import sys
-from infra_monitoring.infra.system.logs import get_debug_file_path
-from infra_monitoring.core.core import run_loop
 import os
+import sys
+
+from infra_monitoring.core.args import get_log_config, parse_args
+from infra_monitoring.core.core import run_loop
+from infra_monitoring.infra.system.logs import get_debug_file_path
 
 # Ensure the averages subsystem has its control timestamp file present.
 # This prepares the hourly cache/state used by aggregations.
 from infra_monitoring.services.monitoring.averages import ensure_default_last_ts
-
-import json as _json
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -34,7 +34,10 @@ def main(argv: list[str] | None = None) -> None:
     # process environment variables; this is a best-effort convenience for
     # local development and tests.
     try:
-        from infra_monitoring.infra.system.helpers import read_env_file, get_project_root
+        from infra_monitoring.infra.system.helpers import (
+            get_project_root,
+            read_env_file,
+        )
 
         env_path = get_project_root() / ".env"
         env_items = read_env_file(env_path)
@@ -42,7 +45,9 @@ def main(argv: list[str] | None = None) -> None:
             if os.getenv(k) is None:
                 os.environ[k] = v
     except Exception:
-        _logging.getLogger(__name__).debug("failed to load .env via helper", exc_info=True)
+        _logging.getLogger(__name__).debug(
+            "failed to load .env via helper", exc_info=True
+        )
 
     # Support test harnesses that pass an empty argv list by applying
     # known defaults rather than reading the process args.
@@ -60,14 +65,18 @@ def main(argv: list[str] | None = None) -> None:
     try:
         _setup_debug_file_handler()
     except Exception as exc:
-        _logging.getLogger(__name__).debug("failed to configure debug file handler: %s", exc, exc_info=True)
+        _logging.getLogger(__name__).debug(
+            "failed to configure debug file handler: %s", exc, exc_info=True
+        )
 
     # Ensure control cache file exists before starting the loop. Failures are
     # non-fatal and logged at debug level to avoid breaking startup.
     try:
         ensure_default_last_ts()
     except Exception:
-        _logging.getLogger(__name__).debug("failed to ensure control file at startup", exc_info=True)
+        _logging.getLogger(__name__).debug(
+            "failed to ensure control file at startup", exc_info=True
+        )
     # Optionally start Prometheus exporter if enabled via env
     try:
         from infra_monitoring.api.exporter.prometheus import start_exporter
@@ -76,7 +85,9 @@ def main(argv: list[str] | None = None) -> None:
             try:
                 start_exporter()
             except Exception:
-                _logging.getLogger(__name__).debug("failed to start Prometheus exporter", exc_info=True)
+                _logging.getLogger(__name__).debug(
+                    "failed to start Prometheus exporter", exc_info=True
+                )
     except Exception:
         _logging.getLogger(__name__).debug("exporter not available", exc_info=True)
 
@@ -90,8 +101,9 @@ def main(argv: list[str] | None = None) -> None:
             # The exporter initialization (`start_exporter`) registers metrics but does not
             # start any HTTP server. When MONITORING_HTTP_ENABLE is set, always start the
             # fallback HTTP server to expose /health and /metrics.
-            from infra_monitoring.api.exporter.main_http import run_http_server
             import threading
+
+            from infra_monitoring.api.exporter.main_http import run_http_server
 
             port = int(os.getenv("MONITORING_HTTP_PORT", "8000"))
             # Allow explicit override from environment so orchestrators
@@ -101,7 +113,9 @@ def main(argv: list[str] | None = None) -> None:
             addr = os.getenv("MONITORING_HTTP_ADDR")
             if not addr:
                 addr = "127.0.0.1"
-            http_thread = threading.Thread(target=run_http_server, kwargs={"addr": addr, "port": port}, daemon=True)
+            http_thread = threading.Thread(
+                target=run_http_server, kwargs={"addr": addr, "port": port}, daemon=True
+            )
             http_thread.start()
 
             # Optionally start a promtail/loki heartbeat worker if enabled via
@@ -109,16 +123,28 @@ def main(argv: list[str] | None = None) -> None:
             # remote log collectors and is run in a background thread.
             if os.getenv("MONITORING_PROMTAIL_ENABLE", "0") in ("1", "true", "yes"):
                 try:
-                    from infra_monitoring.api.exporter.main_http import run_promtail_worker
+                    from infra_monitoring.api.exporter.main_http import (
+                        run_promtail_worker,
+                    )
 
-                    promtail_thread = threading.Thread(target=run_promtail_worker, daemon=True)
+                    promtail_thread = threading.Thread(
+                        target=run_promtail_worker, daemon=True
+                    )
                     promtail_thread.start()
                 except Exception:
-                    _logging.getLogger(__name__).debug("failed to start promtail worker", exc_info=True)
+                    _logging.getLogger(__name__).debug(
+                        "failed to start promtail worker", exc_info=True
+                    )
     except Exception as exc:
-        _logging.getLogger(__name__).warning("Failed to start metrics HTTP server: %s", exc, exc_info=True)
+        _logging.getLogger(__name__).warning(
+            "Failed to start metrics HTTP server: %s", exc, exc_info=True
+        )
 
-    run_loop(interval=args.interval, cycles=args.cycles, verbose_level=getattr(args, "verbose", 0) or 0)
+    run_loop(
+        interval=args.interval,
+        cycles=args.cycles,
+        verbose_level=getattr(args, "verbose", 0) or 0,
+    )
 
 
 def _setup_debug_file_handler() -> None:
@@ -195,7 +221,9 @@ def _get_json_formatter():
 
                     obj["exc"] = "".join(_tb.format_exception(*record.exc_info))
                 except Exception:
-                    _logging.getLogger(__name__).warning("Failed to format exc_info for JSON", exc_info=True)
+                    _logging.getLogger(__name__).warning(
+                        "Failed to format exc_info for JSON", exc_info=True
+                    )
             return _json.dumps(obj, ensure_ascii=False)
 
     return _JSONFormatter()
@@ -235,9 +263,13 @@ def _wrap_emit_safe(handler):
             return orig(record)
         except Exception:
             try:
-                _logging.getLogger(__name__).warning("debug handler emit failed", exc_info=True)
+                _logging.getLogger(__name__).warning(
+                    "debug handler emit failed", exc_info=True
+                )
             except Exception:
-                _logging.getLogger(__name__).info("Failed to record debug handler emit failure", exc_info=True)
+                _logging.getLogger(__name__).info(
+                    "Failed to record debug handler emit failure", exc_info=True
+                )
 
     handler.emit = _types.MethodType(_emit_safe, handler)  # type: ignore[assignment]
 

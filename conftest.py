@@ -9,4 +9,6 @@ if SRC_DIR not in sys.path:
     sys.path.insert(0, SRC_DIR)
 
 # Also ensure PYTHONPATH contains src for subprocesses
-os.environ.setdefault("PYTHONPATH", SRC_DIR + os.pathsep + os.environ.get("PYTHONPATH", ""))
+os.environ.setdefault(
+    "PYTHONPATH", SRC_DIR + os.pathsep + os.environ.get("PYTHONPATH", "")
+)

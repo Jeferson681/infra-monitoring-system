@@ -5,13 +5,13 @@ logic. The module coordinates treatment execution while preserving the
 state and cooldown semantics used by higher-level orchestration.
 """
 
-import time
 import logging
+import time
 from typing import Any
 
+from infra_monitoring.infra.config import settings
 from infra_monitoring.infra.system import treatments
 from infra_monitoring.infra.system.network_learning import NetworkUsageLearningHandler
-from infra_monitoring.infra.config import settings
 
 network_learning_handler = NetworkUsageLearningHandler()
 
@@ -30,14 +30,23 @@ def _select_action(metric_lower: str) -> tuple[str | None, tuple]:
     # the treatment is executed
     if "disk" in metric_lower or "disk_percent" in metric_lower:
         return "check_disk_usage", ()
-    if "memory" in metric_lower or "ram" in metric_lower or "memory_percent" in metric_lower:
+    if (
+        "memory" in metric_lower
+        or "ram" in metric_lower
+        or "memory_percent" in metric_lower
+    ):
         import os
 
         if os.name == "posix":
             return "trim_process_working_set_posix", ()
         else:
             return "trim_process_working_set_windows", ()
-    if "network" in metric_lower or "ping" in metric_lower or "loss" in metric_lower or "latency" in metric_lower:
+    if (
+        "network" in metric_lower
+        or "ping" in metric_lower
+        or "loss" in metric_lower
+        or "latency" in metric_lower
+    ):
         return "reapply_network_config", ()
     if "cpu" in metric_lower:
         return "reap_zombie_processes", ()
@@ -85,15 +94,37 @@ def _maybe_run_aux_cleanup(state: Any, now: float) -> None:
                 try:
                     days = getattr(state, "cleanup_temp_age_days", None)
                     aux_res = aux_func(days) if isinstance(days, int) else aux_func()
-                    if hasattr(state, "last_treatment_run") and isinstance(state.last_treatment_run, dict):
+                    if hasattr(state, "last_treatment_run") and isinstance(
+                        state.last_treatment_run, dict
+                    ):
                         state.last_treatment_run[aux_name] = now
-                    logger.info("treatment_attempt: auxiliary %s result=%s", aux_name, aux_res)
-                except (OSError, RuntimeError, ValueError, TypeError, AttributeError) as exc:
-                    logger.debug("treatment_attempt: auxiliary %s failed: %s", aux_name, exc, exc_info=True)
+                    logger.info(
+                        "treatment_attempt: auxiliary %s result=%s", aux_name, aux_res
+                    )
+                except (
+                    OSError,
+                    RuntimeError,
+                    ValueError,
+                    TypeError,
+                    AttributeError,
+                ) as exc:
+                    logger.debug(
+                        "treatment_attempt: auxiliary %s failed: %s",
+                        aux_name,
+                        exc,
+                        exc_info=True,
+                    )
         else:
-            logger.debug("treatment_attempt: auxiliary %s on cooldown, skipping", aux_name)
+            logger.debug(
+                "treatment_attempt: auxiliary %s on cooldown, skipping", aux_name
+            )
     except (OSError, RuntimeError, ValueError, TypeError, AttributeError) as exc:
-        logger.debug("treatment_attempt: error checking/executing auxiliary %s: %s", aux_name, exc, exc_info=True)
+        logger.debug(
+            "treatment_attempt: error checking/executing auxiliary %s: %s",
+            aux_name,
+            exc,
+            exc_info=True,
+        )
 
 
 def _run_reap_aux(state: Any, action_name: str, result, now: float) -> object | None:
@@ -106,15 +137,31 @@ def _run_reap_aux(state: Any, action_name: str, result, now: float) -> object | 
         if action_name != "reap_zombie_processes":
             try:
                 reap_result = treatments.reap_zombie_processes()
-            except (OSError, RuntimeError, ValueError, TypeError, AttributeError) as exc:
-                logger.debug("treatment_attempt: reap_zombie_processes failed: %s", exc, exc_info=True)
+            except (
+                OSError,
+                RuntimeError,
+                ValueError,
+                TypeError,
+                AttributeError,
+            ) as exc:
+                logger.debug(
+                    "treatment_attempt: reap_zombie_processes failed: %s",
+                    exc,
+                    exc_info=True,
+                )
                 reap_result = None
-            if hasattr(state, "last_treatment_run") and isinstance(state.last_treatment_run, dict):
+            if hasattr(state, "last_treatment_run") and isinstance(
+                state.last_treatment_run, dict
+            ):
                 state.last_treatment_run["reap_zombie_processes"] = now
         else:
             reap_result = result
     except (OSError, RuntimeError, ValueError, TypeError, AttributeError) as exc:
-        logger.debug("treatment_attempt: error executing reap_zombie_processes aux: %s", exc, exc_info=True)
+        logger.debug(
+            "treatment_attempt: error executing reap_zombie_processes aux: %s",
+            exc,
+            exc_info=True,
+        )
         reap_result = None
     return reap_result
 
@@ -171,7 +218,11 @@ def attempt_treatment(state: Any, name: str, _details: dict) -> dict | bool:
                 thresholds["bytes_sent"]["critical"] = limit
                 thresholds["bytes_recv"]["critical"] = limit
             except Exception as exc:
-                logger.debug("network_learning_handler.record_daily_usage failed: %s", exc, exc_info=True)
+                logger.debug(
+                    "network_learning_handler.record_daily_usage failed: %s",
+                    exc,
+                    exc_info=True,
+                )
 
     if _on_cooldown(state, action_name, now):
         return False
@@ -183,7 +234,9 @@ def attempt_treatment(state: Any, name: str, _details: dict) -> dict | bool:
         if action_name == "check_disk_usage":
             _maybe_run_aux_cleanup(state, now)
         _run_reap_aux(state, action_name, result, now)
-        if hasattr(state, "last_treatment_run") and isinstance(state.last_treatment_run, dict):
+        if hasattr(state, "last_treatment_run") and isinstance(
+            state.last_treatment_run, dict
+        ):
             state.last_treatment_run[action_name] = now
         return {"action": action_name, "result": result}
     except (OSError, RuntimeError, ValueError, TypeError, AttributeError):

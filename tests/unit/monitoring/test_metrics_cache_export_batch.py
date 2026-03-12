@@ -1,6 +1,5 @@
 import sys
 
-
 from infra_monitoring.services.monitoring import metrics as m
 
 

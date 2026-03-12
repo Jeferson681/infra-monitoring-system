@@ -35,7 +35,10 @@ def test_write_text_with_portalocker(monkeypatch, tmp_path):
 
 def test_build_json_entry_and_format_extras():
     """build_json_entry and _format_extras_for_human produce expected outputs."""
-    from infra_monitoring.infra.system.log_helpers import build_json_entry, _format_extras_for_human
+    from infra_monitoring.infra.system.log_helpers import (
+        _format_extras_for_human,
+        build_json_entry,
+    )
 
     e = build_json_entry("t", "INFO", "msg", extra={"k": "v"})
     assert e["ts"] == "t" and e["level"] == "INFO"
@@ -45,7 +48,11 @@ def test_build_json_entry_and_format_extras():
 
 def test_atomic_move_and_compress(tmp_path):
     """atomic_move_to_archive and compress_file should move and compress files."""
-    from infra_monitoring.infra.system.log_helpers import atomic_move_to_archive, compress_file, ROTATING_SUFFIX
+    from infra_monitoring.infra.system.log_helpers import (
+        ROTATING_SUFFIX,
+        atomic_move_to_archive,
+        compress_file,
+    )
 
     src = tmp_path / "log.txt"
     src.write_text("hello")

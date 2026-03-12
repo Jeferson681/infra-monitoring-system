@@ -1,5 +1,5 @@
-import subprocess
 import socket
+import subprocess
 
 from infra_monitoring.services.monitoring import metrics as m
 
@@ -22,14 +22,22 @@ def test_parse_first_float_from_text():
 def test_tcp_latency_fallback_socket_error(monkeypatch):
     """Teste para fallback TCP com erro de socket."""
     # simulate create_connection raising
-    monkeypatch.setattr(socket, "create_connection", lambda *a, **kw: (_ for _ in ()).throw(OSError("no")))
+    monkeypatch.setattr(
+        socket,
+        "create_connection",
+        lambda *a, **kw: (_ for _ in ()).throw(OSError("no")),
+    )
     assert m._tcp_latency_fallback("8.8.8.8", 53, 0.01) is None
 
 
 def test_network_latency_ping_fallback(monkeypatch):
     """Teste para fallback de latência de rede via ping."""
     # simulate subprocess.check_output throwing so we go to TCP fallback
-    monkeypatch.setattr(subprocess, "check_output", lambda *a, **kw: (_ for _ in ()).throw(OSError("no ping")))
+    monkeypatch.setattr(
+        subprocess,
+        "check_output",
+        lambda *a, **kw: (_ for _ in ()).throw(OSError("no ping")),
+    )
     # patch tcp fallback to return a known value
     monkeypatch.setattr(m, "_tcp_latency_fallback", lambda h, p, t: 12.34)
     val = m.get_network_latency("8.8.8.8", 53, 0.01)

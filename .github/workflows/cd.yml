@@ -7,6 +7,11 @@ on:
       - main
       - develop
   workflow_dispatch:
+    inputs:
+      run_production:
+        description: 'Set to true to actually run the production deploy (default: false)'
+        required: false
+        default: 'false'
 
 jobs:
   build-and-push:
@@ -23,12 +28,13 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-      - name: Build and push Docker image
+      - name: Build and (optionally) push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: docker/Dockerfile
-          push: true
+          # Only push to the registry for protected branches (main/master).
+          push: ${{ github.ref_name == 'main' || github.ref_name == 'master' }}
           tags: |
             ${{ secrets.DOCKER_USERNAME }}/infra-monitoring-system:latest
             ${{ secrets.DOCKER_USERNAME }}/infra-monitoring-system:${{ github.sha }}
@@ -39,6 +45,8 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
       - name: Deploy container local com Docker
         run: |
           sudo service docker start || true
@@ -47,32 +55,29 @@ jobs:
           docker compose -f docker/docker-compose.yml up -d --build || echo "Falha ao subir containers, verifique logs."
       - name: Notify success on Discord (staging)
         if: ${{ success() }}
-        run: |
-          if [ -n "${{ secrets.DISCORD_WEBHOOK_URL }}" ]; then
-            curl -H "Content-Type: application/json" \
-              -d '{"content": "✅ Deploy to STAGING succeeded: ${{ github.repository }} on ${{ github.ref_name }} (run #${{ github.run_number }})"}' \
-              ${{ secrets.DISCORD_WEBHOOK_URL }}
-          else
-            echo "DISCORD_WEBHOOK_URL not set; skipping notification."
-          fi
+        uses: ./.github/actions/notify-discord
+        with:
+          payload: "{\"content\": \"✅ Deploy to STAGING succeeded: ${{ github.repository }} on ${{ github.ref_name }} (run #${{ github.run_number }})\"}"
+          webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
       - name: Notify failure on Discord (staging)
         if: ${{ failure() }}
-        run: |
-          if [ -n "${{ secrets.DISCORD_WEBHOOK_URL }}" ]; then
-            curl -H "Content-Type: application/json" \
-              -d '{"content": "❌ Deploy to STAGING failed: See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
-              ${{ secrets.DISCORD_WEBHOOK_URL }}
-          else
-            echo "DISCORD_WEBHOOK_URL not set; skipping notification."
-          fi
+        uses: ./.github/actions/notify-discord
+        with:
+          payload: "{\"content\": \"❌ Deploy to STAGING failed: See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
+          webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
 
   deploy-production:
     # Production deploy is manual for portfolio safety. Run via "Run workflow" in Actions
     # to avoid accidental production changes from PRs or automated pushes.
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master'
+    # This job is restricted to manual runs on `main` and will only execute when
+    # the workflow_dispatch input `run_production` is set to 'true'. By default
+    # the input is 'false' so production deploys are skipped.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.inputs.run_production == 'true'
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
       # Para ativar o deploy real, descomente as linhas abaixo e configure os secrets necessários
       # - name: Configure AWS credentials (prod)
       #   uses: aws-actions/configure-aws-credentials@v4
@@ -92,21 +97,13 @@ jobs:
           echo "[DEMO] Esta etapa representa o deploy real em AWS ECS (prod). Para ativar, siga as instruções acima."
       - name: Notify success on Discord (prod)
         if: ${{ success() }}
-        run: |
-          if [ -n "${{ secrets.DISCORD_WEBHOOK_URL }}" ]; then
-            curl -H "Content-Type: application/json" \
-              -d '{"content": "✅ Deploy to PRODUCTION succeeded: ${{ github.repository }} on ${{ github.ref_name }} (run #${{ github.run_number }})"}' \
-              ${{ secrets.DISCORD_WEBHOOK_URL }}
-          else
-            echo "DISCORD_WEBHOOK_URL not set; skipping notification."
-          fi
+        uses: ./.github/actions/notify-discord
+        with:
+          payload: "{\"content\": \"✅ Deploy to PRODUCTION succeeded: ${{ github.repository }} on ${{ github.ref_name }} (run #${{ github.run_number }})\"}"
+          webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
       - name: Notify failure on Discord (prod)
         if: ${{ failure() }}
-        run: |
-          if [ -n "${{ secrets.DISCORD_WEBHOOK_URL }}" ]; then
-            curl -H "Content-Type: application/json" \
-              -d '{"content": "❌ Deploy to PRODUCTION failed: See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
-              ${{ secrets.DISCORD_WEBHOOK_URL }}
-          else
-            echo "DISCORD_WEBHOOK_URL not set; skipping notification."
-          fi
+        uses: ./.github/actions/notify-discord
+        with:
+          payload: "{\"content\": \"❌ Deploy to PRODUCTION failed: See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
+          webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}

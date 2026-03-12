@@ -9,7 +9,10 @@ def test_compute_metric_states_empty():
 def test_compute_metric_states_thresholds():
     """Testa compute_metric_states com thresholds de warning."""
     metrics = {"cpu_percent": 80, "memory_used_bytes": 500}
-    thresholds = {"cpu_percent": {"warning": 50, "critical": 90}, "memory_used_bytes": {"warning": 400}}
+    thresholds = {
+        "cpu_percent": {"warning": 50, "critical": 90},
+        "memory_used_bytes": {"warning": 400},
+    }
     out = s.compute_metric_states(metrics, thresholds)
     assert out["state_cpu"] == s.STATE_WARNING
     assert out["state_ram"] == s.STATE_WARNING

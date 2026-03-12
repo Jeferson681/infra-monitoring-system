@@ -1,5 +1,7 @@
 import datetime
+
 import pytest
+
 from infra_monitoring.infra.system.network_learning import NetworkUsageLearningHandler
 
 
@@ -12,8 +14,7 @@ def test_record_and_limit(tmp_path):
     days = [today - datetime.timedelta(days=6 - i) for i in range(7)]
 
     def date_gen():
-        for d in days:
-            yield d
+        yield from days
 
     dg = date_gen()
     handler = NetworkUsageLearningHandler(date_func=lambda: next(dg))
@@ -52,13 +53,18 @@ def test_fallback(tmp_path, missing_file):
 
         monitor_dir = tmp_path / "logs" / "json"
         monitor_dir.mkdir(parents=True, exist_ok=True)
-        monitor_file = monitor_dir / f"monitoring-{datetime.date.today().strftime('%Y-%m-%d')}.jsonl"
+        monitor_file = (
+            monitor_dir
+            / f"monitoring-{datetime.date.today().strftime('%Y-%m-%d')}.jsonl"
+        )
         for i in range(7):
             entry = {
                 "year_week": str(datetime.date.today().isocalendar()[:2]),
                 "bytes_sent": 1000 * (i + 1),
                 "bytes_recv": 2000 * (i + 1),
-                "date": (datetime.date.today() - datetime.timedelta(days=6 - i)).isoformat(),
+                "date": (
+                    datetime.date.today() - datetime.timedelta(days=6 - i)
+                ).isoformat(),
             }
             with monitor_file.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(entry) + "\n")
@@ -77,10 +83,18 @@ def test_invalid_entry_ignored(tmp_path):
 
     # Entrada sem year_week (mas válida para soma)
     with learning_file.open("w", encoding="utf-8") as f:
-        f.write(json.dumps({"bytes_sent": 1000, "bytes_recv": 2000, "date": "2025-11-13"}) + "\n")
+        f.write(
+            json.dumps({"bytes_sent": 1000, "bytes_recv": 2000, "date": "2025-11-13"})
+            + "\n"
+        )
     # Entrada com year_week
     with learning_file.open("a", encoding="utf-8") as f:
-        entry = {"year_week": "(2025,46)", "bytes_sent": 3000, "bytes_recv": 4000, "date": "2025-11-13"}
+        entry = {
+            "year_week": "(2025,46)",
+            "bytes_sent": 3000,
+            "bytes_recv": 4000,
+            "date": "2025-11-13",
+        }
         f.write(json.dumps(entry) + "\n")
     limit = handler.get_current_limit()
     expected_limit = int((1000 + 2000 + 3000 + 4000) * 1.2)

@@ -5,8 +5,8 @@ weekly limits used by treatment policies. Data is persisted in a simple
 JSONL file under the cache directory.
 """
 
-import json
 import datetime
+import json
 from pathlib import Path
 
 
@@ -37,7 +37,12 @@ class NetworkUsageLearningHandler:
         """
         today = self.date_func()
         now_dt = datetime.datetime.now().isoformat()
-        entry = {"bytes_sent": bytes_sent, "bytes_recv": bytes_recv, "date": today.isoformat(), "timestamp": now_dt}
+        entry = {
+            "bytes_sent": bytes_sent,
+            "bytes_recv": bytes_recv,
+            "date": today.isoformat(),
+            "timestamp": now_dt,
+        }
         from infra_monitoring.infra.system.helpers import ensure_cache_dir_exists
 
         ensure_cache_dir_exists()
@@ -62,7 +67,9 @@ class NetworkUsageLearningHandler:
         # Always sum the last 7 complete days
         data = self._load_data()
         # Sort by date descending
-        valid_entries = [e for e in data if "bytes_sent" in e and "bytes_recv" in e and "date" in e]
+        valid_entries = [
+            e for e in data if "bytes_sent" in e and "bytes_recv" in e and "date" in e
+        ]
         valid_entries.sort(key=lambda e: e["date"], reverse=True)
         last_7 = valid_entries[:7]
         if not last_7:
@@ -81,7 +88,11 @@ class NetworkUsageLearningHandler:
         entries = read_jsonl(self.LEARNING_FILE)
         # Fallback: try reading from the monitoring jsonl if not enough data
         if not entries or len(entries) < self.LEARNING_WEEKS * 7:
-            monitor_path = Path("logs/json/monitoring-{}.jsonl".format(datetime.date.today().strftime("%Y-%m-%d")))
+            monitor_path = Path(
+                "logs/json/monitoring-{}.jsonl".format(
+                    datetime.date.today().strftime("%Y-%m-%d")
+                )
+            )
             entries += read_jsonl(monitor_path)
         return entries
 

@@ -5,25 +5,21 @@ records, rotating and compressing archived files and preparing log
 directories. Designed to be robust and tolerant to I/O failures.
 """
 
-import os
-
 # Keep internal comments minimal; errno handling is not required here
 import logging
-
+import os
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
-
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
 
 from .helpers import get_project_root
-
 from .log_helpers import (
     ROTATING_SUFFIX,
     archive_file_is_old,
     build_human_line,
     build_json_entry,
+    ensure_dir_writable,
     format_date_for_log,
     normalize_message_for_human,
     sanitize_log_name,
@@ -31,7 +27,6 @@ from .log_helpers import (
     try_rotate_file,
     write_json,
     write_text,
-    ensure_dir_writable,
 )
 
 logger = logging.getLogger(__name__)
@@ -196,13 +191,17 @@ def write_log(
     jsonl_path = lp.json_dir / f"{filename}.jsonl"
 
     for idx, msg in enumerate(messages):
-        ts = datetime.now(timezone.utc).isoformat()
+        ts = datetime.now(UTC).isoformat()
 
         # Preserve multi-line human messages for the hourly summary log or
         # when writing to a safe file. Historically the normalize step
         # flattened newlines; when writing the canonical dated `_safe` files
         # we want to preserve the original multiline human text.
-        if human_enable and (name == "monitoring-hourly" or safe_log_enable) and isinstance(msg, str):
+        if (
+            human_enable
+            and (name == "monitoring-hourly" or safe_log_enable)
+            and isinstance(msg, str)
+        ):
             human_msg = msg
         else:
             human_msg = normalize_message_for_human(msg)
@@ -226,7 +225,10 @@ def write_log(
 
 # Helper for write_log: decide whether human write is allowed by hourly window
 def _hourly_allows_write(
-    name: str, hourly: bool, hourly_window_seconds: int, project_root: Optional[Path] = None
+    name: str,
+    hourly: bool,
+    hourly_window_seconds: int,
+    project_root: Path | None = None,
 ) -> bool:
     """Check whether the 'hourly' window allows a write.
 
@@ -246,14 +248,16 @@ def _hourly_allows_write(
         now_int = int(time.time())
         if ts_path.exists():
             try:
-                with open(ts_path, "r", encoding="utf-8") as f:
+                with open(ts_path, encoding="utf-8") as f:
                     last = int(f.read().strip() or 0)
             except (OSError, ValueError):
                 last = 0
             return (now_int - last) >= int(hourly_window_seconds)
         return True
     except Exception as exc:
-        logger.debug("_hourly_allows_write: error checking hourly: %s", exc, exc_info=True)
+        logger.debug(
+            "_hourly_allows_write: error checking hourly: %s", exc, exc_info=True
+        )
         return True
 
 
@@ -285,19 +289,29 @@ def _perform_human_write(
         return
 
     if _hourly_allows_write(name, hourly, hourly_window_seconds):
-        human_line = build_human_line(format_date_for_log(None), level, human_msg, extra)
+        human_line = build_human_line(
+            format_date_for_log(None), level, human_msg, extra
+        )
         ok = write_text(plain_path, human_line)
         if not ok:
-            logger.warning("_perform_human_write: failed to write human log %s", plain_path)
+            logger.warning(
+                "_perform_human_write: failed to write human log %s", plain_path
+            )
         if hourly and ok:
             try:
                 cache_dir = get_project_root() / ".cache"
                 cache_dir.mkdir(parents=True, exist_ok=True)
-                ts_file = cache_dir / (f".last_human_{sanitize_log_name(name, name)}.ts")
+                ts_file = cache_dir / (
+                    f".last_human_{sanitize_log_name(name, name)}.ts"
+                )
                 with open(ts_file, "w", encoding="utf-8") as f:
                     f.write(str(int(time.time())))
             except Exception as exc:
-                logger.debug("_perform_human_write: failed to write hourly ts: %s", exc, exc_info=True)
+                logger.debug(
+                    "_perform_human_write: failed to write hourly ts: %s",
+                    exc,
+                    exc_info=True,
+                )
     else:
         # More explicit message to aid diagnosis when a human write is
         # suppressed by the 'hourly' mechanism. Including the log name and
@@ -314,7 +328,9 @@ def _perform_human_write(
 
 
 # Helper for write_log: build and write a JSON object to JSONL for ingestion
-def _perform_json_write(jsonl_path: Path, ts: str, level: str, msg, extra: dict | None) -> None:
+def _perform_json_write(
+    jsonl_path: Path, ts: str, level: str, msg, extra: dict | None
+) -> None:
     """Build the JSON object and delegate to `write_json`.
 
     Keeps a format compatible with metrics/ingestion consumers.
@@ -323,7 +339,9 @@ def _perform_json_write(jsonl_path: Path, ts: str, level: str, msg, extra: dict 
     # Keep only machine-readable keys and metrics.
     safe_extra = None
     if isinstance(extra, dict):
-        safe_extra = {k: v for k, v in extra.items() if k not in ("summary_short", "summary_long")}
+        safe_extra = {
+            k: v for k, v in extra.items() if k not in ("summary_short", "summary_long")
+        }
     json_obj = build_json_entry(ts, level, msg, safe_extra)
     ok = write_json(jsonl_path, json_obj)
     if ok is False:
@@ -372,7 +390,12 @@ def ensure_log_dirs_exist(root: str | Path | None = None) -> None:
                 # ensure_dir_writable internally)
                 get_log_paths(root)
             except Exception as exc:
-                logger.debug("ensure_log_dirs_exist: failed to recreate %s: %s", p, exc, exc_info=True)
+                logger.debug(
+                    "ensure_log_dirs_exist: failed to recreate %s: %s",
+                    p,
+                    exc,
+                    exc_info=True,
+                )
             break
 
 
@@ -397,7 +420,9 @@ def rotate_logs(day_secs: int | None = None, week_secs: int | None = None) -> No
             try_rotate_file(p, archive_dir, gz_suffix, day_secs, week_secs)
 
 
-def compress_old_logs(day_secs: int | None = None, week_secs: int | None = None) -> None:
+def compress_old_logs(
+    day_secs: int | None = None, week_secs: int | None = None
+) -> None:
     """Compress old rotating files in the archive."""
     archive_dir = get_log_paths().archive_dir
     if not archive_dir.exists():
@@ -418,16 +443,22 @@ def safe_remove(retention_days: int = 7, safe_retention_days: int | None = 30) -
     if not archive_dir.exists():
         return
 
-    now_ts = datetime.now(timezone.utc).timestamp()
+    now_ts = datetime.now(UTC).timestamp()
     patterns = ["*.jsonl.gz", "*.log.gz", f"*{ROTATING_SUFFIX}"]
 
     for pat in patterns:
         for p in sorted(archive_dir.glob(pat)):
-            rd = safe_retention_days if ("_safe" in p.name and safe_retention_days is not None) else retention_days
+            rd = (
+                safe_retention_days
+                if ("_safe" in p.name and safe_retention_days is not None)
+                else retention_days
+            )
             if not archive_file_is_old(p, now_ts, rd):
                 continue
             try:
                 p.unlink()
                 logger.info("safe_remove: removed %s", p)
             except Exception as exc:
-                logger.error("safe_remove: failed to remove %s: %s", p, exc, exc_info=True)
+                logger.error(
+                    "safe_remove: failed to remove %s: %s", p, exc, exc_info=True
+                )

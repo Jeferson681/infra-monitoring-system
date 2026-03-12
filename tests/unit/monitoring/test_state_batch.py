@@ -8,7 +8,10 @@ def test_compute_metric_states_edge_cases():
 
     # internal mapping produces STABLE/WARNING/CRITICAL
     metrics = {"cpu_percent": 95, "memory_used_bytes": 500}
-    thresholds = {"cpu_percent": {"warning": 50, "critical": 90}, "memory_used_bytes": {"warning": 1000}}
+    thresholds = {
+        "cpu_percent": {"warning": 50, "critical": 90},
+        "memory_used_bytes": {"warning": 1000},
+    }
     res = state._compute_metric_states(metrics, thresholds)
     assert res.get("state_cpu") in (state.STATE_WARNING, state.STATE_CRITICAL)
 
@@ -17,11 +20,17 @@ def test_systemstate_evaluate_activate_and_post_treatment(monkeypatch, tmp_path)
     """Testa avaliação, ativação e pós-tratamento em SystemState."""
     # Create SystemState with a low critical threshold so activation happens quickly
     s = state.SystemState(
-        {"cpu_percent": {"warning": 10, "critical": 20}}, critical_duration=1, post_treatment_wait_seconds=0
+        {"cpu_percent": {"warning": 10, "critical": 20}},
+        critical_duration=1,
+        post_treatment_wait_seconds=0,
     )
 
     # Monkeypatch SystemState._collect_metrics_after to return values showing improvement after treatment
-    monkeypatch.setattr(state.SystemState, "_collect_metrics_after", lambda self=None: {"cpu_percent": 5})
+    monkeypatch.setattr(
+        state.SystemState,
+        "_collect_metrics_after",
+        lambda self=None: {"cpu_percent": 5},
+    )
 
     # Evaluate metrics that are critical and ensure state returned is string and activation occurs
     st = s.evaluate_metrics({"cpu_percent": 95})

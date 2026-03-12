@@ -7,8 +7,8 @@ def test_write_debug_function_creates_files(tmp_path, monkeypatch):
     monkeypatch.setenv("MONITORING_LOG_ROOT", str(tmp_path))
 
     # configure handlers
-    from src.main import _setup_debug_file_handler
     from infra_monitoring.infra.system.logs import get_debug_file_path
+    from src.main import _setup_debug_file_handler
 
     _setup_debug_file_handler()
 

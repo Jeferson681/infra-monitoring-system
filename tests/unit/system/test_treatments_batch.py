@@ -1,8 +1,8 @@
 import os
 import socket
 import subprocess
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
 from infra_monitoring.infra.system import treatments as tr
 
@@ -90,6 +90,8 @@ def test_cleanup_temp_files_handles_oserror(monkeypatch, tmp_path):
     # simulate tempfile.gettempdir pointing to our tmp_path
     monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
     # make it raise on iterdir
-    monkeypatch.setattr(Path, "iterdir", lambda self: (_ for _ in ()).throw(OSError("boom")))
+    monkeypatch.setattr(
+        Path, "iterdir", lambda self: (_ for _ in ()).throw(OSError("boom"))
+    )
     # should not raise
     tr.cleanup_temp_files()

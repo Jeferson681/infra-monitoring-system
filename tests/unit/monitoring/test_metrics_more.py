@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+
 import psutil
 
 from infra_monitoring.services.monitoring import metrics
@@ -7,7 +8,10 @@ from infra_monitoring.services.monitoring import metrics
 def test_now_and_is_stale_cache_behavior(monkeypatch):
     """_is_stale returns True when cache timestamp set to 0."""
     metrics._CACHE["cpu_percent"]["ts"] = 0.0
-    assert metrics._is_stale("cpu_percent") is True or metrics._CACHE["cpu_percent"]["ts"] == 0.0
+    assert (
+        metrics._is_stale("cpu_percent") is True
+        or metrics._CACHE["cpu_percent"]["ts"] == 0.0
+    )
 
 
 def test_cache_get_or_refresh_unknown_key():
@@ -67,7 +71,9 @@ def test_tcp_latency_and_flags(monkeypatch):
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    monkeypatch.setattr(metrics.socket, "create_connection", lambda *a, **k: DummySock())
+    monkeypatch.setattr(
+        metrics.socket, "create_connection", lambda *a, **k: DummySock()
+    )
     metrics._last_latency_estimated = False
     v = metrics._tcp_latency_fallback("127.0.0.1", 80, 0.5)
     assert v is None or isinstance(v, float)
@@ -83,6 +89,8 @@ def test_get_cpu_freq_and_memory_info(monkeypatch):
     monkeypatch.setattr(psutil, "cpu_freq", lambda: F())
     assert isinstance(metrics.get_cpu_freq_ghz(), float)
 
-    monkeypatch.setattr(psutil, "virtual_memory", lambda: SimpleNamespace(used=100, total=200))
+    monkeypatch.setattr(
+        psutil, "virtual_memory", lambda: SimpleNamespace(used=100, total=200)
+    )
     used, total = metrics.get_memory_info()
     assert used == 100 and total == 200

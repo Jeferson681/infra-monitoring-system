@@ -8,7 +8,9 @@ repos:
     rev: v0.13.2
     hooks:
       - id: ruff
-        args: ["src", "tests"]
+        # run only on staged files by default; avoid forcing full-tree scan which
+        # can be slow when running `--all-files` manually. Use `pre-commit run ruff --all-files`
+        # explicitly when full repo check is desired.
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.18.2
@@ -28,8 +30,10 @@ repos:
     rev: 1.8.6
     hooks:
       - id: bandit
-        args: ["-r", "src", "-q", "-s", "B104,B404,B603"]
-        pass_filenames: false
+        # Limit bandit to production code only to avoid false-positives in tests
+        # (tests commonly use `assert`). This runs bandit only on files under src/.
+        files: ^src/
+        args: ["-q", "-s", "B104,B404,B603"]
 
   - repo: https://github.com/jendrikseipp/vulture
     rev: v2.14

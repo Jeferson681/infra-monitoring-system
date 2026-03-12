@@ -1,7 +1,7 @@
 import time
 
-from infra_monitoring.infra.system import logs as logs_mod
 from infra_monitoring.infra.system import log_helpers as lh
+from infra_monitoring.infra.system import logs as logs_mod
 
 
 def test_get_log_paths_creates_dirs(tmp_path, monkeypatch):
@@ -62,7 +62,9 @@ def test_hourly_allows_and_blocks(tmp_path, monkeypatch):
 
     time.sleep(2)
     # Após 2 segundos, deve bloquear (window não passou)
-    assert logs_mod._hourly_allows_write(name, True, 3600, project_root=tmp_path) is False
+    assert (
+        logs_mod._hourly_allows_write(name, True, 3600, project_root=tmp_path) is False
+    )
 
 
 def test_ensure_log_dirs_exist_recreates(tmp_path, monkeypatch):

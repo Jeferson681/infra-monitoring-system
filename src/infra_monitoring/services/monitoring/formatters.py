@@ -5,13 +5,13 @@ console output. This module provides the public `normalize_for_display`
 API used by the emission helpers.
 """
 
-from typing import Dict, Any
 import logging
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-def normalize_for_display(metrics: Dict[str, Any]) -> Dict[str, Any]:
+def normalize_for_display(metrics: dict[str, Any]) -> dict[str, Any]:
     """Normalize raw metrics into a structure ready for display.
 
     Returns a dict containing `summary_short`, `summary_long` and
@@ -28,7 +28,7 @@ def normalize_for_display(metrics: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # Helper for normalize_for_display — build short summary (-v)
-def _build_short_from_metrics(metrics: Dict[str, Any]) -> str:
+def _build_short_from_metrics(metrics: dict[str, Any]) -> str:
     """Build a concise, human-readable short summary from metrics.
 
     Includes CPU, RAM, ping and disk when available. Returns a no-data
@@ -60,7 +60,7 @@ def _build_short_from_metrics(metrics: Dict[str, Any]) -> str:
 
 
 # Helper for normalize_for_display — build detailed lines (-vv)
-def _build_long_from_metrics(metrics: Dict[str, Any]) -> list[str]:
+def _build_long_from_metrics(metrics: dict[str, Any]) -> list[str]:
     r"""Generate detailed metric lines for full display.
 
     Shows CPU, RAM, Disk, Ping, Latency, Temperature, traffic and timestamp.
@@ -92,7 +92,9 @@ def _build_long_from_metrics(metrics: Dict[str, Any]) -> list[str]:
     long_lines.append(f"RAM: {mem_line}")
     disk_line = _fmt_bytes_gb(disk_used, disk_total)
     long_lines.append(f"Disk: {disk_line}")
-    long_lines.append(f"Ping: {ping:.1f} ms" if ping is not None else "Ping: Unavailable")
+    long_lines.append(
+        f"Ping: {ping:.1f} ms" if ping is not None else "Ping: Unavailable"
+    )
 
     if latency is not None:
         # Always show latency in ms to avoid converting to seconds which may
@@ -102,7 +104,9 @@ def _build_long_from_metrics(metrics: Dict[str, Any]) -> list[str]:
         long_lines.append("Latency: Unavailable")
 
     temp = metrics.get("temperature_celsius")
-    long_lines.append(f"Temperature: {temp} C" if temp is not None else "Temperature: Unavailable")
+    long_lines.append(
+        f"Temperature: {temp} C" if temp is not None else "Temperature: Unavailable"
+    )
 
     bytes_sent = metrics.get("bytes_sent")
     bytes_recv = metrics.get("bytes_recv")
@@ -125,17 +129,20 @@ def _format_timestamp_line(ts_val) -> str:
         return "Date/time: Unavailable"
     try:
         # Delegate parsing to centralized time helper which accepts multiple formats
-        from infra_monitoring.infra.system.time_helpers import _parse_epoch_from_value  # type: ignore
         import datetime
+
+        from infra_monitoring.infra.system.time_helpers import _parse_epoch_from_value  # type: ignore
 
         parsed = _parse_epoch_from_value(ts_val)
         if parsed is None:
             # fallback to raw representation when unable to parse
             return f"Date/time: {ts_val}"
-        dt = datetime.datetime.fromtimestamp(float(parsed), tz=datetime.timezone.utc)
+        dt = datetime.datetime.fromtimestamp(float(parsed), tz=datetime.UTC)
         return f"Date/time: {dt.strftime('%Y-%m-%d %H:%M:%S')}"
     except Exception as exc:
-        logger.debug("invalid timestamp when formatting date/time: %s", exc, exc_info=True)
+        logger.debug(
+            "invalid timestamp when formatting date/time: %s", exc, exc_info=True
+        )
         return f"Date/time: {ts_val}"
 
 
@@ -176,7 +183,9 @@ def _fmt_bytes_human(n: int | None) -> str:
         return f"{mb:.2f} MB"
     except (TypeError, ValueError) as exc:
         logger = logging.getLogger(__name__)
-        logger.debug("error formatting bytes for human readable output: %s", exc, exc_info=True)
+        logger.debug(
+            "error formatting bytes for human readable output: %s", exc, exc_info=True
+        )
         return "Unavailable"
 
 

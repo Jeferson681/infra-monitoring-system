@@ -6,13 +6,12 @@ best-effort and minimize external dependencies to remain import-friendly in
 tests and CLI contexts.
 """
 
-import json
 import datetime
+import json
 import logging
 import os
 import socket
 import time
-from typing import List, Tuple
 from pathlib import Path
 
 
@@ -70,11 +69,16 @@ def record_network_usage(bytes_sent: int, bytes_recv: int) -> None:
         with NETWORK_LEARNING_FILE.open("w", encoding="utf-8") as f:
             json.dump(data, f)
     except Exception as exc:
-        logging.getLogger(__name__).error("Failed to save network usage data: %s", exc, exc_info=True)
+        logging.getLogger(__name__).error(
+            "Failed to save network usage data: %s", exc, exc_info=True
+        )
 
 
 # Cache for get_network_limit() to avoid frequent file reads
-_network_limit_cache: dict[str, float | int] = {"value": NETWORK_DEFAULT_LIMIT, "ts": 0.0}
+_network_limit_cache: dict[str, float | int] = {
+    "value": NETWORK_DEFAULT_LIMIT,
+    "ts": 0.0,
+}
 
 
 def get_network_limit() -> int:
@@ -122,13 +126,13 @@ def get_network_limit() -> int:
 logger = logging.getLogger(__name__)
 
 
-def reap_children_nonblocking() -> List[Tuple[int, int]]:
+def reap_children_nonblocking() -> list[tuple[int, int]]:
     """Reap terminated child processes in a non-blocking manner (POSIX).
 
     Returns a list of (pid, status) tuples for reaped processes. On
     non-POSIX platforms returns an empty list.
     """
-    reaped: List[Tuple[int, int]] = []
+    reaped: list[tuple[int, int]] = []
     if os.name == "posix":
         try:
             # Some static analyzers/mypy complain about direct access to
@@ -174,9 +178,13 @@ def _disk_candidate_paths() -> list[object]:
         anchor = Path().anchor
         if anchor:
             candidates.append(Path(anchor))
-    except Exception:  # nosec B110 - best-effort fallback for Path.anchor access
-        # Intentionally ignore errors here and fall back to '/'
-        pass
+    except Exception as exc:
+        # Best-effort fallback for Path.anchor access; record debug info
+        import logging as _logging
+
+        _logging.getLogger(__name__).debug(
+            "Path.anchor access failed, falling back", exc_info=exc
+        )
     candidates.append(Path("/"))
     candidates.append("/")
     return candidates
