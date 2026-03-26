@@ -1,48 +1,54 @@
-!.env.example
-# Espelhando .gitignore para build limpo
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.db
-*.sqlite3
-*.log
-*.tmp
-*.swp
-*.swo
-*.bak
-*.orig
-*.egg-info/
+
+# Ignore local virtual environments
 .venv/
+venv/
+
+# Logs and collected data
+logs/
+.cache/
+*.log
+
+# Environment files and secrets
 .env
 .env.*
-.envrc
-.cache/
-logs/
-logs/*
-logs/archive/
-logs/debug/
-logs/json/
-logs/log/
-reports/
-*.coverage
-.coverage*
-.pytest_cache/
+!.env.example
+
+# Tool caches and Python artifacts
 .mypy_cache/
-.tox/
+.pytest_cache/
+.ruff_cache/
+.ropeproject/
+__pycache__/
+*.pyc
+
+# Editor / IDE settings
+.vscode/
+.idea/
+
+# Coverage, build artifacts, distributions, node deps
+.coverage
+coverage.xml
+htmlcov/
 dist/
 build/
-.idea/
-.vscode/
-.DS_Store
-*.tar.gz
-*.zip
-*.egg
+*.egg-info/
 *.whl
 node_modules/
-.git/
-.gitignore
-.dockerignore
 
-# Prints do repositório didático
+# Reports and progress
+reports/
+progress_log.md
+
+# OS temporary files
+.DS_Store
+Thumbs.db
+
+# Didactic repository prints
 print.txt
+
+# Local documentation backups (do not version)
+# docs/originals/
+
+# Sensitive protection configs
+protection_master.json
+protection_min.json

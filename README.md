@@ -15,9 +15,9 @@
 
 Infra Monitoring System is an architectural monitoring project designed as a controlled environment for:
 
-- Observability tooling (Prometheus, Grafana, Loki)  
-- CI/CD and security pipeline validation  
-- Infrastructure as Code experimentation  
+- Observability tooling (Prometheus, Grafana, Loki)
+- CI/CD and security pipeline validation
+- Infrastructure as Code experimentation
 
 The system intentionally avoids external dependencies by providing its own observable target, enabling deterministic testing and architectural evolution.
 
@@ -29,10 +29,10 @@ This is a technical demonstration project, not a production monitoring system.
 
 Instead of relying on external infrastructure, this project provides an internal observable system to:
 
-- validate CI/CD pipelines  
-- test security automation  
-- experiment with observability tools  
-- demonstrate IaC practices  
+- validate CI/CD pipelines
+- test security automation
+- experiment with observability tools
+- demonstrate IaC practices
 
 This allows full control over system behavior and repeatable experiments.
 
@@ -50,10 +50,10 @@ This allows full control over system behavior and repeatable experiments.
 
 ### Key Characteristics
 
-- Provider abstraction (metric source is replaceable)  
-- Domain isolated from infrastructure concerns  
-- Clear separation between collection and exposure  
-- Prepared for integration with external tools  
+- Provider abstraction (metric source is replaceable)
+- Domain isolated from infrastructure concerns
+- Clear separation between collection and exposure
+- Prepared for integration with external tools
 
 The metric source layer can evolve independently without impacting business logic.
 
@@ -61,20 +61,20 @@ The metric source layer can evolve independently without impacting business logi
 
 ## Key Principles
 
-- Clear separation between domain and infrastructure  
-- Replaceable metric providers  
-- Testable core logic  
-- Pipeline-first engineering approach  
+- Clear separation between domain and infrastructure
+- Replaceable metric providers
+- Testable core logic
+- Pipeline-first engineering approach
 
 ---
 
 ## Main Stack
 
-- Python  
-- Docker / Docker Compose  
-- Prometheus, Grafana, Loki  
-- GitHub Actions  
-- Terraform (educational IaC demonstration)  
+- Python
+- Docker / Docker Compose
+- Prometheus, Grafana, Loki
+- GitHub Actions
+- Terraform (educational IaC demonstration)
 
 ---
 
@@ -92,22 +92,22 @@ For environment separation (local vs Docker) and execution flow details:
 
 ## What This Project Demonstrates
 
-- Evolution from experimental collector to extensible architecture  
-- Observability integration (metrics and logs)  
-- CI/CD pipelines with security automation  
-- Static analysis and dependency scanning  
-- IaC concepts decoupled from runtime logic  
-- Structured technical documentation and decision tracking  
+- Evolution from experimental collector to extensible architecture
+- Observability integration (metrics and logs)
+- CI/CD pipelines with security automation
+- Static analysis and dependency scanning
+- IaC concepts decoupled from runtime logic
+- Structured technical documentation and decision tracking
 
 ---
 
 ## Technical Documentation
 
-- Documentation portal: `docs/DOCS.md`  
-- Technical deep-dive (EN): `docs/README-TECH.md`  
-- Technical decisions: `docs/DECISIONS.md`  
-- Execution guide: `docs/RUN.md`  
-- Visual evidence: `docs/prints/README.md`  
+- Documentation portal: `docs/DOCS.md`
+- Technical deep-dive (EN): `docs/README-TECH.md`
+- Technical decisions: `docs/DECISIONS.md`
+- Execution guide: `docs/RUN.md`
+- Visual evidence: `docs/prints/README.md`
 
 ---
 
@@ -119,7 +119,7 @@ For environment separation (local vs Docker) and execution flow details:
 
 Executes formatters, linters and security hooks.
 
-`hadolint` runs in CI during image scans.  
+`hadolint` runs in CI during image scans.
 To run locally, use the `hadolint/hadolint` Docker image or install it natively.
 
 ---
@@ -128,11 +128,11 @@ To run locally, use the `hadolint/hadolint` Docker image or install it natively.
 
 Docker is required only for:
 
-- Full observability stack via Docker Compose  
-- Local container validation  
-- CI parity (security checks)  
+- Full observability stack via Docker Compose
+- Local container validation
+- CI parity (security checks)
 
 CI pipelines include:
 
-- Trivy (image scanning)  
+- Trivy (image scanning)
 - hadolint (Dockerfile linting)

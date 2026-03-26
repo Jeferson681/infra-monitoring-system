@@ -1,24 +1,18 @@
-###########################
-# IGNORE TUDO DE INFRAESTRUTURA COMO CÓDIGO E SENSÍVEL
-###########################
-```ignore
-###########################
-# IGNORE TUDO DE INFRAESTRUTURA COMO CÓDIGO E SENSÍVEL
-###########################
-# Ambientes virtuais
+# Ignore local virtual environments
 .venv/
 venv/
 
-# Logs e dados coletados
+# Logs and collected data
 logs/
 .cache/
+*.log
 
-# Arquivos de ambiente e segredos
+# Environment files and secrets
 .env
 .env.*
 !.env.example
 
-# Cache e artefatos de ferramentas
+# Tool caches and Python artifacts
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
@@ -26,11 +20,11 @@ logs/
 __pycache__/
 *.pyc
 
-# Configurações de editor/IDE
+# Editor / IDE settings
 .vscode/
 .idea/
 
-# Cobertura, build, wheel, node
+# Coverage, build artifacts, distributions, node deps
 .coverage
 coverage.xml
 htmlcov/
@@ -40,21 +34,20 @@ build/
 *.whl
 node_modules/
 
-# Relatórios, progresso
+# Reports and progress
 reports/
 progress_log.md
 
-# Arquivos temporários e do sistema
-*.log
+# OS temporary files
 .DS_Store
 Thumbs.db
 
-# Prints do repositório didático
+# Didactic repository prints
 print.txt
 
-# Backups locais de documentação (não versionar)
-# docs/originals/ (versionado agora para manter histórico de backups)
+# Local documentation backups (do not version)
+# docs/originals/
 
-```
+# Sensitive protection configs
 protection_master.json
 protection_min.json
