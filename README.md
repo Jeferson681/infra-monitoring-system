@@ -4,155 +4,135 @@
 [![CD](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/cd.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/cd.yml)\
 [![Coverage](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/tests-coverage.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/tests-coverage.yml/badge.svg)\
 [![Dependabot](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/dependabot/dependabot-updates/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/dependabot/dependabot-updates)\
-[![TruffleHog Secrets
-Scan](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/trufflehog-scan.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/trufflehog-scan.yml)\
+[![TruffleHog Secrets Scan](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/trufflehog-scan.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/trufflehog-scan.yml)\
 [![Snyk](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/snyk-scan.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/snyk-scan.yml)\
 [![Trivy](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/trivy-scan.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/trivy-scan.yml)\
 [![Terraform](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/terraform.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/terraform.yml)
 
-------------------------------------------------------------------------
+---
 
 ## Overview
 
-Infra Monitoring System is an architectural-focused monitoring project
-designed to demonstrate:
+Infra Monitoring System is an architectural monitoring project designed as a controlled environment for:
 
--   Clean separation of concerns\
--   Decoupled metric providers\
--   Observability integration\
--   CI/CD automation\
--   Security pipeline integration\
--   Infrastructure as Code practices
+- Observability tooling (Prometheus, Grafana, Loki)  
+- CI/CD and security pipeline validation  
+- Infrastructure as Code experimentation  
 
-This repository evolved from an experimental host-based collector into a
-structurally extensible monitoring foundation, prepared for integration
-with mature observability tools.
+The system intentionally avoids external dependencies by providing its own observable target, enabling deterministic testing and architectural evolution.
 
-It is a technical and architectural demonstration project, not a
-production monitoring product.
+This is a technical demonstration project, not a production monitoring system.
 
-------------------------------------------------------------------------
+---
 
 ## Problem Context
 
-The original goal was to provide a controlled target for:
+Instead of relying on external infrastructure, this project provides an internal observable system to:
 
--   CI/CD pipeline validation\
--   Security automation testing\
--   Observability tooling experimentation\
--   IaC demonstrations
+- validate CI/CD pipelines  
+- test security automation  
+- experiment with observability tools  
+- demonstrate IaC practices  
 
-Instead of depending on external infrastructure, the system provides its
-own observable target, enabling deterministic evaluation and
-architectural experimentation.
+This allows full control over system behavior and repeatable experiments.
 
-------------------------------------------------------------------------
+---
 
 ## Architectural Summary
 
-``` text
-Metric Provider (Pluggable)
-        ↓
-Domain Layer
-        ↓
-Exporter Interface (HTTP)
-        ↓
-Prometheus → Grafana / Loki
-```
+    Metric Provider (Pluggable)
+            ↓
+    Domain Layer
+            ↓
+    Exporter Interface (HTTP)
+            ↓
+    Prometheus → Grafana / Loki
 
-Key architectural characteristics:
+### Key Characteristics
 
--   Provider abstraction (metric source is replaceable)
--   Domain isolated from infrastructure concerns
--   Clear separation between collection and exposure
--   Prepared for integration with external agents and real-world tools
+- Provider abstraction (metric source is replaceable)  
+- Domain isolated from infrastructure concerns  
+- Clear separation between collection and exposure  
+- Prepared for integration with external tools  
 
-The metric source layer can evolve independently without impacting
-business logic.
+The metric source layer can evolve independently without impacting business logic.
 
-------------------------------------------------------------------------
+---
 
-## Architecture Principles
+## Key Principles
 
--   Single Responsibility per layer\
--   Infrastructure isolated from domain\
--   Replaceable metric providers\
--   Testable core logic\
--   Pipeline-first engineering mindset
+- Clear separation between domain and infrastructure  
+- Replaceable metric providers  
+- Testable core logic  
+- Pipeline-first engineering approach  
 
-------------------------------------------------------------------------
+---
 
 ## Main Stack
 
--   Python\
--   Docker / Docker Compose\
--   Prometheus, Grafana, Loki\
--   GitHub Actions\
--   Terraform (educational IaC demonstration)
+- Python  
+- Docker / Docker Compose  
+- Prometheus, Grafana, Loki  
+- GitHub Actions  
+- Terraform (educational IaC demonstration)  
 
-------------------------------------------------------------------------
+---
 
-## How to Run (3 commands)
+## How to Run
 
-``` bash
-git clone https://github.com/Jeferson681/infra-monitoring-system.git
-cd infra-monitoring-system
-docker compose -f docker/docker-compose.yml up --build
-```
+    git clone https://github.com/Jeferson681/infra-monitoring-system.git
+    cd infra-monitoring-system
+    docker compose -f docker/docker-compose.yml up --build
 
-For a clear separation between **venv runs** (local Python) and
-**Docker/Compose runs**, plus expected collector vs exporter flows, see:
+For environment separation (local vs Docker) and execution flow details:
 
-docs/RUN.md
+`docs/RUN.md`
 
-------------------------------------------------------------------------
+---
 
 ## What This Project Demonstrates
 
--   Architectural evolution from experimental collector to extensible
-    design\
--   Observability integration (metrics + logs)\
--   CI/CD pipelines with security automation\
--   Static analysis and dependency scanning\
--   IaC concepts separated from runtime logic\
--   Documentation organization and technical decision tracking
+- Evolution from experimental collector to extensible architecture  
+- Observability integration (metrics and logs)  
+- CI/CD pipelines with security automation  
+- Static analysis and dependency scanning  
+- IaC concepts decoupled from runtime logic  
+- Structured technical documentation and decision tracking  
 
-------------------------------------------------------------------------
+---
 
 ## Technical Documentation
 
--   Documentation portal: docs/DOCS.md\
--   Technical deep-dive (EN - canonical): docs/README-TECH.md\
--   Technical decisions: docs/DECISIONS.md\
--   How to run: docs/RUN.md\
--   Visual evidence: docs/prints/README.md
+- Documentation portal: `docs/DOCS.md`  
+- Technical deep-dive (EN): `docs/README-TECH.md`  
+- Technical decisions: `docs/DECISIONS.md`  
+- Execution guide: `docs/RUN.md`  
+- Visual evidence: `docs/prints/README.md`  
 
-------------------------------------------------------------------------
+---
 
 ## Developer Setup (Local Checks)
 
 ### Pre-commit & Linters
 
-Run:
+    pre-commit run --all-files
 
-``` bash
-pre-commit run --all-files
-```
+Executes formatters, linters and security hooks.
 
-This executes formatters, linters and security hooks.
+`hadolint` runs in CI during image scans.  
+To run locally, use the `hadolint/hadolint` Docker image or install it natively.
 
-`hadolint` runs in CI during image scans.\
-To run locally, use the `hadolint/hadolint` Docker image or install it
-natively.
+---
 
-------------------------------------------------------------------------
+## Docker (Optional)
 
-### Docker (Optional)
+Docker is required only for:
 
-Docker is required only if you want:
+- Full observability stack via Docker Compose  
+- Local container validation  
+- CI parity (security checks)  
 
--   The full Docker Compose observability stack\
--   Local container image validation\
--   Parity with CI security checks
+CI pipelines include:
 
-CI runners execute Trivy scans, hadolint and other checks automatically.
+- Trivy (image scanning)  
+- hadolint (Dockerfile linting)

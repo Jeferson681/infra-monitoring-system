@@ -16,7 +16,7 @@ jobs:
           fetch-depth: 0
 
       - name: Run TruffleHog (Git History Scan)
-        uses: trufflesecurity/trufflehog@v3.93.7
+        uses: trufflesecurity/trufflehog@v3.93.8
         with:
           path: ./
           extra_args: --only-verified
