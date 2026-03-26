@@ -8,8 +8,8 @@ pytest
 pytest-cov
 
 # Ferramentas de qualidade/código e automação
-black==26.3.1
-ruff==0.14.11
+black==26.3.0
+ruff==0.15.7
 flake8==7.1.1
 bandit==1.9.4
 pre-commit==4.5.1
