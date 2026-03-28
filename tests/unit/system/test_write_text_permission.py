@@ -16,4 +16,4 @@ def test_write_text_permission_error(monkeypatch, tmp_path):
 
     path = tmp_path / "log" / "f.log"
     ok = write_text(path, "teste")
-    assert ok is False
+    assert isinstance(ok, bool) and ok is False

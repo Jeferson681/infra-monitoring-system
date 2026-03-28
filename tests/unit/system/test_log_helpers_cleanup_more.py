@@ -24,7 +24,7 @@ def test_atomic_move_cleanup_when_dst_exists(tmp_path, monkeypatch):
     # remove src so function will perform cleanup of dst if src missing
     s.unlink()
     res = lh.atomic_move_to_archive(s, dst)
-    assert res is False
+    assert isinstance(res, bool) and res is False
 
 
 def test_try_compress_rotating_unlink(tmp_path, monkeypatch):
@@ -56,7 +56,7 @@ def test_write_text_outer_oserror_fallback(tmp_path, monkeypatch):
 
     # write_text logs the error and returns False on failure. Ensure no file created.
     res = lh.write_text(target, "hello\n")
-    assert res is False
+    assert isinstance(res, bool) and res is False
     assert not target.exists()
 
 
@@ -170,7 +170,7 @@ def test_copy_replace_fallback_cleanup_on_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(_sh, "copy2", bad_copy)
 
     res = lh._copy_replace_fallback(s, d)
-    assert res is False
+    assert isinstance(res, bool) and res is False
     assert not tmp.exists()
 
 
@@ -184,7 +184,7 @@ def test_ensure_dir_writable_permission_error(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "mkdir", fake_mkdir, raising=False)
 
     res = lh.ensure_dir_writable(p)
-    assert res is False
+    assert isinstance(res, bool) and res is False
 
 
 def test_atomic_move_rename_short_circuit(tmp_path, monkeypatch):
@@ -197,7 +197,7 @@ def test_atomic_move_rename_short_circuit(tmp_path, monkeypatch):
     monkeypatch.setattr(lh, "_attempt_rename", lambda a, b: True)
 
     res = lh.atomic_move_to_archive(s, dst)
-    assert res is True
+    assert isinstance(res, bool) and res is True
 
 
 def test_try_rotate_file_no_action_if_not_old(tmp_path, monkeypatch):

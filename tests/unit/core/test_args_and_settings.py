@@ -9,16 +9,16 @@ def test_configure_argparser_defaults():
     """Teste para configuração de argumentos padrão do parser."""
     p = args_mod.configure_argparser()
     ns = p.parse_args([])
-    assert ns.interval == 3.0
-    assert ns.cycles == 1
+    assert isinstance(ns.interval, float) and ns.interval == pytest.approx(3.0)
+    assert isinstance(ns.cycles, int) and ns.cycles == 1
 
 
 def test_parse_args_and_validation():
     """Teste para parsing e validação de argumentos."""
     ns = args_mod.parse_args(["-i", "0.5", "-c", "2", "-v"])
-    assert ns.interval == 0.5
-    assert ns.cycles == 2
-    assert ns.verbose == 1
+    assert isinstance(ns.interval, float) and ns.interval == pytest.approx(0.5)
+    assert isinstance(ns.cycles, int) and ns.cycles == 2
+    assert isinstance(ns.verbose, int) and ns.verbose == 1
 
 
 def test_validate_args_errors():

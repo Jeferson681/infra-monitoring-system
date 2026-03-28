@@ -48,7 +48,7 @@ def test_format_extras_and_multiline_decision(monkeypatch):
     """Teste para decisão de multiline e formatação de extras."""
     extras = {"a": 1, "b": ["x", "y"]}
     s = lh._format_extras_for_human(extras)
-    assert "a=1" in s and "b=" in s
+    assert isinstance(s, str) and "a=1" in s and "b=" in s
 
     # multiline decision when env set
     monkeypatch.setenv("MONITORING_HUMAN_MULTILINE", "1")

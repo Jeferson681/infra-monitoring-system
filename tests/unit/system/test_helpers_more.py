@@ -5,8 +5,10 @@ mod = importlib.import_module("infra_monitoring.infra.system.helpers")
 
 def test_validate_host_port():
     """Teste para validar host e porta."""
-    assert mod.validate_host_port("127.0.0.1", 80)
-    assert not mod.validate_host_port("", -1)
+    assert isinstance(mod.validate_host_port("127.0.0.1", 80), bool)
+    assert mod.validate_host_port("127.0.0.1", 80) is True
+    assert isinstance(mod.validate_host_port("", -1), bool)
+    assert mod.validate_host_port("", -1) is False
 
 
 def test_read_env_file_missing(tmp_path):
@@ -25,6 +27,7 @@ def test_merge_env_items(tmp_path, monkeypatch):
     env = {"A": "override", "C": "3"}
     merged = mod.merge_env_items(f, env)
     # merged keys include A,B,C
+    assert isinstance(merged, dict)
     assert merged.get("A") == "override"
     assert merged.get("B") == "2"
     assert merged.get("C") == "3"

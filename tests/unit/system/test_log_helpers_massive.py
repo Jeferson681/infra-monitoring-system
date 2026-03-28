@@ -9,7 +9,7 @@ def test_sanitize_log_name_and_long_name():
     assert lh.sanitize_log_name("..weird/name!!") != ""
     long = "a" * 500
     s = lh.sanitize_log_name(long)
-    assert len(s) <= 200
+    assert isinstance(s, str) and len(s) <= 200
 
 
 def test_normalize_message_for_human_handles_exceptions(monkeypatch):
@@ -25,7 +25,7 @@ def test_normalize_message_for_human_handles_exceptions(monkeypatch):
 def test_build_json_entry_merges_extras():
     """Teste para build_json_entry mesclando extras."""
     e = lh.build_json_entry("ts", "INFO", "m", {"a": 1})
-    assert e["ts"] == "ts"
+    assert isinstance(e, dict) and e["ts"] == "ts"
     assert e["a"] == 1
 
 
@@ -70,7 +70,7 @@ def test_attempts_failures(tmp_path, monkeypatch):
     )
 
     res = lh._copy_replace_fallback(s, d)
-    assert res is False
+    assert isinstance(res, bool) and res is False
 
 
 def test_all_children_old_oserror(tmp_path, monkeypatch):
@@ -126,7 +126,7 @@ def test_ensure_dir_writable_cleanup(tmp_path, monkeypatch):
 
     monkeypatch.setattr(lh, "open", fake_open, raising=False)
     res = lh.ensure_dir_writable(p)
-    assert res is False
+    assert isinstance(res, bool) and res is False
 
 
 def test_compress_file_raises_and_cleans(tmp_path, monkeypatch):
@@ -148,4 +148,4 @@ def test_compress_file_raises_and_cleans(tmp_path, monkeypatch):
 
     monkeypatch.setattr(lh.gzip, "open", fake_gzip_open)
     res = lh.compress_file(src, dst)
-    assert res is False
+    assert isinstance(res, bool) and res is False

@@ -66,4 +66,4 @@ def test_build_human_line_multiline_env(monkeypatch):
     """Teste para multiline em build_human_line via env."""
     monkeypatch.setenv("MONITORING_HUMAN_MULTILINE", "1")
     s = lh.build_human_line("ts", "INFO", "line1\nline2", {"a": 1})
-    assert "\n" in s
+    assert isinstance(s, str) and "\n" in s

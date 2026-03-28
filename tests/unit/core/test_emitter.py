@@ -12,7 +12,9 @@ def test_format_human_fallback(monkeypatch):
     )
 
     res = fake._format_human_msg(None, {"state": "CRITICAL"})
+    assert isinstance(res, str)
     assert "state=CRITICAL" in res
+    assert res.strip().startswith("state=CRITICAL")
 
 
 def test_emit_snapshot_writes_json(monkeypatch):
@@ -24,13 +26,19 @@ def test_emit_snapshot_writes_json(monkeypatch):
         calls["called"] = True
         calls["name"] = name
         calls["msg"] = message
+        calls["kwargs"] = kwargs
 
     monkeypatch.setattr("infra_monitoring.core.emitter.write_log", fake_write_log)
 
-    # should not raise
+    # should not raise and should call write_log with expected parameters
     mod.emit_snapshot({"state": "STABLE"}, {"state": "STABLE"}, verbose_level=0)
     assert calls.get("called") is True
     assert calls.get("name") == "monitoring"
+    # message should include the minimal human message or JSON content
+    assert isinstance(calls.get("msg"), str)
+    # extra should be present in kwargs and json_enable should be True
+    assert isinstance(calls.get("kwargs"), dict)
+    assert calls["kwargs"].get("json_enable") is True
 
 
 def test_print_short_and_long(capsys):

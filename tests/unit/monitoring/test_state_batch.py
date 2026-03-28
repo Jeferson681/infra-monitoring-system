@@ -13,6 +13,7 @@ def test_compute_metric_states_edge_cases():
         "memory_used_bytes": {"warning": 1000},
     }
     res = state._compute_metric_states(metrics, thresholds)
+    assert isinstance(res, dict)
     assert res.get("state_cpu") in (state.STATE_WARNING, state.STATE_CRITICAL)
 
 
@@ -34,11 +35,15 @@ def test_systemstate_evaluate_activate_and_post_treatment(monkeypatch, tmp_path)
 
     # Evaluate metrics that are critical and ensure state returned is string and activation occurs
     st = s.evaluate_metrics({"cpu_percent": 95})
-    assert st in (state.STATE_CRITICAL, state.STATE_WARNING, state.STATE_STABLE)
+    assert isinstance(st, str) and st in (
+        state.STATE_CRITICAL,
+        state.STATE_WARNING,
+        state.STATE_STABLE,
+    )
 
     # normalize_for_display should include 'current'
     out = s.normalize_for_display()
-    assert "current" in out
+    assert isinstance(out, dict) and "current" in out
 
     # Prepare and record a post treatment snapshot directly
     snap = s._prepare_post_treatment_snapshot({"cpu_percent": 5}, [])

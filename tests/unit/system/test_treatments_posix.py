@@ -7,7 +7,8 @@ from infra_monitoring.infra.system import treatments as tr
 def test_returns_false_when_not_posix(monkeypatch):
     """When the platform is not POSIX, function should return False."""
     monkeypatch.setattr(tr.os, "name", "nt", raising=False)
-    assert tr.trim_process_working_set_posix(12345) is False
+    res = tr.trim_process_working_set_posix(12345)
+    assert isinstance(res, bool) and res is False
 
 
 def test_posix_malloc_trim_success(monkeypatch):
@@ -27,7 +28,8 @@ def test_posix_malloc_trim_success(monkeypatch):
     fake_ctypes.CDLL = cdll
     monkeypatch.setitem(sys.modules, "ctypes", fake_ctypes)
 
-    assert tr.trim_process_working_set_posix(9999) is True
+    res = tr.trim_process_working_set_posix(9999)
+    assert isinstance(res, bool) and res is True
 
 
 def test_posix_no_malloc_trim(monkeypatch):
@@ -46,4 +48,5 @@ def test_posix_no_malloc_trim(monkeypatch):
     fake_ctypes.CDLL = cdll
     monkeypatch.setitem(sys.modules, "ctypes", fake_ctypes)
 
-    assert tr.trim_process_working_set_posix(1111) is False
+    res = tr.trim_process_working_set_posix(1111)
+    assert isinstance(res, bool) and res is False

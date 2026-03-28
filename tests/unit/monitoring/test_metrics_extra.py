@@ -1,14 +1,17 @@
 import subprocess
 
 import psutil
+import pytest
 
 from infra_monitoring.services.monitoring import metrics
 
 
 def test_safe_float_accepts_numbers_and_rejects_nan_inf():
     """_safe_float accepts numeric-like input and rejects NaN/Inf/other types."""
-    assert metrics._safe_float(1) == 1.0
-    assert metrics._safe_float("2.5") == 2.5
+    v1 = metrics._safe_float(1)
+    assert isinstance(v1, float) and v1 == pytest.approx(1.0)
+    v2 = metrics._safe_float("2.5")
+    assert isinstance(v2, float) and v2 == pytest.approx(2.5)
     assert metrics._safe_float(float("nan")) is None
     assert metrics._safe_float(float("inf")) is None
     assert metrics._safe_float(object()) is None
@@ -37,6 +40,7 @@ def test_get_network_stats_monkeypatch(monkeypatch):
 
     monkeypatch.setattr(psutil, "net_io_counters", lambda: FakeNet())
     res = metrics.get_network_stats()
+    assert isinstance(res, dict)
     assert res["bytes_sent"] == 100
     assert res["bytes_recv"] == 200
 
@@ -49,7 +53,8 @@ def test_get_disk_percent_with_candidates(monkeypatch, tmp_path):
         percent = 42
 
     monkeypatch.setattr(psutil, "disk_usage", lambda p: FakeDU())
-    assert metrics.get_disk_percent() == 42
+    dp = metrics.get_disk_percent()
+    assert isinstance(dp, (int, float)) and dp == 42
 
 
 def test_get_network_latency_tcp_fallback(monkeypatch):
@@ -76,7 +81,7 @@ def test_get_network_latency_tcp_fallback(monkeypatch):
 
     # Should return a float (ms) or None but should not raise
     val = metrics.get_network_latency(host="127.0.0.1", port=80, timeout=1.0)
-    assert val is None or isinstance(val, float)
+    assert val is None or (isinstance(val, float) and val >= 0.0)
 
 
 def test_tcp_latency_fallback_marks_estimated(monkeypatch):

@@ -9,7 +9,10 @@ def test_import_exporter():
     """Importa o exporter sem erros."""
     import infra_monitoring.api.exporter.prometheus as prometheus
 
+    # module should expose expected helpers
     assert prometheus is not None
+    assert callable(getattr(prometheus, "_sanitize_metric_name", None))
+    assert callable(getattr(prometheus, "expose_metric", None))
 
 
 def test_sanitize_metric_name_basic():
@@ -36,7 +39,9 @@ def test_expose_metric_no_prom(monkeypatch, caplog):
 
     # calling expose_metric with prometheus missing should log debug and not raise
     mod.expose_metric("monitoring_cpu_percent", 12.3)
-    assert any("prometheus_client not available" in r.message for r in caplog.records)
+    assert any(
+        "prometheus_client not available" in rec.getMessage() for rec in caplog.records
+    )
 
     # Cleanup: remove the monkeypatched None from sys.modules and reload the real prometheus_client
     # so that subsequent tests see the real prometheus_client (if available)
@@ -102,6 +107,10 @@ def test_start_exporter_invokes_start_http_server(monkeypatch):
     mod.start_exporter()
     # exporter now only initializes metrics; it should not start an HTTP server
     assert events.get("started") is None
+    # module should expose _gauges mapping after initialization
+    assert isinstance(getattr(mod, "_gauges", {}), dict)
+    # after initialization the module must have logged info about initialization
+    # (non-fatal informational message)
 
     # Cleanup: restore real prometheus_client
     if "prometheus_client" in sys.modules:

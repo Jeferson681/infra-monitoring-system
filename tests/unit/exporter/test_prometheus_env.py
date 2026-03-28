@@ -27,3 +27,5 @@ def test_start_exporter_initializes_without_starting_server(monkeypatch):
     assert prom._server_started is True
     assert "exposed_from_jsonl" in called
     assert "start_http_called" not in called
+    # ensure internal gauges mapping exists
+    assert isinstance(getattr(prom, "_gauges", {}), dict)

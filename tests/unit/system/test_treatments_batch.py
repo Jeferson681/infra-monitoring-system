@@ -23,7 +23,8 @@ def test_online_check_fails(monkeypatch):
         raise OSError("no net")
 
     monkeypatch.setattr(socket, "create_connection", fake_create)
-    assert tr._online_check(timeout=0.01) is False
+    res = tr._online_check(timeout=0.01)
+    assert isinstance(res, bool) and res is False
 
 
 def test_reapply_network_config_no_candidates(monkeypatch):
@@ -55,7 +56,7 @@ def test_iter_roots_on_windows_and_posix(monkeypatch, tmp_path):
     # on POSIX
     monkeypatch.setattr(os, "name", "posix", raising=False)
     roots = tr._iter_roots()
-    assert roots == [Path("/")]
+    assert isinstance(roots, list) and roots == [Path("/")]
 
     # on Windows emulate C: exists
     monkeypatch.setattr(os, "name", "nt", raising=False)
@@ -74,7 +75,7 @@ def test_check_disk_usage_handles_errors(monkeypatch, tmp_path):
 
     monkeypatch.setattr(Path, "exists", fake_exists)
     res = tr.check_disk_usage(90)
-    assert res == []
+    assert isinstance(res, list) and res == []
 
 
 def test_trim_reap_zombie_on_platform(monkeypatch):
@@ -82,7 +83,8 @@ def test_trim_reap_zombie_on_platform(monkeypatch):
     monkeypatch.setattr(os, "name", "posix", raising=False)
     # patch reap_children_nonblocking to raise
     monkeypatch.setattr(tr, "reap_children_nonblocking", lambda: [])
-    assert tr.reap_zombie_processes() == 0
+    res = tr.reap_zombie_processes()
+    assert isinstance(res, int) and res == 0
 
 
 def test_cleanup_temp_files_handles_oserror(monkeypatch, tmp_path):

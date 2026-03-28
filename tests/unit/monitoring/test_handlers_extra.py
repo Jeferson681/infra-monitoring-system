@@ -66,8 +66,10 @@ def test_maybe_run_aux_cleanup_and_run_reap_aux(monkeypatch):
         "infra_monitoring.infra.system.treatments.cleanup_temp_files", fake_cleanup
     )
     handlers._maybe_run_aux_cleanup(state, time.monotonic())
-    # if function ran, last_treatment_run should be updated
+    # if function ran, last_treatment_run should be updated with cleanup_temp_files
     assert isinstance(state.last_treatment_run, dict)
+    assert "cleanup_temp_files" in state.last_treatment_run
+    assert isinstance(state.last_treatment_run.get("cleanup_temp_files"), float)
 
     # test _run_reap_aux behavior
     def fake_reap():
@@ -111,7 +113,10 @@ def test_attempt_treatment_no_action_or_cooldown(monkeypatch):
     s3.treatment_cooldowns = {}
     s3.last_treatment_run = {}
     res = handlers.attempt_treatment(s3, "disk_percent", {})
-    assert res is False or isinstance(res, dict)
+    # When successful, should return a dict with action and result; otherwise False
+    assert res is False or (
+        isinstance(res, dict) and res.get("action") == "check_disk_usage"
+    )
 
 
 def test_attempt_treatment_noop():

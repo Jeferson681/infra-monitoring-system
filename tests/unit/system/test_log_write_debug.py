@@ -24,14 +24,16 @@ def test_write_debug_entry(tmp_path, monkeypatch):
     logs = sorted(lp.log_dir.glob("unit-test-debug-*.log"))
     jsons = sorted(lp.json_dir.glob("unit-test-debug-*.jsonl"))
 
-    assert logs, f"arquivo .log não criado em {lp.log_dir}"
-    assert jsons, f"arquivo .jsonl não criado em {lp.json_dir}"
+    assert isinstance(logs, list) and logs, f"arquivo .log não criado em {lp.log_dir}"
+    assert (
+        isinstance(jsons, list) and jsons
+    ), f"arquivo .jsonl não criado em {lp.json_dir}"
 
     # Conteúdo mínimo esperado
     with logs[0].open("r", encoding="utf-8") as f:
         text = f.read()
-    assert "mensagem-debug-de-teste" in text
+    assert isinstance(text, str) and "mensagem-debug-de-teste" in text
 
     with jsons[0].open("r", encoding="utf-8") as f:
         j = f.read()
-    assert "mensagem-debug-de-teste" in j
+    assert isinstance(j, str) and "mensagem-debug-de-teste" in j

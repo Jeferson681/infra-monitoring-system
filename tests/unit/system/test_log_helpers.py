@@ -29,6 +29,7 @@ def test_build_json_entry_and_human_line(monkeypatch):
 
     j = build_json_entry("ts", "INFO", "ok", {"a": 1, "msg": "shadow"})
     # existing keys should be preserved and collisions renamed
+    assert isinstance(j, dict)
     assert j["ts"] == "ts"
     assert j["level"] == "INFO"
     assert "extra_msg" in j
@@ -36,11 +37,16 @@ def test_build_json_entry_and_human_line(monkeypatch):
     # Legacy single-line
     monkeypatch.delenv("MONITORING_HUMAN_MULTILINE", raising=False)
     line = build_human_line("2020-01-01T00:00:00Z", "INFO", "message", {"x": 1})
-    assert line.endswith("\n") and "message" in line and "x=1" in line
+    assert (
+        isinstance(line, str)
+        and line.endswith("\n")
+        and "message" in line
+        and "x=1" in line
+    )
 
     # For a message containing newline, multiline should be used even if env not set
     multi = build_human_line("2020-01-01T00:00:00Z", "INFO", "a\nb", {"y": 2})
-    assert "\n\n" in multi
+    assert isinstance(multi, str) and "\n\n" in multi
 
 
 def test_write_text_with_and_without_portalocker(tmp_path, monkeypatch):
@@ -63,12 +69,14 @@ def test_write_text_with_and_without_portalocker(tmp_path, monkeypatch):
     # Case 1: portalocker present
     monkeypatch.setattr(lh, "portalocker", FakePL)
     lh.write_text(p, "hello\n")
-    assert p.read_text(encoding="utf-8").strip() == "hello"
+    txt = p.read_text(encoding="utf-8")
+    assert isinstance(txt, str) and txt.strip() == "hello"
 
     # Case 2: portalocker absent -> should still write
     monkeypatch.setattr(lh, "portalocker", None)
     lh.write_text(p, "world\n")
-    assert "world" in p.read_text(encoding="utf-8")
+    content2 = p.read_text(encoding="utf-8")
+    assert isinstance(content2, str) and "world" in content2
 
 
 def test_write_json_fallback(tmp_path):
@@ -79,7 +87,7 @@ def test_write_json_fallback(tmp_path):
     # sets are not JSON serializable; write_json should fallback using str
     write_json(p, {"x": {1, 2}})
     content = p.read_text(encoding="utf-8")
-    assert "set(" in content or "{1, 2}" in content
+    assert isinstance(content, str) and ("set(" in content or "{1, 2}" in content)
 
 
 def test_atomic_move_and_compress(tmp_path):
@@ -96,7 +104,7 @@ def test_atomic_move_and_compress(tmp_path):
 
     # Should be able to move
     ok = atomic_move_to_archive(src, dst_rot)
-    assert ok
+    assert isinstance(ok, bool) and ok is True
     assert dst_rot.exists()
 
     # Create a file to compress
@@ -104,11 +112,11 @@ def test_atomic_move_and_compress(tmp_path):
     src2.write_text("abc")
     gz = tmp_path / "out" / "data.txt.gz"
     ok2 = compress_file(src2, gz)
-    assert ok2
+    assert isinstance(ok2, bool) and ok2 is True
     assert gz.exists()
-    # verify gzip header
-    with gzip.open(gz, "rb") as f:
-        assert f.read() == b"abc"
+    # verify gzip content (read as text)
+    with gzip.open(gz, "rt", encoding="utf-8") as f:
+        assert f.read() == "abc"
 
     # is_older_than: adjust mtime to past
     older = tmp_path / "old.txt"
@@ -183,6 +191,6 @@ def test_is_older_than_and_ensure_dir_writable(tmp_path):
 
     f = tmp_path / "t.txt"
     f.write_text("x")
-    assert ensure_dir_writable(tmp_path)
+    assert ensure_dir_writable(tmp_path) is True
     # Recent file should not be older than large seconds
     assert not is_older_than(f, 9999999)

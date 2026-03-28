@@ -2,6 +2,8 @@ import json
 import time
 from types import SimpleNamespace
 
+import pytest
+
 from infra_monitoring.api.exporter import main_http
 
 
@@ -48,7 +50,8 @@ def test_get_process_metrics_prometheus_and_names(monkeypatch):
     h = make_handler()
     metrics = h._get_process_metrics(prefix="process_", prometheus=False)
     assert "process_cpu_percent" in metrics
-    assert metrics["process_cpu_percent"] == 1.1
+    assert isinstance(metrics["process_cpu_percent"], (int, float))
+    assert metrics["process_cpu_percent"] == pytest.approx(1.1)
 
     pm = h._get_process_metrics(prefix="process_", prometheus=True)
     # prometheus mode should not contain duplicate prefix
@@ -83,7 +86,9 @@ def test_get_cpu_temp_c_fallback_and_psutil(monkeypatch):
         lambda: {"t": [SimpleNamespace(current=45.0)]},
         raising=False,
     )
-    assert h._get_cpu_temp_c({}) == 45.0
+    assert isinstance(h._get_cpu_temp_c({}), float) and h._get_cpu_temp_c(
+        {}
+    ) == pytest.approx(45.0)
 
     # fallback to provided system_metrics dict
     sm = {"metrics": {"temperature_celsius": 55}}
@@ -91,7 +96,9 @@ def test_get_cpu_temp_c_fallback_and_psutil(monkeypatch):
     monkeypatch.setattr(
         main_http.psutil, "sensors_temperatures", lambda: {}, raising=False
     )
-    assert h._get_cpu_temp_c(sm) == 55.0
+    assert isinstance(h._get_cpu_temp_c(sm), float) and h._get_cpu_temp_c(
+        sm
+    ) == pytest.approx(55.0)
 
 
 def test_get_last_system_metrics_reads_file(monkeypatch, tmp_path):
@@ -104,7 +111,7 @@ def test_get_last_system_metrics_reads_file(monkeypatch, tmp_path):
     monkeypatch.setattr(main_http, "SYSTEM_METRICS_JSONL_PATH", str(d))
     h = make_handler()
     m = h._get_last_system_metrics()
-    assert m == {"b": 2}
+    assert isinstance(m, dict) and m == {"b": 2}
 
 
 def test_get_network_rates(monkeypatch):
@@ -134,7 +141,9 @@ def test_get_network_rates(monkeypatch):
     h.__class__._last_net_ts = 900
     h.__class__._last_net = (2000, 1000)
     in_mbps, out_mbps = h._get_network_rates()
-    assert isinstance(in_mbps, float) or in_mbps is None
+    assert (in_mbps is None or isinstance(in_mbps, float)) and (
+        out_mbps is None or isinstance(out_mbps, float)
+    )
 
 
 def test_process_num_fds_exception(monkeypatch):
@@ -175,4 +184,5 @@ def test_cpu_temp_psutil_raises_and_fallback(monkeypatch):
         raising=False,
     )
     # fallback if provided
-    assert h._get_cpu_temp_c({"temperature": 12}) == 12.0
+    val = h._get_cpu_temp_c({"temperature": 12})
+    assert isinstance(val, float) and val == pytest.approx(12.0)

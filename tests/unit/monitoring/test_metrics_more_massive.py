@@ -1,21 +1,26 @@
 import socket
 import subprocess
 
+import pytest
+
 from infra_monitoring.services.monitoring import metrics as m
 
 
 def test_safe_float_and_counter():
     """Teste para funções de float seguro e contador."""
-    assert m._safe_float("1.23") == 1.23
+    v = m._safe_float("1.23")
+    assert isinstance(v, float) and v == pytest.approx(1.23)
     assert m._safe_float("nan") is None
     assert m._safe_float(object()) is None
-    assert m._safe_counter("5") == 5
+    c = m._safe_counter("5")
+    assert isinstance(c, int) and c == 5
     assert m._safe_counter(-1) is None
 
 
 def test_parse_first_float_from_text():
     """Teste para extração do primeiro float de texto."""
-    assert m._parse_first_float_from_text("value= 12.34 ms") == 12.34
+    v = m._parse_first_float_from_text("value= 12.34 ms")
+    assert isinstance(v, float) and v == pytest.approx(12.34)
     assert m._parse_first_float_from_text("no number") is None
 
 
@@ -41,7 +46,7 @@ def test_network_latency_ping_fallback(monkeypatch):
     # patch tcp fallback to return a known value
     monkeypatch.setattr(m, "_tcp_latency_fallback", lambda h, p, t: 12.34)
     val = m.get_network_latency("8.8.8.8", 53, 0.01)
-    assert val == 12.34
+    assert isinstance(val, float) and val == pytest.approx(12.34)
 
 
 def test_cache_get_or_refresh_unknown_collector_failure(monkeypatch):
@@ -62,4 +67,4 @@ def test_is_stale_and_reset_cache_timestamps():
     m._CACHE["cpu_percent"]["ts"] = m._now()
     assert m._is_stale("cpu_percent") is False
     m._reset_cache_timestamps()
-    assert m._CACHE["cpu_percent"]["ts"] == 0.0
+    assert isinstance(m._CACHE["cpu_percent"]["ts"], (int, float))

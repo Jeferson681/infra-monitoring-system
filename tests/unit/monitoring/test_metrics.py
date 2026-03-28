@@ -7,6 +7,8 @@ and a few helper functions.
 import importlib
 import sys
 
+import pytest
+
 
 def test_collect_metrics_smoke():
     """collect_metrics should return a dict with expected keys."""
@@ -16,6 +18,11 @@ def test_collect_metrics_smoke():
     metrics = mod.collect_metrics()
     assert isinstance(metrics, dict)
     assert "cpu_percent" in metrics and "memory_percent" in metrics
+    # values should be numeric when present
+    if metrics.get("cpu_percent") is not None:
+        assert isinstance(metrics["cpu_percent"], (int, float))
+    if metrics.get("memory_percent") is not None:
+        assert isinstance(metrics["memory_percent"], (int, float))
 
 
 def test_export_some_metrics_no_prom(monkeypatch, caplog):
@@ -24,11 +31,13 @@ def test_export_some_metrics_no_prom(monkeypatch, caplog):
     mod = importlib.reload(
         importlib.import_module("infra_monitoring.services.monitoring.metrics")
     )
-    caplog.set_level("DEBUG")
+    import logging
+
+    caplog.set_level(logging.DEBUG)
     mod._export_some_metrics(
         {"cpu_percent": 1.2, "memory_percent": 3.4, "disk_percent": 5.6}
     )
-    # ensure no ERROR logs were emitted
+    # ensure no ERROR logs were emitted and a debug about missing client may exist
     assert not any(r.levelname == "ERROR" for r in caplog.records)
 
 
@@ -47,4 +56,9 @@ def test_export_some_metrics_with_prom(monkeypatch):
     mod._export_some_metrics(
         {"cpu_percent": 2.0, "memory_percent": 4.0, "disk_percent": 6.0}
     )
-    assert any("monitoring_cpu_percent" in c[0] for c in calls)
+    # ensure at least the cpu metric was exported with correct numeric value
+    assert any(
+        c[0].endswith("cpu_percent") and c[1] == pytest.approx(2.0) for c in calls
+    )
+    # expect at least cpu, memory and disk to be exported
+    assert len(calls) >= 3

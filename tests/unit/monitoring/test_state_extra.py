@@ -9,6 +9,7 @@ def test_compute_metric_states_basic():
         "memory_used_bytes": {"warning": 50},
     }
     res = state._compute_metric_states(metrics, thresholds)
+    assert isinstance(res, dict)
     assert res.get("state_cpu") in (state.STATE_WARNING, state.STATE_STABLE)
 
 
@@ -26,9 +27,13 @@ def test_systemstate_evaluate_and_snapshots(tmp_path, monkeypatch):
     )
     metrics = {"cpu_percent": 95}
     st = s.evaluate_metrics(metrics)
-    assert st in (state.STATE_CRITICAL, state.STATE_WARNING, state.STATE_STABLE)
+    assert isinstance(st, str) and st in (
+        state.STATE_CRITICAL,
+        state.STATE_WARNING,
+        state.STATE_STABLE,
+    )
     disp = s.normalize_for_display()
-    assert "current" in disp
+    assert isinstance(disp, dict) and "current" in disp
 
 
 def test_prepare_post_treatment_and_record(monkeypatch, tmp_path):
@@ -41,4 +46,5 @@ def test_prepare_post_treatment_and_record(monkeypatch, tmp_path):
     # ensure truncation works
     for i in range(15):
         s._record_post_treatment_snapshot({"idx": i})
+    assert isinstance(s.post_treatment_history, list)
     assert len(s.post_treatment_history) <= 10

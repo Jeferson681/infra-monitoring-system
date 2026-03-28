@@ -23,9 +23,9 @@ def test_resolve_filename_and_normalize():
     """Teste para resolução e normalização de nome de arquivo."""
     name = "..bad/name!!"
     fn = logs_mod._resolve_filename(name, safe_log_enable=False)
-    assert "-" in fn
+    assert isinstance(fn, str) and "-" in fn
     fn2 = logs_mod._resolve_filename(name, safe_log_enable=True)
-    assert "_safe" in fn2
+    assert isinstance(fn2, str) and "_safe" in fn2
 
 
 def test_normalize_messages_and_extras():
@@ -57,7 +57,11 @@ def test_write_log_human_and_json(tmp_path, monkeypatch):
     logs_mod.write_log(
         "app", "INFO", "hello", extra={"k": "v"}, human_enable=True, json_enable=True
     )
-    assert calls["text"] or calls["json"]
+    assert (
+        isinstance(calls["text"], list)
+        and isinstance(calls["json"], list)
+        and (calls["text"] or calls["json"])
+    )
 
     # multiple messages with extras list
     calls["text"].clear()

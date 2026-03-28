@@ -8,20 +8,25 @@ from infra_monitoring.services.monitoring import metrics as m
 
 def test_parse_first_float_from_text():
     """Testa extração do primeiro float de texto."""
-    assert m._parse_first_float_from_text("temp= 12.34 C") == pytest.approx(12.34)
+    v = m._parse_first_float_from_text("temp= 12.34 C")
+    assert isinstance(v, float) and v == pytest.approx(12.34)
     assert m._parse_first_float_from_text("no numbers here") is None
     assert m._parse_first_float_from_text("") is None
-    assert m._parse_first_float_from_text("-3.5 degrees") == pytest.approx(-3.5)
+    v2 = m._parse_first_float_from_text("-3.5 degrees")
+    assert isinstance(v2, float) and v2 == pytest.approx(-3.5)
 
 
 def test_safe_float_and_counter():
     """Testa _safe_float e _safe_counter para valores válidos e nulos."""
-    assert m._safe_float("1.23") == pytest.approx(1.23)
+    v = m._safe_float("1.23")
+    assert isinstance(v, float) and v == pytest.approx(1.23)
     assert m._safe_float("nan") is None
     assert m._safe_float(object()) is None
 
-    assert m._safe_counter(123) == 123
-    assert m._safe_counter("10") == 10
+    c1 = m._safe_counter(123)
+    assert isinstance(c1, int) and c1 == 123
+    c2 = m._safe_counter("10")
+    assert isinstance(c2, int) and c2 == 10
     assert m._safe_counter(-1) is None
     assert m._safe_counter(object()) is None
 
@@ -33,6 +38,7 @@ def test_get_network_stats_and_disk_percent(monkeypatch):
 
     monkeypatch.setattr(m.psutil, "net_io_counters", lambda: fake_net)
     ns = m.get_network_stats()
+    assert isinstance(ns, dict)
     assert ns["bytes_sent"] == 1000
     assert ns["bytes_recv"] == 2000
 
@@ -56,7 +62,7 @@ def test_get_network_stats_and_disk_percent(monkeypatch):
 
     monkeypatch.setattr(m.psutil, "disk_usage", fake_disk_usage)
     pct = m.get_disk_percent()
-    assert pct == pytest.approx(42.5)
+    assert isinstance(pct, (int, float)) and pct == pytest.approx(42.5)
 
 
 def test_get_disk_percent_with_path(monkeypatch, tmp_path):
@@ -67,6 +73,7 @@ def test_get_disk_percent_with_path(monkeypatch, tmp_path):
             self.percent = percent
 
     monkeypatch.setattr(m.psutil, "disk_usage", lambda p: DU(7.0))
+    assert isinstance(m.get_disk_percent(str(tmp_path)), (int, float))
     assert m.get_disk_percent(str(tmp_path)) == pytest.approx(7.0)
 
 
@@ -88,7 +95,7 @@ def test_get_network_latency_ping_success(monkeypatch):
     # reset flag
     m._last_latency_estimated = False
     v = m.get_network_latency("8.8.8.8", 53, 1.0)
-    assert v == pytest.approx(12.34)
+    assert isinstance(v, float) and v == pytest.approx(12.34)
     assert m._last_latency_estimated is False
 
 
@@ -117,7 +124,7 @@ def test_get_network_latency_ping_fallback_tcp(monkeypatch):
 
     m._last_latency_estimated = False
     v = m.get_network_latency("8.8.8.8", 53, 1.0)
-    assert v == pytest.approx(round((1.123 - 1.0) * 1000, 2))
+    assert isinstance(v, float) and v == pytest.approx(round((1.123 - 1.0) * 1000, 2))
     assert m._last_latency_estimated is True
 
 
@@ -137,7 +144,7 @@ def test_get_cpu_percent_warmup(monkeypatch):
     m._cpu_warmed_up = False
     v = m.get_cpu_percent()
     # warmed-up path should perform a second sample and return 5.0
-    assert v == pytest.approx(5.0)
+    assert isinstance(v, float) and v == pytest.approx(5.0)
 
 
 def test_get_cpu_freq_ghz(monkeypatch):
@@ -148,7 +155,8 @@ def test_get_cpu_freq_ghz(monkeypatch):
             self.current = current
 
     monkeypatch.setattr(m.psutil, "cpu_freq", lambda: F(2300))
-    assert m.get_cpu_freq_ghz() == pytest.approx(2.3)
+    cf = m.get_cpu_freq_ghz()
+    assert isinstance(cf, float) and cf == pytest.approx(2.3)
 
     monkeypatch.setattr(m.psutil, "cpu_freq", lambda: None)
     assert m.get_cpu_freq_ghz() is None
@@ -178,4 +186,4 @@ def test_get_temp_from_script_and_collector(monkeypatch, tmp_path):
 
     monkeypatch.setattr(m.psutil, "sensors_temperatures", mock_sensors_temps)
     result = m._temperature_collector()
-    assert result == pytest.approx(50.2)
+    assert isinstance(result, float) and result == pytest.approx(50.2)

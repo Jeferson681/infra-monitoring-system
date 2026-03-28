@@ -8,8 +8,12 @@ from infra_monitoring.services.monitoring import metrics
 
 def test_safe_float_and_counter():
     """Teste para validação das funções _safe_float e _safe_counter."""
-    assert metrics._safe_float("3.14") == 3.14
-    assert metrics._safe_float(5) == 5.0
+    assert isinstance(metrics._safe_float("3.14"), float) and metrics._safe_float(
+        "3.14"
+    ) == pytest.approx(3.14)
+    assert isinstance(metrics._safe_float(5), float) and metrics._safe_float(
+        5
+    ) == pytest.approx(5.0)
     assert metrics._safe_float("nan") is None
     assert metrics._safe_float(float("inf")) is None
     assert metrics._safe_float(object()) is None
@@ -22,9 +26,11 @@ def test_safe_float_and_counter():
 
 def test_parse_first_float_from_text():
     """Teste para extração do primeiro float de uma string."""
-    assert metrics._parse_first_float_from_text("temp=42.5 C") == 42.5
+    v = metrics._parse_first_float_from_text("temp=42.5 C")
+    assert isinstance(v, float) and v == pytest.approx(42.5)
     assert metrics._parse_first_float_from_text("no numbers here") is None
-    assert metrics._parse_first_float_from_text("  -1.23 something") == -1.23
+    v2 = metrics._parse_first_float_from_text("  -1.23 something")
+    assert isinstance(v2, float) and v2 == pytest.approx(-1.23)
 
 
 def test_get_temp_from_script_success_and_failure(monkeypatch):
@@ -75,7 +81,7 @@ def test_get_network_latency_ping_and_tcp(monkeypatch):
     monkeypatch.setattr(metrics.subprocess, "check_output", fake_check_output)
     monkeypatch.setattr(metrics, "_last_latency_estimated", False)
     v = metrics.get_network_latency("8.8.8.8", 53, timeout=1.0)
-    assert isinstance(v, float) and v == 12.34
+    assert isinstance(v, float) and v == pytest.approx(12.34)
 
     # ping fails -> tcp fallback; simulate perf_counter progression
     def fake_check_output_err(cmd, stderr, text, timeout):
@@ -99,7 +105,7 @@ def test_get_network_latency_ping_and_tcp(monkeypatch):
         metrics.socket, "create_connection", lambda *a, **k: DummyConn()
     )
     v2 = metrics.get_network_latency("8.8.8.8", 53, timeout=1.0)
-    # should be small but > 0 (millisecond rounding)
+    # should be a non-negative float (milliseconds)
     assert isinstance(v2, float) and v2 >= 0.0
 
 
@@ -109,7 +115,8 @@ def test_get_disk_percent_and_usage(monkeypatch):
     monkeypatch.setattr(
         metrics.psutil, "disk_usage", lambda p: SimpleNamespace(percent=42)
     )
-    assert metrics.get_disk_percent(None) == 42
+    dp = metrics.get_disk_percent(None)
+    assert isinstance(dp, (int, float)) and dp == 42
 
     # failure path: disk_usage raises OSError for candidates -> None
     def raise_oserror(p):
@@ -127,10 +134,13 @@ def test_get_memory_and_disk_info(monkeypatch):
     monkeypatch.setattr(
         metrics.psutil, "virtual_memory", lambda: SimpleNamespace(used=1000, total=2000)
     )
-    assert metrics.get_memory_info() == (1000, 2000)
+    mi = metrics.get_memory_info()
+    assert isinstance(mi, tuple) and len(mi) == 2
+    assert mi[0] == 1000 and mi[1] == 2000
 
     monkeypatch.setattr(
         metrics.psutil, "disk_usage", lambda p: SimpleNamespace(used=300, total=1000)
     )
     used, total = metrics.get_disk_usage_info(None)
+    assert isinstance(used, int) and isinstance(total, int)
     assert used == 300 and total == 1000

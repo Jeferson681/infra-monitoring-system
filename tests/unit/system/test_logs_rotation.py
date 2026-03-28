@@ -43,7 +43,7 @@ def test_compress_old_logs_iterates_rotating(tmp_path, monkeypatch):
     # compress_old_logs uses the local import in logs_mod, so patch that name
     monkeypatch.setattr(logs_mod, "try_compress_rotating", fake_try_compress_rotating)
     logs_mod.compress_old_logs(day_secs=1, week_secs=7)
-    assert called["count"] == 1
+    assert isinstance(called["count"], int) and called["count"] == 1
 
 
 def test_safe_remove_unlinks_old(tmp_path, monkeypatch):
@@ -85,4 +85,4 @@ def test_rotate_logs_calls_try_rotate(tmp_path, monkeypatch):
 
     monkeypatch.setattr(logs_mod, "try_rotate_file", fake_try_rotate_file)
     logs_mod.rotate_logs(day_secs=1, week_secs=7)
-    assert called["count"] >= 2
+    assert isinstance(called["count"], int) and called["count"] >= 2

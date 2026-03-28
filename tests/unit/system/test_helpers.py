@@ -11,7 +11,8 @@ def test_read_env_file_nonexistent(tmp_path):
 
     p = tmp_path / "nope.env"
     assert not p.exists()
-    assert read_env_file(p) == {}
+    res = read_env_file(p)
+    assert isinstance(res, dict) and res == {}
 
 
 def test_read_env_file_parsing(tmp_path):
@@ -30,6 +31,7 @@ BADLINE
         encoding="utf-8",
     )
     res = read_env_file(p)
+    assert isinstance(res, dict)
     assert res.get("FOO") == "bar"
     assert res.get("QUOTED") == "baz"
     assert res.get("EMPTY") == ""
@@ -44,9 +46,10 @@ def test_merge_env_items_precedence(tmp_path, monkeypatch):
     p.write_text("A=1\nB=fromfile\n", encoding="utf-8")
     process_env = {"B": "fromproc", "C": "3"}
     merged = merge_env_items(p, process_env)
-    assert merged["A"] == "1"
-    assert merged["B"] == "fromproc"
-    assert merged["C"] == "3"
+    assert isinstance(merged, dict)
+    assert merged.get("A") == "1"
+    assert merged.get("B") == "fromproc"
+    assert merged.get("C") == "3"
 
 
 def test_validate_host_port():
@@ -86,3 +89,4 @@ def test_import_helpers():
     import infra_monitoring.infra.system.helpers as helpers
 
     assert helpers is not None
+    assert hasattr(helpers, "read_env_file")

@@ -3,7 +3,8 @@ from infra_monitoring.services.monitoring import state as s
 
 def test_compute_metric_states_empty():
     """Testa compute_metric_states com entradas vazias."""
-    assert s.compute_metric_states({}, {}) == {}
+    out = s.compute_metric_states({}, {})
+    assert isinstance(out, dict) and out == {}
 
 
 def test_compute_metric_states_thresholds():
@@ -14,8 +15,9 @@ def test_compute_metric_states_thresholds():
         "memory_used_bytes": {"warning": 400},
     }
     out = s.compute_metric_states(metrics, thresholds)
-    assert out["state_cpu"] == s.STATE_WARNING
-    assert out["state_ram"] == s.STATE_WARNING
+    assert isinstance(out, dict)
+    assert out.get("state_cpu") == s.STATE_WARNING
+    assert out.get("state_ram") == s.STATE_WARNING
 
 
 def test_systemstate_evaluate_and_snapshot(monkeypatch, tmp_path):
@@ -25,13 +27,13 @@ def test_systemstate_evaluate_and_snapshot(monkeypatch, tmp_path):
 
     # Evaluate stable
     state = ss.evaluate_metrics({"cpu_percent": 10})
-    assert state == s.STATE_STABLE
+    assert isinstance(state, str) and state == s.STATE_STABLE
     norm = ss.normalize_for_display()
-    assert "current" in norm
+    assert isinstance(norm, dict) and "current" in norm
 
     # Evaluate warning
     state = ss.evaluate_metrics({"cpu_percent": 60})
-    assert state == s.STATE_WARNING
+    assert isinstance(state, str) and state == s.STATE_WARNING
 
 
 def test_activation_and_post_treatment(monkeypatch, tmp_path):
@@ -66,4 +68,5 @@ def test_safe_collect_handles_errors(monkeypatch):
     def bad_collect():
         raise RuntimeError("boom")
 
-    assert ss._safe_collect(bad_collect) == {}
+    res = ss._safe_collect(bad_collect)
+    assert isinstance(res, dict) and res == {}

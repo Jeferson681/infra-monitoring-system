@@ -13,10 +13,10 @@ def test_sanitize_and_normalize_and_builders():
 
     ts = "2025-10-15"
     entry = log_helpers.build_json_entry(ts, "INFO", "msg", {"k": "v"})
-    assert entry["ts"] == ts and entry["msg"] == "msg"
+    assert isinstance(entry, dict) and entry["ts"] == ts and entry["msg"] == "msg"
 
     human = log_helpers.build_human_line(ts, "WARN", "hello", {"a": 1})
-    assert ts in human and "WARN" in human
+    assert isinstance(human, str) and ts in human and "WARN" in human
 
 
 def test_ensure_dir_writable_and_write_text(tmp_path):
@@ -34,7 +34,7 @@ def test_write_json_and_backup(tmp_path):
     """Teste para escrita de JSON e backup."""
     p = tmp_path / "j.jsonl"
     log_helpers.write_json(p, {"a": 1})
-    assert p.exists()
+    assert p.exists() and p.read_text(encoding="utf-8")
 
 
 def test_process_temp_item_file_and_dir(tmp_path):
@@ -61,7 +61,8 @@ def test_compress_and_atomic_move(tmp_path):
     src = tmp_path / "a.txt"
     src.write_text("hello")
     dst_gz = tmp_path / "a.txt.gz"
-    assert log_helpers.compress_file(src, dst_gz) is True
+    res_comp = log_helpers.compress_file(src, dst_gz)
+    assert isinstance(res_comp, bool) and res_comp is True
     assert dst_gz.exists()
 
     # test atomic_move_to_archive fallbacks by simulating rename failure

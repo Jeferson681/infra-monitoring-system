@@ -23,13 +23,13 @@ def test_write_debug_function_creates_files(tmp_path, monkeypatch):
     assert jsonl.exists(), f"debug jsonl file not created: {jsonl}"
 
     content = txt.read_text(encoding="utf-8")
-    assert "mensagem-debug-fn" in content
+    assert isinstance(content, str) and "mensagem-debug-fn" in content
 
     # Validate JSONL content: the formatter emits an object with 'msg'
     jl = jsonl.read_text(encoding="utf-8").splitlines()
     assert jl, "jsonl should contain at least one line"
     obj = json.loads(jl[0])
-    assert "mensagem-debug-fn" in obj.get("msg", "")
+    assert isinstance(obj, dict) and "mensagem-debug-fn" in obj.get("msg", "")
 
 
 def test_write_debug_permission_fallback(tmp_path, monkeypatch):

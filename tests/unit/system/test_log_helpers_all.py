@@ -14,13 +14,14 @@ def test_sanitize_log_name_fallback():
 def test_build_json_entry_and_human_line():
     """Teste para construção de entrada JSON e linha humana."""
     js = mod.build_json_entry("2025-01-01T00:00:00", "INFO", "msg", extra={"a": 1})
+    assert isinstance(js, dict)
     assert js["ts"].startswith("2025")
     assert js["level"] == "INFO"
     # build_json_entry uses key 'msg' for the message
     assert js["msg"] == "msg"
 
     hl = mod.build_human_line("2025-01-01T00:00:00", "WARN", "short", extras={"k": "v"})
-    assert "short" in hl
+    assert isinstance(hl, str) and "short" in hl
 
 
 def test_format_date_and_is_older_than(tmp_path):

@@ -25,6 +25,7 @@ def test_record_and_limit(tmp_path):
     limit = handler.get_current_limit()
     expected_sum = sum([(1000 * (i + 1)) + (2000 * (i + 1)) for i in range(7)])
     expected_limit = int(expected_sum * 1.2)
+    assert isinstance(limit, int)
     assert limit == expected_limit, f"Expected {expected_limit}, got {limit}"
 
     assert learning_file.exists()
@@ -34,7 +35,10 @@ def test_record_and_limit(tmp_path):
 
     for line in lines:
         entry = json.loads(line)
+        assert isinstance(entry, dict)
         assert "bytes_sent" in entry and "bytes_recv" in entry
+        assert isinstance(entry.get("bytes_sent"), int)
+        assert isinstance(entry.get("bytes_recv"), int)
 
 
 @pytest.mark.parametrize("missing_file", [True, False])
@@ -70,6 +74,8 @@ def test_fallback(tmp_path, missing_file):
                 f.write(json.dumps(entry) + "\n")
     limit = handler.get_current_limit()
     assert isinstance(limit, int)
+    # limit should be non-negative and at least the DEFAULT_LIMIT lower bound or computed value
+    assert limit >= 0
 
 
 def test_invalid_entry_ignored(tmp_path):
@@ -98,4 +104,5 @@ def test_invalid_entry_ignored(tmp_path):
         f.write(json.dumps(entry) + "\n")
     limit = handler.get_current_limit()
     expected_limit = int((1000 + 2000 + 3000 + 4000) * 1.2)
+    assert isinstance(limit, int)
     assert limit == expected_limit

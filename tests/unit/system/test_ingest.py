@@ -22,6 +22,8 @@ def test_iter_jsonl_plain(tmp_path):
     from infra_monitoring.infra.system.ingest import iter_jsonl
 
     items = list(iter_jsonl(p))
+    assert isinstance(items, list)
+    assert all(isinstance(i, dict) for i in items)
     assert items == [{"a": 1}, {"b": 2}]
 
 
@@ -34,6 +36,8 @@ def test_iter_jsonl_gzip(tmp_path):
     from infra_monitoring.infra.system.ingest import iter_jsonl
 
     items = list(iter_jsonl(p))
+    assert isinstance(items, list)
+    assert all(isinstance(i, dict) for i in items)
     assert items == [{"x": 10}, {"y": 20}]
 
 

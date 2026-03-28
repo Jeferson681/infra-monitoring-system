@@ -15,8 +15,9 @@ def test_ensure_runtime_checks_monkeypatch(monkeypatch):
         "infra_monitoring.core.core.ensure_last_ts_exists",
         lambda: (_ for _ in ()).throw(Exception("boom")),
     )
-    # should not raise
-    core._ensure_runtime_checks()
+    # should not raise and should return None
+    res = core._ensure_runtime_checks()
+    assert res is None
 
 
 def test_collect_and_emit_handles_collect_exceptions(monkeypatch):
@@ -35,7 +36,9 @@ def test_collect_and_emit_handles_collect_exceptions(monkeypatch):
     )
 
     res = core._collect_and_emit(fake_state, verbose_level=0)
-    assert res["state"] == "STABLE"
+    assert isinstance(res, dict)
+    assert res.get("state") == "STABLE"
+    assert isinstance(res.get("metrics"), dict)
 
 
 def test_run_loop_one_cycle(monkeypatch):
@@ -52,4 +55,6 @@ def test_run_loop_one_cycle(monkeypatch):
         lambda now, a, b, c, d, intervals: (a, b, c, d),
     )
 
-    core.run_loop(interval=0, cycles=1, verbose_level=0)
+    # should run one cycle without raising and return None
+    ret = core.run_loop(interval=0, cycles=1, verbose_level=0)
+    assert ret is None

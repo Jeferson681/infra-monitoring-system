@@ -22,6 +22,7 @@ def test_cache_concurrent_returns_cached(monkeypatch):
         return 999
 
     val = m._cache_get_or_refresh(key, collector)
+    # since lock is held, cached value should be returned (7)
     assert val == 7
 
 

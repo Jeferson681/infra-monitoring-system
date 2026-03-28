@@ -13,7 +13,7 @@ def test_parse_ping_output_variants(monkeypatch):
         lambda *a, **k: "Reply from 8.8.8.8: bytes=32 time=12.34ms TTL=117",
     )
     v1 = m.get_network_latency("8.8.8.8", 53, 1.0)
-    assert v1 is None or isinstance(v1, float)
+    assert v1 is None or (isinstance(v1, float) and v1 >= 0.0)
 
     monkeypatch.setattr(
         m.subprocess,
@@ -21,7 +21,7 @@ def test_parse_ping_output_variants(monkeypatch):
         lambda *a, **k: "rtt min/avg/max/mdev = 1.234/2.345/3.456/0.123 ms",
     )
     v2 = m.get_network_latency("8.8.8.8", 53, 1.0)
-    assert v2 is None or isinstance(v2, float)
+    assert v2 is None or (isinstance(v2, float) and v2 >= 0.0)
 
 
 def test_get_network_latency_tcp_fallback(monkeypatch):
@@ -48,7 +48,7 @@ def test_get_network_latency_tcp_fallback(monkeypatch):
 
     # should return ~200ms
     val = m.get_network_latency("8.8.8.8", 53, 1.0)
-    assert val is None or isinstance(val, float)
+    assert val is None or (isinstance(val, float) and val >= 0.0)
 
 
 def test_get_disk_usage_info_branches(monkeypatch):
@@ -59,7 +59,7 @@ def test_get_disk_usage_info_branches(monkeypatch):
     )
     # should return None, None when all candidates fail
     used, total = m.get_disk_usage_info(None)
-    assert (used, total) == (None, None)
+    assert used is None and total is None
 
 
 def test_collect_metrics_full_flow(monkeypatch):
@@ -90,7 +90,7 @@ def test_collect_metrics_full_flow(monkeypatch):
     m._reset_cache_timestamps()
     res = m.collect_metrics()
     assert isinstance(res, dict)
-    assert "cpu_percent" in res
+    assert "cpu_percent" in res and isinstance(res["cpu_percent"], (int, float))
 
 
 def test_validate_host_port_fallback(monkeypatch):

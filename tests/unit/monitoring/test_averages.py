@@ -18,7 +18,10 @@ def test__extract_epoch_numeric_and_iso():
     # ISO string
     iso = datetime.datetime.now(datetime.UTC).isoformat()
     o2 = {"Data/hora": iso}
-    assert extract_epoch(o2) is not None
+    val = extract_epoch(o2)
+    # must be a numeric epoch near now
+    assert isinstance(val, (int, float))
+    assert abs(val - time.time()) < 5
 
 
 def test__human_bytes():
@@ -31,6 +34,7 @@ def test_extract_relevant_and_normalize_state():
     """Confirma extração de campos relevantes e normalização de estado."""
     obj = {"state": "crit", "metrics_raw": {"cpu_percent": 12.5}}
     rel = averages.extract_relevant(obj)
+    assert "cpu_percent" in rel and isinstance(rel["cpu_percent"], (int, float))
     assert rel["cpu_percent"] == pytest.approx(12.5)
     assert averages._normalize_state("crit") == "CRITICAL"
     assert averages._normalize_state(None) is None
@@ -53,8 +57,12 @@ def test__iter_jsonl_today_and_lineno(tmp_path):
     assert len(got) == 2
     obj1, p1, ln1 = got[0]
     assert isinstance(obj1, dict)
+    # path equality should preserve Path type
+    from pathlib import Path
+
+    assert isinstance(p1, Path)
     assert p1 == fpath
-    assert ln1 == 1
+    assert isinstance(ln1, int) and ln1 == 1
 
 
 def test_aggregate_last_seconds_creates_last_ts(tmp_path):
@@ -77,6 +85,10 @@ def test_aggregate_last_seconds_creates_last_ts(tmp_path):
     agg = averages.aggregate_last_seconds(logs_root=tmp_path, seconds=10)
     assert agg is not None
     assert "averages" in agg
+    # ensure cpu_percent is present and numeric and close to expected mean
+    assert "cpu_percent" in agg["averages"]
+    assert isinstance(agg["averages"]["cpu_percent"], (int, float))
+    assert agg["averages"]["cpu_percent"] == pytest.approx(20.0)
     # persisted last_ts should exist
     last = averages.read_last_time()
     assert isinstance(last, float)
@@ -119,3 +131,5 @@ def test_persist_and_read_last_time(tmp_path):
     assert p.exists()
     v = averages.read_last_time()
     assert isinstance(v, float)
+    # read_last_time should return the same persisted value
+    assert averages.read_last_time() == v

@@ -9,7 +9,7 @@ def test_write_json_fallback(tmp_path):
     # set is not JSON serializable by default
     write_json(p, {"a": {1, 2, 3}})
     content = p.read_text(encoding="utf-8")
-    assert "a" in content
+    assert isinstance(content, str) and "a" in content
 
 
 def test_write_text_with_portalocker(monkeypatch, tmp_path):
@@ -41,7 +41,7 @@ def test_build_json_entry_and_format_extras():
     )
 
     e = build_json_entry("t", "INFO", "msg", extra={"k": "v"})
-    assert e["ts"] == "t" and e["level"] == "INFO"
+    assert isinstance(e, dict) and e["ts"] == "t" and e["level"] == "INFO"
     s = _format_extras_for_human({"k": "v", "list": [1, 2]})
     assert "k=v" in s and "list=" in s
 
@@ -67,7 +67,7 @@ def test_atomic_move_and_compress(tmp_path):
     r.write_text("x")
     gz = archive / "small.txt.gz"
     compressed = compress_file(r, gz)
-    assert compressed
+    assert isinstance(compressed, bool) and compressed is True
     assert gz.exists()
     # gzip should be readable
     with gzip.open(gz, "rt", encoding="utf-8") as fh:
