@@ -1,70 +1,64 @@
 # Infra Monitoring System
 
-[![CI](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/ci.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/ci.yml)\
-[![CD](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/cd.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/cd.yml)\
-[![Coverage](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/tests-coverage.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/tests-coverage.yml/badge.svg)\
-[![Dependabot](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/dependabot/dependabot-updates/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/dependabot/dependabot-updates)\
-[![TruffleHog Secrets Scan](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/trufflehog-scan.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/trufflehog-scan.yml)\
-[![Snyk](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/snyk-scan.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/snyk-scan.yml)\
-[![Trivy](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/trivy-scan.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/trivy-scan.yml)\
+[![CI](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/ci.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/ci.yml)
+[![Coverage](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/tests-coverage.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/tests-coverage.yml)
+[![Security Scans](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/trivy-scan.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/trivy-scan.yml)
 [![Terraform](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/terraform.yml/badge.svg)](https://github.com/Jeferson681/infra-monitoring-system/actions/workflows/terraform.yml)
 
 ---
 
 ## Overview
 
-Infra Monitoring System is an architectural monitoring project designed as a controlled environment for:
+Infra Monitoring System is a study project focused on observability, operational automation and integration between monitoring tools.
 
-- Observability tooling (Prometheus, Grafana, Loki)
-- CI/CD and security pipeline validation
-- Infrastructure as Code experimentation
+The project provides a controlled environment for collecting metrics, visualizing data and validating CI/CD pipelines using Prometheus, Grafana, Loki and Docker Compose.
 
-The system intentionally avoids external dependencies by providing its own observable target, enabling deterministic testing and architectural evolution.
+Instead of depending on external infrastructure, the system exposes its own observable target, allowing repeatable experiments and isolated testing scenarios.
 
-This is a technical demonstration project, not a production monitoring system.
+This is a technical learning project and not a production monitoring platform.
 
 ---
 
-## Problem Context
+## Main Goals
 
-Instead of relying on external infrastructure, this project provides an internal observable system to:
-
-- validate CI/CD pipelines
-- test security automation
-- experiment with observability tools
-- demonstrate IaC practices
-
-This allows full control over system behavior and repeatable experiments.
+- Explore observability concepts in practice
+- Validate CI/CD and security automation flows
+- Experiment with Infrastructure as Code concepts
+- Study integration between monitoring components
+- Practice modular organization and infrastructure separation
 
 ---
 
-## Architectural Summary
+## How the System Works
 
-    Metric Provider (Pluggable)
-            ↓
-    Domain Layer
-            ↓
-    Exporter Interface (HTTP)
-            ↓
-    Prometheus → Grafana / Loki
+Simplified flow:
 
-### Key Characteristics
+```text
+Metric Provider
+      ↓
+Collection Layer
+      ↓
+HTTP Exporter
+      ↓
+Prometheus
+      ↓
+Grafana / Loki
+```
 
-- Provider abstraction (metric source is replaceable)
-- Domain isolated from infrastructure concerns
-- Clear separation between collection and exposure
-- Prepared for integration with external tools
-
-The metric source layer can evolve independently without impacting business logic.
+The project separates metric collection from metric exposure, allowing the internal provider layer to evolve independently from the monitoring stack.
 
 ---
 
-## Key Principles
+## Main Features
 
-- Clear separation between domain and infrastructure
-- Replaceable metric providers
-- Testable core logic
-- Pipeline-first engineering approach
+- Metrics collection using pluggable providers
+- Prometheus integration for scraping metrics
+- Grafana dashboards for visualization
+- Loki integration for centralized logs
+- Docker Compose environment for reproducible execution
+- CI/CD pipelines with GitHub Actions
+- Security and dependency scanning automation
+- Terraform studies for Infrastructure as Code concepts
 
 ---
 
@@ -72,67 +66,87 @@ The metric source layer can evolve independently without impacting business logi
 
 - Python
 - Docker / Docker Compose
-- Prometheus, Grafana, Loki
+- Prometheus
+- Grafana
+- Loki
 - GitHub Actions
-- Terraform (educational IaC demonstration)
+- Terraform
 
 ---
 
-## How to Run
+## Project Structure
 
-    git clone https://github.com/Jeferson681/infra-monitoring-system.git
-    cd infra-monitoring-system
-    docker compose -f docker/docker-compose.yml up --build
+```text
+infra-monitoring-system/
+├── docker/
+├── docs/
+├── scripts/
+├── src/
+├── tests/
+└── .github/workflows/
+```
 
-For environment separation (local vs Docker) and execution flow details:
+Main areas:
 
-`docs/RUN.md`
+- `src/` → application and metric collection logic
+- `tests/` → automated tests
+- `docker/` → observability stack configuration
+- `docs/` → technical documentation and execution guides
+- `.github/workflows/` → CI/CD and security pipelines
 
 ---
 
-## What This Project Demonstrates
+## Running the Project
 
-- Evolution from experimental collector to extensible architecture
-- Observability integration (metrics and logs)
-- CI/CD pipelines with security automation
-- Static analysis and dependency scanning
-- IaC concepts decoupled from runtime logic
-- Structured technical documentation and decision tracking
+```bash
+git clone https://github.com/Jeferson681/infra-monitoring-system.git
+
+cd infra-monitoring-system
+
+docker compose -f docker/docker-compose.yml up --build
+```
+
+Detailed setup and environment information:
+
+```text
+docs/RUN.md
+```
+
+---
+
+## CI/CD and Automation
+
+The project includes automated pipelines for:
+
+- tests execution
+- linting and formatting
+- dependency checks
+- container security scanning
+- Terraform validation
+
+Main tools used:
+
+- GitHub Actions
+- Ruff
+- pre-commit
+- Trivy
+- Snyk
+- TruffleHog
 
 ---
 
 ## Technical Documentation
 
-- Documentation portal: `docs/DOCS.md`
-- Technical deep-dive (EN): `docs/README-TECH.md`
-- Technical decisions: `docs/DECISIONS.md`
-- Execution guide: `docs/RUN.md`
-- Visual evidence: `docs/prints/README.md`
+- `docs/DOCS.md`
+- `docs/README-TECH.md`
+- `docs/DECISIONS.md`
+- `docs/RUN.md`
+- `docs/prints/README.md`
 
 ---
 
-## Developer Setup (Local Checks)
+## Purpose of the Project
 
-### Pre-commit & Linters
+This project was created as a practical environment for studying observability, automation and operational tooling integration.
 
-    pre-commit run --all-files
-
-Executes formatters, linters and security hooks.
-
-`hadolint` runs in CI during image scans.
-To run locally, use the `hadolint/hadolint` Docker image or install it natively.
-
----
-
-## Docker (Optional)
-
-Docker is required only for:
-
-- Full observability stack via Docker Compose
-- Local container validation
-- CI parity (security checks)
-
-CI pipelines include:
-
-- Trivy (image scanning)
-- hadolint (Dockerfile linting)
+The focus is on understanding system behavior, monitoring flows and infrastructure organization in a controlled and reproducible environment.
